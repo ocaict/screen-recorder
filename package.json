@@ -1,0 +1,17 @@
+{
+  "name": "Firt Electro App",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "discription": "Electron First App",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-packager . Bible_Quotes --asar --icon=bible.ico --overwrite"
+  },
+  "author": "Oluegwu Chigozie",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^25.1.1",
+    "electron-packager": "^17.1.1"
+  }
+}

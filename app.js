@@ -7,12 +7,18 @@ const {
   dialog,
   Tray,
 } = require("electron/main");
-const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
-const fs = require("fs");
-
-const path = require("path");
 const { shell } = require("electron");
+
+const fs = require("fs");
+const path = require("path");
+const ffmpeg = require("fluent-ffmpeg");
+const { getTimeDuration } = require("./helpers/helpers");
+const ffmpegPath = app.isPackaged
+  ? path.join(process.resourcesPath, "ffmpeg.exe")
+  : require("ffmpeg-static");
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+
 let mainWindow;
 let trayMenu;
 const trayIcon = path.join(__dirname, "appIcon.png");
@@ -21,14 +27,10 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
-    minWidth: 400,
-    minHeight: 400,
-    maxWidth: 800,
-    maxHeight: 600,
     transparent: true,
     frame: false,
     show: false,
-    resizable: true,
+    resizable: false,
     icon: path.join(__dirname, "appIcon.png"),
 
     webPreferences: {
@@ -50,6 +52,7 @@ const createTrayMenu = () => {
       click: () => {
         mainWindow.webContents.send("stop-recorder");
         console.log("Stop!...");
+        trayMenu.destroy();
       },
     },
     {
@@ -173,7 +176,7 @@ ipcMain.handle("get-capture-sources", async () => {
 });
 
 ipcMain.handle("handle-stream", async (e, stream) => {
-  const fileName = `newRecord_${Date.now().toString()}.mp4`; // You may change the file name and extension
+  const fileName = `newRecord_${Date.now().toString()}.mp4`;
   const filePath = __dirname + "/records/" + fileName;
   const userPath = dialog.showSaveDialogSync(mainWindow, {
     defaultPath: `${filePath}`,
@@ -183,7 +186,6 @@ ipcMain.handle("handle-stream", async (e, stream) => {
   if (!userPath) {
     mainWindow.webContents.send("record-terminated");
     trayMenu.destroy();
-
     return;
   }
 
@@ -191,27 +193,46 @@ ipcMain.handle("handle-stream", async (e, stream) => {
   const writeStream = fs.createWriteStream(tempFilePath);
   const blob = Buffer.from(stream);
   writeStream.write(blob);
-
+  console.log(await getTimeDuration(ffmpeg, tempFilePath));
+  return;
   writeStream
     .end(() => {
       ffmpeg(tempFilePath)
-        .setFfmpegPath(ffmpegPath)
+        .outputOptions([
+          "-c:v libx264",
+          "-crf 18",
+          "-preset slow",
+          "-movflags +faststart",
+          "-pix_fmt yuv420p",
+          // "-vf fps=60,scale=1920:1080",
+        ])
         .toFormat("mp4")
         .on("end", () => {
           console.log("Conversion finished");
           fs.unlink(tempFilePath, (err) => {
-            if (err) return console.log(err);
+            if (err) {
+              console.log(err);
+              mainWindow.webContents.send("error-message", err);
+              return;
+            }
           });
           e.sender.send("conversion-complete", userPath);
           trayMenu.destroy();
           mainWindow.show();
         })
+        .on("progress", (progress) => {
+          mainWindow.webContents.send("conversion-progress", progress);
+        })
         .on("error", (err) => {
           console.error("Error during conversion", err);
+          mainWindow.webContents.send("error-message", err);
         })
         .save(userPath);
     })
-    .on("error", (error) => console.log(error));
+    .on("error", (error) => {
+      console.log(error);
+      mainWindow.webContents.send("error-message", error);
+    });
 });
 
 ipcMain.handle("hide-recorder", () => {

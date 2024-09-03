@@ -6,7 +6,7 @@
   "discription": "This a simple screen capture for video sharing platforms",
   "scripts": {
     "dev": "electron .",
-    "build": "electron-packager . OcaScreenCapture --asar --icon=appIcon.ico --overwrite"
+    "build": "electron-packager . --extra-resource=node_modules/ffmpeg-static/ffmpeg.exe OcaScreenCapture --asar --icon=appIcon.ico --overwrite"
   },
   "author": "Oluegwu Chigozie",
   "license": "MIT",

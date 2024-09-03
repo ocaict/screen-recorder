@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("api", {
   restoreOrMaximizeWindow: () => ipcRenderer.invoke("restore-maximize-window"),
   getCaptureSources: () => ipcRenderer.invoke("get-capture-sources"),
   hideRecorder: () => ipcRenderer.invoke("hide-recorder"),
+  closeApp: () => ipcRenderer.invoke("close-app"),
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -64,6 +65,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           mandatory: {
             chromeMediaSource: "desktop",
             chromeMediaSourceId: source.id,
+            maxWidth: 1920,
+            maxHeight: 1080,
+            maxFrameRate: 60,
+            minFrameRate: 30,
           },
         },
       });
@@ -196,6 +201,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Get Default Screen Source
   ipcRenderer.invoke("get-default-source").then((source) => {
     setupStream(source);
+  });
+
+  ipcRenderer.on("error-message", (e, err) => {
+    console.log(err);
+  });
+
+  ipcRenderer.on("conversion-progress", (e, progress) => {
+    console.log(progress);
   });
 
   // End of DOM Listener

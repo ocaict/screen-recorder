@@ -1,17 +1,22 @@
 {
-  "name": "Firt Electro App",
+  "name": "OcaMedia SreenCapture",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
-  "discription": "Electron First App",
+  "discription": "This a simple screen capture for video sharing platforms",
   "scripts": {
     "dev": "electron .",
-    "build": "electron-packager . Bible_Quotes --asar --icon=bible.ico --overwrite"
+    "build": "electron-packager . OcaScreenCapture --asar --icon=appIcon.ico --overwrite"
   },
   "author": "Oluegwu Chigozie",
   "license": "MIT",
   "devDependencies": {
     "electron": "^25.1.1",
     "electron-packager": "^17.1.1"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3"
   }
 }

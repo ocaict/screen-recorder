@@ -1,29 +1,4 @@
-const swiper = new Swiper(".swiper", {
-  // Optional parameters
-  direction: "horizontal",
-  loop: true,
-
-  // If we need pagination
-  pagination: {
-    el: ".swiper-pagination",
-  },
-
-  // Navigation arrows
-  navigation: {
-    nextEl: ".swiper-button-next",
-    prevEl: ".swiper-button-prev",
-  },
-
-  // And if we need scrollbar
-  scrollbar: {
-    el: ".swiper-scrollbar",
-  },
-  autoplay: {
-    delay: 5000,
-  },
-});
-
-$(document).ready(() => {
+$(document).ready(async () => {
   $(".file-menu-btn").click(async () => {
     const result = await api.showFileMenu("file");
     console.log(result);
@@ -50,9 +25,13 @@ $(document).ready(() => {
   $(".exit-btn").click(async () => {
     await api.closeApp();
   });
-});
+  $(".capture-btn").click(async () => {
+    const result = await api.getCaptureSources();
+    console.log(result);
+  });
 
-// let r = Math.floor(Math.random() * 256);
-//     let g = Math.floor(Math.random() * 256);
-//     let b = Math.floor(Math.random() * 256);
-//     this.style.backgroundColor = `rgb(${r},${g},${b})`;
+  $(".hide-recorder-btn").click(async () => {
+    const result = await api.hideRecorder();
+    console.log(result);
+  });
+});

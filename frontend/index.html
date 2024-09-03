@@ -7,6 +7,7 @@
       http-equiv="Content-Security-Policy"
       content="script-src 'self' 'unsafe-inline';"
     />
+
     <link rel="stylesheet" href="fontawesome-free-6.4.0-web/css/all.min.css" />
     <link rel="stylesheet" href="css/swiper8.css" />
     <link rel="stylesheet" href="css/index.css" />
@@ -16,7 +17,7 @@
       <div class="title-bar">
         <img class="app-icon" src="images/appIcon.png" alt="App Icon" />
 
-        <p class="app-title">This is the Title</p>
+        <p class="app-title">OcaMedia ScreenRecorder</p>
         <div class="controls-btns-container">
           <button class="btn control-btn minimize-btn" title="Minimize">
             <i class="fas fa-minus"></i>
@@ -35,108 +36,50 @@
           <button class="btn menu-btn edit-menu-btn">Edit</button>
           <button class="btn menu-btn">View</button>
           <button class="btn menu-btn">Help</button>
+          <button class="btn menu-btn setting-btn">Setting</button>
         </div>
       </div>
     </header>
-    <main>
-      <!-- Testimonial  -->
-      <section class="container testimonials__container swiper">
-        <h2>Students Testimonials</h2>
-        <div class="swiper-wrapper">
-          <article class="testimonial swiper-slide">
-            <div class="avatar">
-              <img src="./images/avatar1.png" alt="" />
-            </div>
-            <div class="testimonial__info">
-              <h5>Mary John</h5>
-              <small>Student</small>
-            </div>
-            <div class="testimonial__body">
-              <p>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste
-                eos provident dignissimos repellat dolorem nostrum consequatur
-                porro consequuntur expedita aliquid? Beatae incidunt delectus
-                iste, est quod eum cumque dolorum at?m19
-              </p>
-            </div>
-          </article>
-          <article class="testimonial swiper-slide">
-            <div class="avatar">
-              <img src="./images/avatar2.png" alt="" />
-            </div>
-            <div class="testimonial__info">
-              <h5>Mary John</h5>
-              <small>Student</small>
-            </div>
-            <div class="testimonial__body">
-              <p>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste
-                eos provident dignissimos repellat dolorem nostrum consequatur
-                porro consequuntur expedita aliquid? Beatae incidunt delectus
-                iste, est quod eum cumque dolorum at?m19
-              </p>
-            </div>
-          </article>
-          <article class="testimonial swiper-slide">
-            <div class="avatar">
-              <img src="./images/avatar3.png" alt="" />
-            </div>
-            <div class="testimonial__info">
-              <h5>Peter James</h5>
-              <small>Student</small>
-            </div>
-            <div class="testimonial__body">
-              <p>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste
-                eos provident dignissimos repellat dolorem nostrum consequatur
-                porro consequuntur expedita aliquid? Beatae incidunt delectus
-                iste, est quod eum cumque dolorum at?m19
-              </p>
-            </div>
-          </article>
-          <article class="testimonial swiper-slide">
-            <div class="avatar">
-              <img src="./images/avatar4.png" alt="" />
-            </div>
-            <div class="testimonial__info">
-              <h5>John Doe</h5>
-              <small>Student</small>
-            </div>
-            <div class="testimonial__body">
-              <p>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste
-                eos provident dignissimos repellat dolorem nostrum consequatur
-                porro consequuntur expedita aliquid? Beatae incidunt delectus
-                iste, est quod eum cumque dolorum at?m19
-              </p>
-            </div>
-          </article>
-          <article class="testimonial swiper-slide">
-            <div class="avatar">
-              <img src="./images/avatar5.png" alt="" />
-            </div>
-            <div class="testimonial__info">
-              <h5>Gabriel Joseph</h5>
-              <small>Student</small>
-            </div>
-            <div class="testimonial__body">
-              <p>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Iste
-                eos provident dignissimos repellat dolorem nostrum consequatur
-                porro consequuntur expedita aliquid? Beatae incidunt delectus
-                iste, est quod eum cumque dolorum at?m19
-              </p>
-            </div>
-          </article>
-        </div>
-        <div class="swiper-pagination"></div>
-      </section>
-    </main>
-    <!-- End of Testimonial -->
-    <footer>
-      <h4>Footer</h4>
-    </footer>
+    <main class="main">
+      <div class="btn-container video-btn-container">
+        <button class="btn capture-btn select-screen">Select Screen</button>
+        <button class="btn start-btn start-record-btn">Rec</button>
+        <button class="btn stop-btn stop-record-btn">Stop</button>
+      </div>
+      <div class="video-container">
+        <video class="video"></video>
+      </div>
 
+      <div class="message-container">
+        <div class="convert-message hide">
+          <h3>Processing Video...</h3>
+        </div>
+        <button class="btn hide-recorder-btn">Hide Recorder</button>
+        <button class="btn open-location-btn">Open Video Location</button>
+        <button class="btn play-with-default-btn">Play Video</button>
+      </div>
+
+      <div class="popup-container">
+        <div class="setting-container">
+          <p class="setting-title">Recording Setting</p>
+          <div class="microphones-container">
+            <div class="form-group">
+              <label>Microphone</label>
+              <select name="mocrophones" id="microphones-input">
+                <option selected disabled>Select Microphone</option>
+                <option value="mic1">Microphone1</option>
+                <option value="mic2">Microphone2</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn setting-ok-btn">OK</button>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <h4>OcaMedia</h4>
+    </footer>
     <script src="js/jquery.js"></script>
     <script src="js/swiper8.js"></script>
     <script src="js/index.js"></script>

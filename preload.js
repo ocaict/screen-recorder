@@ -21,15 +21,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   let videoElement = document.querySelector("video");
   let startBtn = document.querySelector(".start-btn");
   let stopBtn = document.querySelector(".stop-btn");
-  let convertMessageContainer = document.querySelector(".convert-message");
+  let noticeMessageContainer = document.querySelector(".message-container");
   let settingOkBtn = document.querySelector(".setting-ok-btn");
   let settingContainer = document.querySelector(".setting-container");
   let settingBtn = document.querySelector(".setting-btn");
-  let openRecordedLocationBtn = document.querySelector(".open-location-btn");
-  let playWithDefaultPlayerBtn = document.querySelector(
-    ".play-with-default-btn"
-  );
 
+  let selectScreenBtn = document.querySelector(".select-screen");
+  let hideWindowBtn = document.querySelector(".hide-recorder-btn");
+  let completedMessageContainer = document.querySelector(".completed-message");
+  let loaderContainer = document.querySelector(".loader-container");
   const microphonesSelect = document.querySelector("#microphones-input");
   let options = "";
   const inputs = await navigator.mediaDevices.enumerateDevices();
@@ -47,15 +47,40 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   microphonesSelect.innerHTML = options;
-
   microphonesSelect.addEventListener("change", (e) => {
     selectedMicrophone = inputs.find((mic) => mic.deviceId === e.target.value);
   });
 
-  const showMessage = (msg) => {
-    convertMessageContainer.innerHTML = `<h3>${msg}</h3>`;
-    convertMessageContainer.classList.remove("hide");
-    return convertMessageContainer;
+  const showMessage = (
+    elem,
+    button = false,
+    msg = "Video Proccessed!",
+    time = undefined
+  ) => {
+    elem.innerHTML = !button
+      ? `<div class="notice-message">
+          <h3 class="message">${msg}</h3>
+        </div>`
+      : ` <button class="btn hide-message-btn">
+            <i class="hide-message-btn fas fa-xmark"></i>
+          </button>
+          <p>${msg}</p>
+          <button class="btn open-location-btn">Open Video Location</button>
+          <button class="btn play-with-default-btn">Play Video</button>
+        `;
+
+    elem.classList.remove("hide");
+
+    if (time) {
+      setTimeout(() => {
+        elem.classList.add("hide");
+      }, time);
+    }
+    return elem;
+  };
+
+  const hideMessage = (elem) => {
+    elem.classList.add("hide");
   };
 
   async function setupStream(source) {
@@ -67,9 +92,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             chromeMediaSourceId: source.id,
             maxWidth: 1920,
             maxHeight: 1080,
-            maxFrameRate: 60,
-            minFrameRate: 30,
+            aspectRatio: 16 / 9,
+            frameRate: { ideal: 60, min: 30 },
           },
+          optional: [
+            { minWidth: 1280 },
+            { minHeight: 720 },
+            { aspectRatio: 16 / 9 },
+          ],
+          cursor: "motion",
         },
       });
 
@@ -77,7 +108,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 44100,
+          sampleRate: 48000,
+          channelCount: 2,
+          autoGainControl: true,
+
           deviceId: selectedMicrophone
             ? selectedMicrophone.deviceId
             : defaultMicrophone.deviceId,
@@ -95,7 +129,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       videoElement.srcObject = stream;
       videoElement.play();
     } else {
-      console.warn("No stream Avaible");
+      showMessage(noticeMessageContainer, false, "No stream Avaible", 3000);
     }
   }
 
@@ -106,14 +140,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         ...stream.getTracks(),
         ...audio.getTracks(),
       ]);
+      stopBtn.classList.remove("hide-btn");
+      hideWindowBtn.classList.remove("hide-btn");
+      selectScreenBtn.classList.add("hide-btn");
+      startBtn.classList.add("hide-btn");
+
       recorder = new MediaRecorder(mixedStream);
       recorder.ondataavailable = handleDataAvailable;
       recorder.onstop = handleStop;
       recorder.start(200);
 
-      showMessage("Recording Your Screen...");
+      showMessage(
+        noticeMessageContainer,
+        false,
+        "Recording Your Screen...",
+        undefined
+      );
     } else {
-      showMessage("No Screen Selected!");
+      showMessage(noticeMessageContainer, false, "No Screen Selected!", 3000);
     }
   }
 
@@ -130,7 +174,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     reader.onload = async () => {
       const buffer = reader.result;
       ipcRenderer.invoke("handle-stream", buffer);
-      showMessage("Processing Video...");
     };
 
     stream.getTracks().forEach((track) => track.stop());
@@ -142,18 +185,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function stopRecording() {
-    if (!recorder) return showMessage("No Recording Available");
-
+    if (!recorder) return;
     return recorder.stop();
   }
 
   stopBtn.addEventListener("click", () => {
     stopRecording();
+    stopBtn.classList.add("hide-btn");
+    hideWindowBtn.classList.add("hide-btn");
+    selectScreenBtn.classList.remove("hide-btn");
+    startBtn.classList.remove("hide-btn");
+    showMessage(noticeMessageContainer, false, "Preparing....", undefined);
   });
 
   startBtn.addEventListener("click", () => {
     // console.log(selectedMicrophone);
     // console.log(defaultMicrophone);
+
     startRecording();
     ipcRenderer.invoke("create-tray-menu");
   });
@@ -169,13 +217,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   ipcRenderer.on("source", async (_, source) => {
     await setupStream(source);
   });
-  // Conversion to mp4 completed
-  ipcRenderer.on("conversion-complete", (_, filePath) => {
-    showMessage("Video Converted!");
-    videoElement.src = filePath;
-    recordedLocation = filePath;
-    videoElement.addEventListener("loadedmetadata", () => videoElement.play());
-  });
 
   // Stop Recorded when task bar icon clicked on stop
   ipcRenderer.on("stop-recorder", () => {
@@ -184,18 +225,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   ipcRenderer.on("record-terminated", () => {
-    showMessage("Terminated!");
+    showMessage(noticeMessageContainer, false, "Terminated!", 3000);
   });
 
-  // Open Recorded File location
-  openRecordedLocationBtn.addEventListener("click", () => {
-    if (!recordedLocation) return;
-    ipcRenderer.invoke("open-recorded-location", recordedLocation);
-  });
-
-  playWithDefaultPlayerBtn.addEventListener("click", () => {
-    if (!recordedLocation) return;
-    ipcRenderer.invoke("play-with-default-player", recordedLocation);
+  completedMessageContainer.addEventListener("click", (e) => {
+    if (e.target.className.includes("open-location-btn")) {
+      if (!recordedLocation) return;
+      ipcRenderer.invoke("open-recorded-location", recordedLocation);
+    } else if (e.target.className.includes("play-with-default-btn")) {
+      if (!recordedLocation) return;
+      ipcRenderer.invoke("play-with-default-player", recordedLocation);
+    } else if (e.target.className.includes("hide-message-btn")) {
+      hideMessage(completedMessageContainer);
+    }
   });
 
   // Get Default Screen Source
@@ -206,9 +248,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   ipcRenderer.on("error-message", (e, err) => {
     console.log(err);
   });
+  let o = {
+    frames: 3661,
+    currentFps: 79,
+    currentKbps: 691.1,
+    targetSize: 10496,
+    timemark: "00:02:04.41",
+  };
 
   ipcRenderer.on("conversion-progress", (e, progress) => {
-    console.log(progress);
+    showMessage(
+      noticeMessageContainer,
+      false,
+      `Processing.... ${progress.timemark}`
+    );
+    loaderContainer.classList.remove("hide");
+  });
+
+  // Conversion to mp4 completed
+  ipcRenderer.on("conversion-complete", (_, filePath) => {
+    loaderContainer.classList.add("hide");
+    showMessage(completedMessageContainer, true, "Video Proccessed!", false);
+    hideMessage(noticeMessageContainer);
+    recordedLocation = filePath;
+    ipcRenderer.invoke("get-default-source").then((source) => {
+      setupStream(source);
+    });
   });
 
   // End of DOM Listener

@@ -139,8 +139,13 @@ h2 {
 }
 
 /* MAIN */
+.app {
+  height: 100vh;
+  overflow: hidden;
+}
 .main {
   height: calc(100vh - 48px - 48px);
+  position: relative;
 }
 
 .video-container {
@@ -163,6 +168,45 @@ h2 {
   margin: auto;
   margin-bottom: 10px;
 }
+
+.loader,
+.loader-image,
+.loader-container {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  position: absolute;
+  z-index: 20;
+  overflow: hidden;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.loader-image img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  background-color: blue;
+}
+.loader {
+  border: 25px solid #abdef9;
+  border-left: 25px solid #8d6c9f;
+  border-bottom: 25px solid #f9e3ae;
+  border-right: 25px solid #56cbf9;
+  z-index: 30;
+  animation: rotate 5s linear infinite;
+}
+
+@keyframes rotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
 .video-btn-container .btn {
   background-color: var(--color-light);
   box-shadow: 0px 0px 2px 2px var(--box-shadow-color);
@@ -193,7 +237,8 @@ h2 {
 .video-btn-container .stop-btn:hover {
   background-color: rgb(128, 34, 0);
 }
-.video-btn-container .capture-btn {
+.video-btn-container .capture-btn,
+.video-btn-container .hide-recorder-btn {
   background-color: darkcyan;
   color: #fff;
   border-radius: 6px;
@@ -201,13 +246,22 @@ h2 {
   padding: 10px;
 }
 
-.video-btn-container .capture-btn:hover {
+.video-btn-container .capture-btn:hover,
+.video-btn-container .hide-recorder-btn:hover {
   background-color: rgb(23, 116, 116);
   color: #fff;
 }
+.message {
+  font-size: 1rem;
+  opacity: 0.7;
+}
 
-.hide {
-  display: none;
+.video-btn-container .hide-btn {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  padding: 0;
+  box-shadow: none;
 }
 
 /* Settings */
@@ -221,13 +275,73 @@ h2 {
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 5px;
-  box-shadow: 0px 0px 2px 1px rgba(0, 0, 0, 0.8);
+  box-shadow: 0px 0px 2px 1px var(--box-shadow-color);
 }
 
 .setting-container select {
   padding: 3px;
   width: 100%;
 }
+
+.message-container,
+.btn-location-container {
+  width: 250px;
+  margin: auto;
+  background-color: var(--color-bg);
+  color: var(--color-light);
+  position: absolute;
+  padding: 10px;
+  border-radius: 8px;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%);
+  text-align: center;
+  background-image: linear-gradient(
+    to top,
+    var(--color-bg),
+    var(--color-bg1),
+    var(--color-bg2)
+  );
+  box-shadow: 0px 0px 3px 2px var(--box-shadow-color);
+}
+.btn-location-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn-location-container .btn {
+  border-radius: 50%;
+  padding: 5px;
+  transition: all 0.4s linear;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background-color: transparent;
+  color: #fff;
+  border-radius: 6px;
+  height: 30px;
+  padding: 10px;
+  border: 1px solid var(--color-bg2);
+  transition: var(--transition);
+}
+.btn-location-container .hide-message-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: #ff2f14;
+  font-size: 1.2rem;
+}
+.btn-location-container .hide-message-btn:hover {
+  color: var(--color-danger);
+}
+.hide {
+  display: none;
+}
+
 /* footer */
 
 footer {

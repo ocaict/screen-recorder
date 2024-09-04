@@ -13,77 +13,91 @@
     <link rel="stylesheet" href="css/index.css" />
   </head>
   <body>
-    <header class="header">
-      <div class="title-bar">
-        <img class="app-icon" src="images/appIcon.png" alt="App Icon" />
+    <div class="app">
+      <header class="header">
+        <div class="title-bar">
+          <img class="app-icon" src="images/appIcon.png" alt="App Icon" />
 
-        <p class="app-title">OcaMedia ScreenRecorder</p>
-        <div class="controls-btns-container">
-          <button class="btn control-btn minimize-btn" title="Minimize">
-            <i class="fas fa-minus"></i>
-          </button>
-          <button
-            class="btn control-btn restore-maximize-btn"
-            title="Maximize"
-            disabled
-          >
-            <i class="fas fa-window-maximize"></i>
-          </button>
-          <button class="btn control-btn exit-btn" title="Exit">
-            <i class="fas fa-xmark"></i>
-          </button>
+          <p class="app-title">OcaMedia ScreenRecorder</p>
+          <div class="controls-btns-container">
+            <button class="btn control-btn minimize-btn" title="Minimize">
+              <i class="fas fa-minus"></i>
+            </button>
+            <button
+              class="btn control-btn restore-maximize-btn"
+              title="Maximize"
+              disabled
+            >
+              <i class="fas fa-window-maximize"></i>
+            </button>
+            <button class="btn control-btn exit-btn" title="Exit">
+              <i class="fas fa-xmark"></i>
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="menu-container">
-        <div class="btn-container">
-          <button class="btn menu-btn file-menu-btn">File</button>
-          <button class="btn menu-btn edit-menu-btn">Edit</button>
-          <button class="btn menu-btn">View</button>
-          <button class="btn menu-btn">Help</button>
-          <button class="btn menu-btn setting-btn">Setting</button>
+        <div class="menu-container">
+          <div class="btn-container">
+            <button class="btn menu-btn file-menu-btn">File</button>
+            <button class="btn menu-btn edit-menu-btn">Edit</button>
+            <button class="btn menu-btn">View</button>
+            <button class="btn menu-btn">Help</button>
+            <button class="btn menu-btn setting-btn">Setting</button>
+          </div>
         </div>
-      </div>
-    </header>
-    <main class="main">
-      <div class="btn-container video-btn-container">
-        <button class="btn capture-btn select-screen">Select Screen</button>
-        <button class="btn start-btn start-record-btn">Rec</button>
-        <button class="btn stop-btn stop-record-btn">Stop</button>
-      </div>
-      <div class="video-container">
-        <video class="video"></video>
-      </div>
-
-      <div class="message-container">
-        <div class="convert-message hide">
-          <h3>Processing Video...</h3>
+      </header>
+      <main class="main">
+        <div class="btn-container video-btn-container">
+          <button class="btn capture-btn select-screen">Select Screen</button>
+          <button class="btn hide-recorder-btn hide-btn">Hide Recorder</button>
+          <button class="btn start-btn start-record-btn">Rec</button>
+          <button class="btn stop-btn stop-record-btn hide-btn">Stop</button>
         </div>
-        <button class="btn hide-recorder-btn">Hide Recorder</button>
-        <button class="btn open-location-btn">Open Video Location</button>
-        <button class="btn play-with-default-btn">Play Video</button>
-      </div>
-
-      <div class="popup-container">
-        <div class="setting-container">
-          <p class="setting-title">Recording Setting</p>
-          <div class="microphones-container">
-            <div class="form-group">
-              <label>Microphone</label>
-              <select name="mocrophones" id="microphones-input">
-                <option selected disabled>Select Microphone</option>
-                <option value="mic1">Microphone1</option>
-                <option value="mic2">Microphone2</option>
-              </select>
+        <div class="video-container">
+          <video class="video"></video>
+          <div class="loader-container hide">
+            <div class="loader"></div>
+            <div class="loader-image">
+              <img src="images/videoIcon.png" />
             </div>
           </div>
-          <button class="btn setting-ok-btn">OK</button>
         </div>
-      </div>
-    </main>
+        <div class="message-container hide">
+          <div class="notice-message">
+            <h3 class="message">Processing Video...</h3>
+          </div>
+        </div>
 
-    <footer>
-      <h4>OcaMedia</h4>
-    </footer>
+        <div class="popup-container">
+          <div class="setting-container">
+            <p class="setting-title">Recording Setting</p>
+            <div class="microphones-container">
+              <div class="form-group">
+                <label>Microphone</label>
+                <select name="mocrophones" id="microphones-input">
+                  <option selected disabled>Select Microphone</option>
+                  <option value="mic1">Microphone1</option>
+                  <option value="mic2">Microphone2</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn setting-ok-btn">OK</button>
+          </div>
+        </div>
+
+        <div class="btn-location-container completed-message hide">
+          <button class="btn hide-message-btn">
+            <i class="fas fa-xmark"></i>
+          </button>
+          <p>Video Proccessed!</p>
+          <button class="btn open-location-btn">Open Video Location</button>
+          <button class="btn play-with-default-btn">Play Video</button>
+        </div>
+      </main>
+
+      <footer>
+        <h4>OcaMedia</h4>
+      </footer>
+    </div>
     <script src="js/jquery.js"></script>
     <script src="js/swiper8.js"></script>
     <script src="js/index.js"></script>

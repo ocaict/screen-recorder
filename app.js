@@ -12,6 +12,7 @@ const { shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
+
 const { getTimeDuration } = require("./helpers/helpers");
 const ffmpegPath = app.isPackaged
   ? path.join(process.resourcesPath, "ffmpeg.exe")
@@ -76,6 +77,7 @@ const createTrayMenu = () => {
 const getCaptureSources = async () => {
   const sources = await desktopCapturer.getSources({
     types: ["window", "screen"],
+    fetchWindowIcons: true,
   });
 
   return sources;
@@ -162,6 +164,7 @@ ipcMain.handle("close-app", () => {
 const selectSource = (source) => {
   mainWindow.webContents.send("source", source);
 };
+
 ipcMain.handle("get-capture-sources", async () => {
   const sources = await getCaptureSources();
   const menu = Menu.buildFromTemplate(
@@ -188,13 +191,13 @@ ipcMain.handle("handle-stream", async (e, stream) => {
     trayMenu.destroy();
     return;
   }
-
   const tempFilePath = "temp_video.webm";
   const writeStream = fs.createWriteStream(tempFilePath);
   const blob = Buffer.from(stream);
   writeStream.write(blob);
-  console.log(await getTimeDuration(ffmpeg, tempFilePath));
-  return;
+
+  // const time = await getTimeDuration(ffmpeg, tempFilePath);
+
   writeStream
     .end(() => {
       ffmpeg(tempFilePath)
@@ -216,6 +219,7 @@ ipcMain.handle("handle-stream", async (e, stream) => {
               return;
             }
           });
+
           e.sender.send("conversion-complete", userPath);
           trayMenu.destroy();
           mainWindow.show();

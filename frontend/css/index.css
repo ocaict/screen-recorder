@@ -282,6 +282,52 @@ h2 {
   padding: 3px;
   width: 100%;
 }
+label {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+input[type="checkbox"] {
+  margin-right: 10;
+  transform: scale(1.2);
+  accent-color: darkcyan;
+}
+input[type="text"]:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  border-color: #ccc;
+  cursor: default;
+  padding: 1px;
+  font-size: 1.1rem;
+}
+
+fieldset {
+  margin-bottom: 15px;
+  padding: 5px;
+  border: 1px solid var(--color-bg2);
+  border-radius: 6px;
+}
+
+legend {
+  font-weight: bold;
+  color: var(--color-light);
+  padding: 0 5px;
+  font-size: 1.2em;
+}
+.setting-btn-group {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 10px;
+}
+.setting-btn-group .btn {
+  padding: 5px 10px;
+  cursor: default;
+  border-radius: 5px;
+  transition: all 0.3s linear;
+}
+.setting-btn-group .btn:hover {
+  background-color: #999;
+}
 
 .message-container,
 .btn-location-container {

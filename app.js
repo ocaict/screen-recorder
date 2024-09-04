@@ -89,46 +89,36 @@ app.whenReady().then(async () => {
 
 const createMenu = (type) => {
   // Creating application menu
-  const menuTemplate = [
-    {
-      label: "Copy",
-      click: async () => {
-        mainWindow.webContents.send("copy");
-      },
-    },
-    {
-      label: "Always On Top",
-      type: "checkbox",
-      checked: false,
+  let menuTemplate =
+    type === "file"
+      ? [
+          {
+            label: "about",
+            click: () => {
+              console.log("About");
+            },
+          },
 
-      click: (e) => {
-        mainWindow.setAlwaysOnTop(true);
-        console.log(e.checked);
-      },
-    },
-
-    {
-      label: "about",
-      click: () => {
-        console.log("About");
-      },
-    },
-    {
-      role: "reload",
-    },
-    {
-      role: "toggleDevTools",
-    },
-    {
-      label: "Quit",
-      click: () => app.quit(),
-    },
-  ];
+          {
+            label: "Quit",
+            click: () => app.quit(),
+          },
+        ]
+      : [
+          {
+            role: "toggleDevTools",
+          },
+          {
+            role: "reload",
+          },
+        ];
   // Building application menu from template
+
   const menu = Menu.buildFromTemplate(menuTemplate);
 
   // Setting application menu
   Menu.setApplicationMenu(menu);
+
   let x = type === "file" ? 10 : 10 + 40;
   let y = 24 + 24;
 
@@ -191,7 +181,7 @@ ipcMain.handle("handle-stream", async (e, stream) => {
     trayMenu.destroy();
     return;
   }
-  const tempFilePath = "temp_video.webm";
+  const tempFilePath = path.join(__dirname, "temp_video.webm");
   const writeStream = fs.createWriteStream(tempFilePath);
   const blob = Buffer.from(stream);
   writeStream.write(blob);

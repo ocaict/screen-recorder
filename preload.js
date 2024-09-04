@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   let startBtn = document.querySelector(".start-btn");
   let stopBtn = document.querySelector(".stop-btn");
   let noticeMessageContainer = document.querySelector(".message-container");
-  let settingOkBtn = document.querySelector(".setting-ok-btn");
+  let settingOkBtn = document.querySelector(".setting-save-btn");
   let settingContainer = document.querySelector(".setting-container");
   let settingBtn = document.querySelector(".setting-btn");
 

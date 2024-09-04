@@ -9,6 +9,12 @@ const {
 } = require("electron/main");
 const { shell } = require("electron");
 
+if (!app.isPackaged) {
+  require("electron-reload")(__dirname, {
+    electron: require(`${__dirname}/node_modules/electron`),
+  });
+}
+
 const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
@@ -181,7 +187,9 @@ ipcMain.handle("handle-stream", async (e, stream) => {
     trayMenu.destroy();
     return;
   }
-  const tempFilePath = path.join(__dirname, "temp_video.webm");
+  const tempFilePath = !app.isPackaged
+    ? path.join(__dirname, "temp_video.webm")
+    : path.join(app.getPath("temp"), "temp_video.webm");
   const writeStream = fs.createWriteStream(tempFilePath);
   const blob = Buffer.from(stream);
   writeStream.write(blob);

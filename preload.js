@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld("api", {
   hideRecorder: () => ipcRenderer.invoke("hide-recorder"),
   closeApp: () => ipcRenderer.invoke("close-app"),
 });
-
+console.log("hi");
 document.addEventListener("DOMContentLoaded", async () => {
   let stream = null;
   let audio = null;
@@ -225,7 +225,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   ipcRenderer.on("record-terminated", () => {
-    showMessage(noticeMessageContainer, false, "Terminated!", 3000);
+    showMessage(noticeMessageContainer, false, "Terminated!", 2000);
+    ipcRenderer.invoke("get-default-source").then((source) => {
+      setupStream(source);
+    });
   });
 
   completedMessageContainer.addEventListener("click", (e) => {

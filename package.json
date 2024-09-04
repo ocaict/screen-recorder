@@ -1,18 +1,19 @@
 {
-  "name": "OcaMedia SreenCapture",
+  "name": "Oca SreenRecorder",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
-  "discription": "This a simple screen capture for video sharing platforms",
+  "discription": "This a simple screen recorder for video sharing platforms",
   "scripts": {
     "dev": "electron .",
-    "build": "electron-packager . OcaScreenCapture --extra-resource=node_modules/ffmpeg-static/ffmpeg.exe  --icon=appIcon.ico --overwrite"
+    "build": "electron-packager . OcaScreenRecorder --extra-resource=node_modules/ffmpeg-static/ffmpeg.exe --icon=appIcon.ico --asar --overwrite"
   },
   "author": "Oluegwu Chigozie",
   "license": "MIT",
   "devDependencies": {
     "electron": "^25.1.1",
-    "electron-packager": "^17.1.1"
+    "electron-packager": "^17.1.1",
+    "electron-reload": "^2.0.0-alpha.1"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

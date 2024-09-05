@@ -25,6 +25,7 @@ $(document).ready(async () => {
   $(".exit-btn").click(async () => {
     await api.closeApp();
   });
+
   $(".capture-btn").click(async () => {
     const result = await api.getCaptureSources();
     console.log(result);
@@ -33,5 +34,9 @@ $(document).ready(async () => {
   $(".hide-recorder-btn").click(async () => {
     const result = await api.hideRecorder();
     console.log(result);
+  });
+
+  $(".setting-cancel-btn").click(async () => {
+    $(".setting-container").fadeOut();
   });
 });

@@ -75,7 +75,7 @@
                 <legend>Inputs</legend>
 
                 <div class="form-group">
-                  <label>Microphone</label>
+                  <label for="microphones-input">Microphone</label>
                   <select name="mocrophones" id="microphones-input">
                     <option selected disabled>Select Microphone</option>
                     <option value="mic1">Microphone1</option>
@@ -86,38 +86,40 @@
               <fieldset>
                 <legend>More Setting</legend>
                 <div class="form-group">
-                  <input
-                    type="checkbox"
-                    name="always-on-top"
-                    id="always-on-top"
-                  />
-                  <label for="always-on-top">Always On Top</label>
+                  <input type="checkbox" name="alwaysOnTop" id="alwaysOnTop" />
+                  <label for="alwaysOnTop">Always On Top</label>
                 </div>
 
                 <div class="form-group">
                   <input
                     type="checkbox"
-                    name="always-on-top"
-                    id="always-on-top"
+                    name="systemTrayIcon"
+                    id="systemTrayIcon"
                   />
-                  <label for="always-on-top"
+                  <label for="systemTrayIcon"
                     >Display icon in the system tray
                   </label>
                 </div>
                 <div class="form-group">
                   <input
                     type="checkbox"
-                    name="always-on-top"
-                    id="always-on-top"
+                    name="noiseSuppression"
+                    id="noiseSuppression"
                   />
-                  <label for="always-on-top">Automatic Noise Removal </label>
+                  <label for="noiseSuppression">Automatic Noise Removal </label>
                 </div>
               </fieldset>
 
               <fieldset>
                 <legend>Hotkeys</legend>
-                <label for="stop-key">Stop</label>
-                <input type="text" id="stop-key" value="End" disabled />
+                <input type="checkbox" name="shortCutKey" id="shortCutKey" />
+                <label for="shortCutKey">Set shortcut key</label><br />
+                <input
+                  type="text"
+                  id="stop-key"
+                  placeholder="Press F9 to stop recording"
+                  disabled
+                />
               </fieldset>
             </div>
             <div class="setting-btn-group">

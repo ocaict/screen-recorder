@@ -7,7 +7,7 @@ const {
   dialog,
   Tray,
 } = require("electron/main");
-const { shell } = require("electron");
+const { shell, globalShortcut } = require("electron");
 
 if (!app.isPackaged) {
   require("electron-reload")(__dirname, {
@@ -18,6 +18,7 @@ if (!app.isPackaged) {
 const fs = require("fs");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
+let shortCutKeys = null;
 
 const { getTimeDuration } = require("./helpers/helpers");
 const ffmpegPath = app.isPackaged
@@ -28,9 +29,10 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 let mainWindow;
 let trayMenu;
+let isRecording = false;
 const trayIcon = path.join(__dirname, "appIcon.png");
 
-function createWindow() {
+function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -58,7 +60,6 @@ const createTrayMenu = () => {
       label: "Stop Recording",
       click: () => {
         mainWindow.webContents.send("stop-recorder");
-        console.log("Stop!...");
         trayMenu.destroy();
       },
     },
@@ -90,7 +91,7 @@ const getCaptureSources = async () => {
 };
 
 app.whenReady().then(async () => {
-  createWindow();
+  createMainWindow();
 });
 
 const createMenu = (type) => {
@@ -254,12 +255,36 @@ ipcMain.handle("get-default-source", async (e) => {
   return defaultSource;
 });
 ipcMain.handle("open-recorded-location", async (e, location) => {
-  const result = shell.showItemInFolder(location);
-  console.log(result);
+  const exist = fs.existsSync(location);
+  if (exist) {
+    shell.showItemInFolder(location);
+  } else {
+    mainWindow.webContents.send("error-message", { message: "File not Found" });
+  }
 });
 ipcMain.handle("play-with-default-player", async (e, location) => {
-  const result = await shell.openPath(location);
-  console.log(result);
+  const exist = fs.existsSync(location);
+  if (exist) {
+    await shell.openPath(location);
+  }
+  {
+    mainWindow.webContents.send("error-message", { message: "File not Found" });
+  }
+});
+
+ipcMain.handle("set-shortcut-key", (e, setKey) => {
+  shortCutKeys = "F9";
+
+  if (!setKey) return globalShortcut.unregister(shortCutKeys);
+  globalShortcut.register(shortCutKeys, () => {
+    if (!isRecording) return;
+    mainWindow.webContents.send("stop-recorder");
+    trayMenu.destroy();
+  });
+});
+
+ipcMain.handle("set-is-recording", (e, recording) => {
+  isRecording = recording;
 });
 
 app.on("window-all-closed", () => {
@@ -270,6 +295,6 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createMainWindow();
   }
 });

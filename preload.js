@@ -8,8 +8,25 @@ contextBridge.exposeInMainWorld("api", {
   hideRecorder: () => ipcRenderer.invoke("hide-recorder"),
   closeApp: () => ipcRenderer.invoke("close-app"),
 });
-console.log("hi");
+
 document.addEventListener("DOMContentLoaded", async () => {
+  let videoElement = document.querySelector("video");
+  let startBtn = document.querySelector(".start-btn");
+  let stopBtn = document.querySelector(".stop-btn");
+  let noticeMessageContainer = document.querySelector(".message-container");
+  let settingOkBtn = document.querySelector(".setting-save-btn");
+  let settingContainer = document.querySelector(".setting-container");
+  let settingBtn = document.querySelector(".setting-btn");
+  let selectScreenBtn = document.querySelector(".select-screen");
+  let hideWindowBtn = document.querySelector(".hide-recorder-btn");
+  let completedMessageContainer = document.querySelector(".completed-message");
+  let loaderContainer = document.querySelector(".loader-container");
+  const microphonesSelect = document.querySelector("#microphones-input");
+  const systemTrayIconCheckBox = document.querySelector("#systemTrayIcon");
+  const shortCutKeyCheckBox = document.querySelector("#shortCutKey");
+  const inputs = await navigator.mediaDevices.enumerateDevices();
+
+  let options = "";
   let stream = null;
   let audio = null;
   let mixedStream = null;
@@ -18,21 +35,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   let selectedMicrophone = null;
   let defaultMicrophone = null;
   let recordedLocation = null;
-  let videoElement = document.querySelector("video");
-  let startBtn = document.querySelector(".start-btn");
-  let stopBtn = document.querySelector(".stop-btn");
-  let noticeMessageContainer = document.querySelector(".message-container");
-  let settingOkBtn = document.querySelector(".setting-save-btn");
-  let settingContainer = document.querySelector(".setting-container");
-  let settingBtn = document.querySelector(".setting-btn");
-
-  let selectScreenBtn = document.querySelector(".select-screen");
-  let hideWindowBtn = document.querySelector(".hide-recorder-btn");
-  let completedMessageContainer = document.querySelector(".completed-message");
-  let loaderContainer = document.querySelector(".loader-container");
-  const microphonesSelect = document.querySelector("#microphones-input");
-  let options = "";
-  const inputs = await navigator.mediaDevices.enumerateDevices();
+  let hideWindowDruringRecording = false;
+  let shortCutKey = false;
+  let isRecording = false;
 
   inputs.forEach((input) => {
     if (input.kind === "audioinput") {
@@ -89,18 +94,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         video: {
           mandatory: {
             chromeMediaSource: "desktop",
-            chromeMediaSourceId: source.id,
-            maxWidth: 1920,
-            maxHeight: 1080,
-            aspectRatio: 16 / 9,
-            frameRate: { ideal: 60, min: 30 },
+            chromeMediaSourceId: source.id, //This is a comment , do't save
+            // maxWidth: 1920,
+            // maxHeight: 1080,
+            // aspectRatio: 16 / 9,
+            frameRate: { ideal: 30, min: 30 },
+            channelCount: 2,
+            frameRate: 30,
           },
           optional: [
             { minWidth: 1280 },
             { minHeight: 720 },
             { aspectRatio: 16 / 9 },
           ],
-          cursor: "motion",
         },
       });
 
@@ -108,7 +114,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 48000,
+          sampleRate: 41000,
           channelCount: 2,
           autoGainControl: true,
 
@@ -149,6 +155,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       recorder.ondataavailable = handleDataAvailable;
       recorder.onstop = handleStop;
       recorder.start(200);
+      isRecording = true;
+      ipcRenderer.invoke("set-is-recording", isRecording);
 
       showMessage(
         noticeMessageContainer,
@@ -156,6 +164,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         "Recording Your Screen...",
         undefined
       );
+      if (hideWindowDruringRecording) {
+        ipcRenderer.invoke("hide-recorder");
+      }
     } else {
       showMessage(noticeMessageContainer, false, "No Screen Selected!", 3000);
     }
@@ -167,7 +178,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function handleStop(e) {
     const blob = new Blob(recordedChunks, {
-      type: "video/webm;codecs=vp9",
+      type: "video/webm",
     });
     const reader = new FileReader();
     reader.readAsArrayBuffer(blob);
@@ -191,6 +202,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   stopBtn.addEventListener("click", () => {
     stopRecording();
+    isRecording = false;
+    ipcRenderer.invoke("set-is-recording", isRecording);
     stopBtn.classList.add("hide-btn");
     hideWindowBtn.classList.add("hide-btn");
     selectScreenBtn.classList.remove("hide-btn");
@@ -249,15 +262,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   ipcRenderer.on("error-message", (e, err) => {
-    console.log(err);
+    showMessage(noticeMessageContainer, false, err.message, 3000);
+    hideMessage(completedMessageContainer);
   });
-  let o = {
-    frames: 3661,
-    currentFps: 79,
-    currentKbps: 691.1,
-    targetSize: 10496,
-    timemark: "00:02:04.41",
-  };
 
   ipcRenderer.on("conversion-progress", (e, progress) => {
     showMessage(
@@ -270,13 +277,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Conversion to mp4 completed
   ipcRenderer.on("conversion-complete", (_, filePath) => {
+    recordedLocation = filePath;
     loaderContainer.classList.add("hide");
     showMessage(completedMessageContainer, true, "Video Proccessed!", false);
     hideMessage(noticeMessageContainer);
-    recordedLocation = filePath;
     ipcRenderer.invoke("get-default-source").then((source) => {
       setupStream(source);
     });
+  });
+
+  systemTrayIconCheckBox.addEventListener("change", (e) => {
+    hideWindowDruringRecording = e.target.checked;
+  });
+
+  shortCutKeyCheckBox.addEventListener("change", (e) => {
+    shortCutKey = e.target.checked;
+    ipcRenderer.invoke("set-shortcut-key", shortCutKey);
   });
 
   // End of DOM Listener

@@ -1,0 +1,29 @@
+{
+  "videoQuality": "high",
+  "frameRate": 24,
+  "resolution": "1920x1080",
+  "recordAudio": false,
+  "recordSystemAudio": false,
+  "selectedMicrophone": "default",
+  "outputDirectory": "",
+  "shortcutEnabled": false,
+  "shortcutKey": "F9",
+  "hideWindowDuringRecording": false,
+  "showNotifications": false,
+  "autoOpenAfterRecording": false,
+  "defaultFormat": "mp4",
+  "countdown": 5,
+  "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-21_23-45-41.mp4",
+      "fileName": "Recording_2026-02-21_23-45-41.mp4",
+      "recordedAt": "2026-02-21T22:45:46.752Z",
+      "size": 288908
+    }
+  ],
+  "maxRecentRecordings": 10,
+  "filenamePattern": "Recording_{date}_{time}",
+  "autoSave": false,
+  "compression": "balanced",
+  "hardwareAcceleration": "none"
+}

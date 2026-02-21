@@ -294,12 +294,12 @@ input[type="checkbox"] {
   accent-color: darkcyan;
 }
 input[type="text"]:disabled {
-  background-color: #f5f5f5;
+  background-color: #bdbdbd;
   color: #999;
   border-color: #ccc;
   cursor: no-drop;
   padding: 1px;
-  font-size: 1.1rem;
+  font-size: 1rem;
   user-select: none;
 }
 

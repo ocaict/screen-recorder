@@ -95,18 +95,21 @@ document.addEventListener("DOMContentLoaded", async () => {
           mandatory: {
             chromeMediaSource: "desktop",
             chromeMediaSourceId: source.id, //This is a comment , do't save
-            // maxWidth: 1920,
-            // maxHeight: 1080,
-            // aspectRatio: 16 / 9,
+            maxWidth: 1920,
+            maxHeight: 1080,
+            aspectRatio: 16 / 9,
             frameRate: { ideal: 30, min: 30 },
             channelCount: 2,
             frameRate: 30,
+            latency: true,
+            autoGainControl: true,
           },
-          optional: [
-            { minWidth: 1280 },
-            { minHeight: 720 },
-            { aspectRatio: 16 / 9 },
-          ],
+          // optional: [
+          //   { minWidth: 1280 },
+          //   { minHeight: 720 },
+          //   { aspectRatio: 16 / 9 },
+          // ],
+          cursor: "motion",
         },
       });
 
@@ -126,7 +129,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       setupVideoFeedBack();
     } catch (err) {
-      console.log(err);
+      showMessage(noticeMessageContainer, false, err.message, 3000);
     }
   }
 
@@ -178,7 +181,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function handleStop(e) {
     const blob = new Blob(recordedChunks, {
-      type: "video/webm",
+      mimeType: "video/webm",
     });
     const reader = new FileReader();
     reader.readAsArrayBuffer(blob);
@@ -207,7 +210,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     stopBtn.classList.add("hide-btn");
     hideWindowBtn.classList.add("hide-btn");
     selectScreenBtn.classList.remove("hide-btn");
-    startBtn.classList.remove("hide-btn");
     showMessage(noticeMessageContainer, false, "Preparing....", undefined);
   });
 
@@ -273,6 +275,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       `Processing.... ${progress.timemark}`
     );
     loaderContainer.classList.remove("hide");
+    startBtn.style.display = "none";
   });
 
   // Conversion to mp4 completed
@@ -283,6 +286,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideMessage(noticeMessageContainer);
     ipcRenderer.invoke("get-default-source").then((source) => {
       setupStream(source);
+      startBtn.style.display = "block";
     });
   });
 

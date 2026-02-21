@@ -51,6 +51,7 @@ function createMainWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "frontend", "index.html"));
   mainWindow.on("ready-to-show", () => mainWindow.show());
+  mainWindow.webContents.openDevTools();
 }
 
 const createTrayMenu = () => {
@@ -170,7 +171,7 @@ ipcMain.handle("get-capture-sources", async () => {
         label: source.name,
         click: () => selectSource(source),
       };
-    })
+    }),
   );
   menu.popup();
 });
@@ -206,7 +207,7 @@ ipcMain.handle("handle-stream", async (e, stream) => {
           "-preset slow",
           "-movflags +faststart",
           "-pix_fmt yuv420p",
-          // "-vf fps=60,scale=1920:1080",
+          "-vf fps=60,scale=1920:1080",
         ])
         .toFormat("mp4")
         .on("end", () => {
@@ -266,8 +267,7 @@ ipcMain.handle("play-with-default-player", async (e, location) => {
   const exist = fs.existsSync(location);
   if (exist) {
     await shell.openPath(location);
-  }
-  {
+  } else {
     mainWindow.webContents.send("error-message", { message: "File not Found" });
   }
 });

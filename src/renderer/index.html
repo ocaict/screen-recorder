@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
+  <title>Oca Screen Recorder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="titlebar">
+    <div class="titlebar-drag">
+      <img src="images/appIcon.png" alt="Icon" class="app-icon">
+      <span class="app-title">Oca Screen Recorder</span>
+    </div>
+    <div class="titlebar-buttons">
+      <button class="titlebar-btn minimize-btn" id="minimizeBtn" title="Minimize">
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          <rect x="1" y="5.5" width="10" height="1" fill="currentColor" />
+        </svg>
+      </button>
+      <button class="titlebar-btn maximize-btn" id="maximizeBtn" title="Maximize">
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
+      <button class="titlebar-btn close-btn" id="closeBtn" title="Close">
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" />
+          <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="preview-section">
+      <div class="preview-container">
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <div class="no-source-message" id="noSourceMessage">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <p>Select a screen or window to start recording</p>
+        </div>
+        <div class="recording-indicator hidden" id="recordingIndicator">
+          <span class="recording-dot"></span>
+          <span class="recording-text">Recording</span>
+          <span class="recording-time" id="recordingTime">00:00:00</span>
+        </div>
+        <div class="hotkey-overlay hidden" id="hotkeyOverlay">
+          <span>Press</span>
+          <span class="hotkey-key" id="hotkeyKey">F9</span>
+          <span>to stop</span>
+        </div>
+        <div class="countdown-overlay hidden" id="countdownOverlay">
+          <div class="countdown-number" id="countdownNumber">5</div>
+          <div class="countdown-text">Recording will start...</div>
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <button class="control-btn select-source-btn" id="selectSourceBtn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <span>Select Source</span>
+        </button>
+
+        <button class="control-btn start-btn" id="startBtn" disabled>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" />
+          </svg>
+          <span>Start Recording</span>
+        </button>
+
+        <button class="control-btn pause-btn" id="pauseBtn" disabled>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="pauseIcon">
+            <rect x="6" y="4" width="4" height="16" rx="1" />
+            <rect x="14" y="4" width="4" height="16" rx="1" />
+          </svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="resumeIcon" style="display:none;">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <span id="pauseBtnText">Pause</span>
+        </button>
+
+        <button class="control-btn stop-btn" id="stopBtn" disabled>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+          <span>Stop Recording</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>Source Preview</h3>
+        <div class="source-list" id="sourceList">
+          <div class="source-item no-source" id="noSourcePreview">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span class="source-name">No source selected</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Recent Recordings</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+          <h3 style="margin:0">Recent Recordings</h3>
+          <button class="btn" id="clearRecentBtn" style="font-size:12px;padding:6px 8px">Clear All</button>
+        </div>
+        <div class="recent-recordings-list" id="recentRecordingsList">
+          <div class="no-recordings">No recordings yet</div>
+        </div>
+      </div>
+
+      <button class="settings-btn" id="settingsBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <span>Settings</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="modal" id="sourceModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Select Source</h2>
+        <button class="modal-close" id="closeSourceModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="source-grid" id="sourceGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="settingsModal">
+    <div class="modal-content settings-modal">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" id="closeSettingsModal">&times;</button>
+      </div>
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="recording">Recording</button>
+        <button class="settings-tab" data-tab="save">Save</button>
+        <button class="settings-tab" data-tab="general">General</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-form tab-content active" id="tab-recording">
+          <div class="form-group">
+            <label for="settingsQuality">Video Quality</label>
+            <select id="settingsQuality" class="form-select">
+              <option value="low">Low (Smaller file)</option>
+              <option value="medium">Medium</option>
+              <option value="high">High (Recommended)</option>
+              <option value="ultra">Ultra (Best quality)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settingsFrameRate">Frame Rate</label>
+            <select id="settingsFrameRate" class="form-select">
+              <option value="24">24 fps</option>
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settingsResolution">Resolution</label>
+            <select id="settingsResolution" class="form-select">
+              <option value="1280x720">720p (1280x720)</option>
+              <option value="1920x1080">1080p (1920x1080)</option>
+              <option value="2560x1440">1440p (2560x1440)</option>
+              <option value="3840x2160">4K (3840x2160)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsRecordAudio" checked>
+              Record Audio
+            </label>
+          </div>
+          <div class="form-group" id="audioDeviceGroup">
+            <label for="settingsMicrophone">Microphone</label>
+            <select id="settingsMicrophone" class="form-select">
+              <option value="default">Default Microphone</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settingsCountdown">Countdown</label>
+            <select id="settingsCountdown" class="form-select">
+              <option value="0">No countdown</option>
+              <option value="3">3 seconds</option>
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-form tab-content" id="tab-save">
+          <div class="form-group">
+            <label for="settingsOutputDir">Output Directory</label>
+            <input type="text" id="settingsOutputDir" class="form-input" placeholder="Default: Videos folder">
+          </div>
+          <div class="form-group">
+            <label for="settingsFilenamePattern">Filename Pattern</label>
+            <select id="settingsFilenamePattern" class="form-select">
+              <option value="Recording_{date}_{time}">Recording_{date}_{time}</option>
+              <option value="Video_{date}_{time}">Video_{date}_{time}</option>
+              <option value="Tutorial_{date}_{time}">Tutorial_{date}_{time}</option>
+              <option value="{date}_{time}">{date}_{time}</option>
+              <option value="Recording_{timestamp}">Recording_{timestamp}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settingsCompression">Compression</label>
+            <select id="settingsCompression" class="form-select">
+              <option value="maximum">Maximum Compression (Smallest file)</option>
+              <option value="balanced">Balanced (Recommended)</option>
+              <option value="quality">Quality (Best quality, larger file)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="settingsHardwareAcceleration">Hardware Acceleration</label>
+            <select id="settingsHardwareAcceleration" class="form-select">
+              <option value="none">None (Software Encoding)</option>
+              <option value="nvenc">NVIDIA NVENC</option>
+              <option value="qsv">Intel Quick Sync Video (QSV)</option>
+              <option value="amf">AMD AMF</option>
+            </select>
+            <div class="form-note" id="hardwareInfo" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+            <button type="button" class="btn" id="autoSelectNvenc" style="margin-top:8px;display:none">Auto-select
+              NVENC</button>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsAutoSave">
+              Auto-save (skip save dialog)
+            </label>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsAutoOpen" checked>
+              Auto-open after recording
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-form tab-content" id="tab-general">
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsHideWindow" checked>
+              Hide Window During Recording
+            </label>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsShortcut" checked>
+              Enable Global Shortcut
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="settingsShortcutKey">Shortcut Key</label>
+            <select id="settingsShortcutKey" class="form-select">
+              <option value="F9">F9</option>
+              <option value="F10">F10</option>
+              <option value="F11">F11</option>
+              <option value="F12">F12</option>
+              <option value="CommandOrControl+Shift+R">Ctrl+Shift+R</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsShowNotifications" checked>
+              Show Notifications
+            </label>
+          </div>
+        </div>
+
+        <button class="save-settings-btn" id="saveSettingsBtn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <div id="nvencPrompt" class="nvenc-prompt"
+    style="display:none;position:fixed;bottom:80px;right:20px;background:var(--bg-card);border:1px solid rgba(0,0,0,0.08);padding:12px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.08);z-index:1200;max-width:320px;">
+    <div style="margin-bottom:8px;font-size:13px;color:var(--text)">Fast hardware encoding is available on your system.
+      Would you like to enable NVIDIA NVENC for faster exports?</div>
+    <div style="text-align:right">
+      <button id="nvencDismissBtn" class="btn" style="margin-right:8px">Dismiss</button>
+      <button id="nvencEnableBtn" class="btn primary">Enable NVENC</button>
+    </div>
+  </div>
+
+  <div class="processing-overlay" id="processingOverlay">
+    <div class="processing-content">
+      <div class="spinner"></div>
+      <p id="processingText">Processing video...</p>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <p class="progress-percent" id="progressPercent">0%</p>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+
+</html>

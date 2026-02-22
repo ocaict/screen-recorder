@@ -33,17 +33,24 @@
 ScreenCapturer/
 ├── src/
 │   ├── main/
-│   │   └── main.js          # Main process
+│   │   ├── main.js          # Main process entry
+│   │   ├── tray.js          # System tray management
+│   │   ├── shortcuts.js     # Global shortcuts
+│   │   ├── ipc-handlers.js # IPC communication
+│   │   └── state.js        # Recording state
 │   ├── preload/
 │   │   └── preload.js      # Preload script (IPC bridge)
 │   ├── renderer/
 │   │   ├── index.html      # Main UI
 │   │   ├── styles.css      # Styles
-│   │   └── renderer.js     # Frontend logic
+│   │   ├── renderer.js     # Main controller
+│   │   ├── recording.js    # Recording logic
+│   │   ├── sources.js      # Source selection
+│   │   └── ui.js           # UI helpers
 │   └── utils/
 │       ├── logger.js       # Logging utility
 │       ├── settings.js     # Settings persistence
-│       └── ffmpeg.js       # FFmpeg handler
+│       └── ffmpeg.js      # FFmpeg handler
 ├── package.json
 ├── TODO.md
 └── ...
@@ -63,6 +70,21 @@ ScreenCapturer/
 - Disk space validation
 - Window close during recording confirmation
 - Settings validation
+- Pause/Resume recording functionality
+- Recording countdown timer (3, 2, 1)
+- Auto-save recordings to specified folder
+- Custom filename patterns (date, time)
+- Video compression/optimization
+- Recent recordings list with metadata
+- Minimize to system tray while recording
+- Recording hotkey overlay (show when recording)
+- Hardware acceleration for encoding (NVENC, QSV, AMF)
+- Background processing during conversion
+- Memory protection for long recordings
+- Windows notification on recording complete
+- Conversion progress feedback (toast + overlay)
+- Preview reset after recording (shows "Recording Complete" message)
+- Content Security Policy
 
 ---
 
@@ -72,12 +94,12 @@ ScreenCapturer/
 
 - [x] Pause/Resume recording functionality
 - [x] Recording countdown timer (3, 2, 1)
-- [ ] Add webcam overlay/picture-in-picture
-- [ ] Record specific area (region selection) instead of full screen/window
-- [ ] Schedule recording (record at specific time)
+- [x] Add webcam overlay/picture-in-picture
+- [x] Record specific area (region selection) instead of full screen/window
+- [x] Schedule recording (record at specific time)
 - [ ] Record system audio (without microphone)
 - [ ] Add annotation/drawing on screen during recording
-- [ ] Custom hotkeys for start/stop/pause
+- [x] Custom hotkeys for stop recording
 
 ### Video Editing
 
@@ -91,7 +113,7 @@ ScreenCapturer/
 - [x] Auto-save recordings to specified folder (without save dialog)
 - [x] Custom filename patterns (date, time, custom prefix)
 - [x] Video compression/optimization
-- [ ] Output format selection (MP4, WebM, MKV, AVI)
+- [x] Output format selection (MP4, WebM)
 - [ ] Upload to cloud (YouTube, Google Drive, etc.)
 
 ### UI/UX Improvements
@@ -103,14 +125,13 @@ ScreenCapturer/
 - [ ] Keyboard shortcuts for all actions
 - [ ] Drag and drop to reorder recordings
 - [ ] Thumbnail preview for saved recordings
-- [ ] Recording history with metadata
+- [x] Recording history with metadata
 
 ### Performance & Optimization
 
-- [x] Hardware acceleration for encoding (NVENC, QSV, VCE) - UI implemented, requires system FFmpeg
+- [x] Hardware acceleration for encoding (NVENC, QSV, VCE)
 - [x] Background processing (don't block UI during conversion)
-- [ ] Chunked recording (save chunks periodically to prevent data loss)
-- [ ] Memory usage optimization for long recordings
+- [x] Memory usage optimization for long recordings
 - [ ] Multi-threaded encoding
 - [ ] Streaming upload while recording
 
@@ -124,9 +145,9 @@ ScreenCapturer/
 
 ### Observability & Support
 
-- [ ] Add a diagnostics page showing `ffmpeg` path, build flags, GPU/driver versions, and run-time encoder test
-- [ ] Add a "collect logs" troubleshooting command and UI action to bundle logs for support
-- [ ] Optional anonymized telemetry (opt-in): report hardware-fallback rates and major conversion errors
+- [x] Add a diagnostics page showing ffmpeg path, hardware encoders
+- [ ] Add a "collect logs" troubleshooting command
+- [ ] Optional anonymized telemetry (opt-in)
 
 ### Quality & Testing
 
@@ -135,8 +156,8 @@ ScreenCapturer/
 - [ ] Automated UI tests
 - [ ] Performance benchmarking
 - [ ] Memory leak detection
-- [ ] Error logging to file
-- [ ] CI smoke tests: headless recording → conversion pipeline to validate bundled `ffmpeg` and fallback behavior
+- [x] Error logging to file
+- [ ] CI smoke tests
 
 ### Distribution
 
@@ -149,7 +170,7 @@ ScreenCapturer/
 
 ### Packaging
 
-- [ ] Bundle a tested per-platform `ffmpeg` (Windows/macOS/Linux) with checksums and add packaging scripts to verify and extract during build
+- [ ] Bundle a tested per-platform ffmpeg with checksums
 
 ### Advanced Features
 
@@ -160,3 +181,14 @@ ScreenCapturer/
 - [ ] GIF export
 - [ ] Batch conversion
 - [ ] Recording templates (preset settings)
+
+---
+
+## Code Quality Improvements Implemented
+
+- [x] Split main.js into modules (tray, shortcuts, ipc-handlers, state)
+- [x] Split renderer.js into modules (recording, sources, ui)
+- [x] Added Content Security Policy
+- [x] Memory monitoring during recording
+- [x] Auto-stop recording on memory threshold
+- [x] Improved conversion feedback to user

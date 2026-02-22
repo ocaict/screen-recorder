@@ -1,73 +1,146 @@
 class ScreenRecorder {
   constructor() {
-    this.videoStream = null;
-    this.audioStream = null;
-    this.mixedStream = null;
-    this.mediaRecorder = null;
-    this.recordedChunks = [];
-    this.isRecording = false;
-    this.isPaused = false;
-    this.selectedSource = null;
-    this.selectedAudioDevice = null;
-    this.recordingStartTime = null;
-    this.recordingTimer = null;
     this.settings = {};
+    this.recordingManager = null;
+    this.sourceManager = null;
+    this.uiManager = null;
+    this.annotationManager = null;
 
-    this.initializeElements();
+    this.initialize();
+  }
+
+  async initialize() {
+    this.uiManager = new UIManager(this);
+    this.uiManager.initializeElements();
+    
+    this.recordingManager = new RecordingManager(this);
+    this.sourceManager = new SourceManager(this);
+    this.annotationManager = new AnnotationManager(this);
+    this.annotationManager.init();
+
+    await this.recordingManager.init();
+
     this.initializeEventListeners();
     this.initializeIPCListeners();
     this.loadSettings();
     this.loadAudioDevices();
   }
 
-  initializeElements() {
-    this.previewVideo = document.getElementById("previewVideo");
-    this.noSourceMessage = document.getElementById("noSourceMessage");
-    this.recordingIndicator = document.getElementById("recordingIndicator");
-    this.recordingTime = document.getElementById("recordingTime");
-    this.selectSourceBtn = document.getElementById("selectSourceBtn");
-    this.startBtn = document.getElementById("startBtn");
-    this.pauseBtn = document.getElementById("pauseBtn");
-    this.pauseIcon = document.getElementById("pauseIcon");
-    this.resumeIcon = document.getElementById("resumeIcon");
-    this.pauseBtnText = document.getElementById("pauseBtnText");
-    this.stopBtn = document.getElementById("stopBtn");
-    this.sourceModal = document.getElementById("sourceModal");
-    this.sourceGrid = document.getElementById("sourceGrid");
-    this.closeSourceModal = document.getElementById("closeSourceModal");
-    this.settingsModal = document.getElementById("settingsModal");
-    this.closeSettingsModal = document.getElementById("closeSettingsModal");
-    this.settingsBtn = document.getElementById("settingsBtn");
-    this.saveSettingsBtn = document.getElementById("saveSettingsBtn");
-    this.toastContainer = document.getElementById("toastContainer");
-    this.processingOverlay = document.getElementById("processingOverlay");
-    this.progressFill = document.getElementById("progressFill");
-    this.progressPercent = document.getElementById("progressPercent");
-    this.processingText = document.getElementById("processingText");
-    this.sourceList = document.getElementById("sourceList");
-    this.minimizeBtn = document.getElementById("minimizeBtn");
-    this.maximizeBtn = document.getElementById("maximizeBtn");
-    this.closeBtn = document.getElementById("closeBtn");
-    this.countdownOverlay = document.getElementById("countdownOverlay");
-    this.countdownNumber = document.getElementById("countdownNumber");
-    this.recentRecordingsList = document.getElementById("recentRecordingsList");
-    this.clearRecentBtn = document.getElementById("clearRecentBtn");
-    this.hotkeyOverlay = document.getElementById("hotkeyOverlay");
-    this.hotkeyKey = document.getElementById("hotkeyKey");
-    this.hwInfo = document.getElementById("hardwareInfo");
-    this.hwAutoBtn = document.getElementById("autoSelectNvenc");
-    this.nvencPrompt = document.getElementById("nvencPrompt");
-    this.nvencEnableBtn = document.getElementById("nvencEnableBtn");
-    this.nvencDismissBtn = document.getElementById("nvencDismissBtn");
-  }
-
   initializeEventListeners() {
     this.selectSourceBtn.addEventListener("click", () =>
-      this.openSourceModal(),
+      this.sourceManager.openSourceModal(),
     );
-    this.startBtn.addEventListener("click", () => this.startRecording());
+    
+    this.selectRegionBtn = document.getElementById("selectRegionBtn");
+    this.selectRegionBtn?.addEventListener("click", async () => {
+      try {
+        const region = await window.electronAPI.startRegionSelection();
+        if (region) {
+          this.recordingManager.selectedRegion = region;
+          
+          try {
+            const sources = await window.electronAPI.getCaptureSources();
+            const screenSource = sources.find(s => s.id.startsWith("screen:"));
+            
+            if (screenSource) {
+              const fullStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                  mandatory: {
+                    chromeMediaSource: "desktop",
+                    chromeMediaSourceId: screenSource.id,
+                    minWidth: 1920,
+                    maxWidth: 1920,
+                    minHeight: 1080,
+                    maxHeight: 1080,
+                  },
+                },
+                audio: false,
+              });
+              
+              const cropCanvas = document.createElement("canvas");
+              cropCanvas.width = region.width;
+              cropCanvas.height = region.height;
+              const ctx = cropCanvas.getContext("2d");
+              
+              const fullVideo = document.createElement("video");
+              fullVideo.srcObject = fullStream;
+              fullVideo.muted = true;
+              fullVideo.playsInline = true;
+              await fullVideo.play();
+              
+              const drawCrop = () => {
+                if (fullVideo.readyState >= 2) {
+                  ctx.drawImage(fullVideo, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
+                }
+                this.cropDrawId = requestAnimationFrame(drawCrop);
+              };
+              drawCrop();
+              
+              const croppedStream = cropCanvas.captureStream(30);
+              this.previewVideo.srcObject = croppedStream;
+              this.previewVideo.style.objectFit = "contain";
+              this.previewVideo.style.width = "100%";
+              this.previewVideo.style.height = "100%";
+              await this.previewVideo.play();
+              this.noSourceMessage.classList.add("hidden");
+              
+              this.currentPreviewStream = fullStream;
+              this.currentCropCanvas = cropCanvas;
+            }
+          } catch (previewErr) {
+            console.warn("Preview capture failed:", previewErr);
+          }
+          
+          this.showToast(`Region selected: ${region.width}x${region.height}`, "success");
+          this.startBtn.disabled = false;
+          this.sourceList.innerHTML = `
+            <div class="source-item active">
+              <div class="source-thumbnail region-thumb">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                </svg>
+              </div>
+              <span class="source-name">Region: ${region.width}x${region.height}</span>
+            </div>
+          `;
+          document.querySelectorAll(".timer-preset").forEach(btn => btn.disabled = false);
+        }
+      } catch (err) {
+        console.error("Region selection error:", err);
+        this.showToast("Failed to select region", "error");
+      }
+    });
+    
+    if (this.processingCancel) {
+      this.processingCancel.addEventListener("click", async () => {
+        if (confirm("Cancel processing? The recording will be lost.")) {
+          this.isProcessingCancelled = true;
+          this.processingOverlay.classList.remove("active");
+          this.processingStatus.textContent = "Cancelling...";
+          if (window.electronAPI && window.electronAPI.cancelConversion) {
+            await window.electronAPI.cancelConversion();
+          }
+          this.showToast("Processing cancelled", "info");
+        }
+      });
+    }
+    
+    if (this.emptySourceBtn) {
+      this.emptySourceBtn.addEventListener("click", () => this.sourceManager.openSourceModal());
+    }
+
+    document.querySelectorAll(".timer-preset").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".timer-preset").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.timerPreset = parseInt(btn.dataset.minutes) || 0;
+      });
+    });
+
+    this.startBtn.addEventListener("click", () => this.recordingManager.startRecording());
     this.pauseBtn.addEventListener("click", () => this.togglePause());
-    this.stopBtn.addEventListener("click", () => this.stopRecording());
+    this.stopBtn.addEventListener("click", () => this.recordingManager.stopRecording());
+    this.annotationToggleBtn.addEventListener("click", () => this.toggleAnnotation());
     this.closeSourceModal.addEventListener("click", () =>
       this.closeModal(this.sourceModal),
     );
@@ -75,7 +148,89 @@ class ScreenRecorder {
       this.closeModal(this.settingsModal),
     );
     this.settingsBtn.addEventListener("click", () => this.openSettingsModal());
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (this.sourceModal.classList.contains("active")) {
+          this.closeModal(this.sourceModal);
+        } else if (this.settingsModal.classList.contains("active")) {
+          this.closeModal(this.settingsModal);
+        }
+      }
+      if (e.key === "Tab") {
+        if (this.sourceModal.classList.contains("active")) {
+          this.uiManager.trapFocus(e, this.sourceModal);
+        } else if (this.settingsModal.classList.contains("active")) {
+          this.uiManager.trapFocus(e, this.settingsModal);
+        }
+      }
+      if (e.ctrlKey && e.key === ",") {
+        e.preventDefault();
+        this.openSettingsModal();
+      }
+      if (e.key === "F2" && this.recordingManager?.isRecording) {
+        e.preventDefault();
+        this.toggleAnnotation();
+      }
+    });
     this.saveSettingsBtn.addEventListener("click", () => this.saveSettings());
+
+    document.getElementById("browseOutputDir")?.addEventListener("click", async () => {
+      const dir = await window.electronAPI.selectDirectory();
+      if (dir) {
+        document.getElementById("settingsOutputDir").value = dir;
+      }
+    });
+
+    document.getElementById("settingsShortcut")?.addEventListener("change", (e) => {
+      const shortcutKey = document.getElementById("settingsShortcutKey");
+      if (shortcutKey) {
+        shortcutKey.disabled = !e.target.checked;
+      }
+    });
+
+    document.getElementById("resetSettingsBtn")?.addEventListener("click", async () => {
+      if (!confirm("Reset all settings to defaults?")) return;
+      document.getElementById("settingsQuality").value = "high";
+      document.getElementById("settingsFrameRate").value = "24";
+      document.getElementById("settingsResolution").value = "1920x1080";
+      document.getElementById("settingsRecordAudio").checked = true;
+      document.getElementById("settingsMicrophone").value = "default";
+      document.getElementById("settingsCountdown").value = "3";
+      document.getElementById("settingsOutputDir").value = "";
+      document.getElementById("settingsFilenamePattern").value = "Recording_{date}_{time}";
+      document.getElementById("settingsCompression").value = "balanced";
+      document.getElementById("settingsHardwareAcceleration").value = "none";
+      document.getElementById("settingsFormat").value = "mp4";
+      document.getElementById("settingsAutoSave").checked = true;
+      document.getElementById("settingsAutoOpen").checked = true;
+      document.getElementById("settingsHideWindow").checked = true;
+      document.getElementById("settingsShortcut").checked = true;
+      document.getElementById("settingsShortcutKey").value = "F9";
+      document.getElementById("settingsShortcutKey").disabled = false;
+      document.getElementById("settingsShowNotifications").checked = true;
+      this.updateFileSizeEstimate();
+      
+      try {
+        await this.saveSettings(true);
+        this.showToast("Settings reset to defaults", "success");
+      } catch (err) {
+        this.showToast("Failed to reset settings", "error");
+      }
+    });
+
+    document.getElementById("settingsQuality")?.addEventListener("change", () => this.updateFileSizeEstimate());
+    document.getElementById("settingsResolution")?.addEventListener("change", () => this.updateFileSizeEstimate());
+    document.getElementById("settingsFrameRate")?.addEventListener("change", () => this.updateFileSizeEstimate());
+    document.getElementById("settingsRecordAudio")?.addEventListener("change", () => this.updateFileSizeEstimate());
+    
+    document.getElementById("settingsWebcam")?.addEventListener("change", (e) => {
+      const webcamGroups = document.querySelectorAll('[id$="Group"][id*="webcam"]');
+      webcamGroups.forEach(el => {
+        el.style.display = e.target.checked ? "block" : "none";
+      });
+    });
+    
     if (this.hwAutoBtn) {
       this.hwAutoBtn.addEventListener("click", async () => {
         const hwSelect = document.getElementById(
@@ -118,7 +273,7 @@ class ScreenRecorder {
             "NVENC enabled. Exports will use hardware encoding when available.",
             "success",
           );
-          if (this.nvencPrompt) this.nvencPrompt.style.display = "none";
+          if (this.nvencPrompt) this.nvencPrompt.classList.remove("show");
         } catch (err) {
           this.showToast("Failed to enable NVENC", "error");
         }
@@ -129,7 +284,10 @@ class ScreenRecorder {
         try {
           await window.electronAPI.saveSettings({ nvencPromptDismissed: true });
           this.settings.nvencPromptDismissed = true;
-          if (this.nvencPrompt) this.nvencPrompt.style.display = "none";
+          if (this.nvencPrompt) {
+            this.nvencPrompt.classList.remove("show");
+            this.nvencPrompt.style.display = "none";
+          }
         } catch (err) {
           this.showToast("Failed to dismiss prompt", "error");
         }
@@ -153,72 +311,144 @@ class ScreenRecorder {
     document.querySelectorAll(".settings-tab").forEach((tab) => {
       tab.addEventListener("click", () => this.switchTab(tab.dataset.tab));
     });
+
+    if (this.showShortcutsBtn) {
+      this.showShortcutsBtn.addEventListener("click", () => this.openShortcutsModal());
+    }
+    if (this.closeShortcutsModal) {
+      this.closeShortcutsModal.addEventListener("click", () => this.closeModal(this.shortcutsModal));
+    }
+    if (this.shortcutsModal) {
+      this.shortcutsModal.addEventListener("click", (e) => {
+        if (e.target === this.shortcutsModal) this.closeModal(this.shortcutsModal);
+      });
+    }
+
+    if (this.settingsTimerPreset) {
+      this.settingsTimerPreset.addEventListener("change", () => {
+        if (this.settingsTimerPreset.value === "custom") {
+          this.customTimerGroup.style.display = "block";
+        } else {
+          this.customTimerGroup.style.display = "none";
+        }
+      });
+    }
+
+    if (this.settingsScheduledRecording) {
+      this.settingsScheduledRecording.addEventListener("change", () => {
+        this.scheduleTimeGroup.style.display = this.settingsScheduledRecording.checked ? "block" : "none";
+      });
+    }
   }
 
   switchTab(tabName) {
     document
       .querySelectorAll(".settings-tab")
-      .forEach((t) => t.classList.remove("active"));
+      .forEach((t) => {
+        t.classList.remove("active");
+        t.setAttribute("aria-selected", "false");
+      });
     document
       .querySelectorAll(".tab-content")
       .forEach((c) => c.classList.remove("active"));
     document
       .querySelector(`.settings-tab[data-tab="${tabName}"]`)
       .classList.add("active");
+    document
+      .querySelector(`.settings-tab[data-tab="${tabName}"]`)
+      .setAttribute("aria-selected", "true");
     document.getElementById(`tab-${tabName}`).classList.add("active");
   }
 
   initializeIPCListeners() {
     window.electronAPI.onStopRecordingFromTray(() => {
-      if (this.isRecording) this.stopRecording();
+      if (this.recordingManager.isRecording) this.recordingManager.stopRecording();
     });
 
     window.electronAPI.onStopRecordingFromShortcut(() => {
       if (
-        this.mediaRecorder &&
-        (this.mediaRecorder.state === "recording" ||
-          this.mediaRecorder.state === "paused")
+        this.recordingManager.mediaRecorder &&
+        (this.recordingManager.mediaRecorder.state === "recording" ||
+          this.recordingManager.mediaRecorder.state === "paused")
       ) {
-        this.stopRecording();
-      } else if (this.isRecording || this.mediaRecorder) {
-        this.stopRecording();
+        this.recordingManager.stopRecording();
+      } else if (this.recordingManager.isRecording || this.recordingManager.mediaRecorder) {
+        this.recordingManager.stopRecording();
       }
     });
 
     window.electronAPI.onResumeRecordingFromTray(() => {
-      if (this.isRecording && this.isPaused) this.resumeRecording();
+      if (this.recordingManager.isRecording && this.recordingManager.isPaused) this.recordingManager.resumeRecording();
     });
 
     window.electronAPI.onPauseRecordingFromTray(() => {
-      if (this.isRecording && !this.isPaused) this.pauseRecording();
+      if (this.recordingManager.isRecording && !this.recordingManager.isPaused) this.recordingManager.pauseRecording();
     });
 
     window.electronAPI.onStopRecordingFromQuit(async () => {
-      if (this.isRecording) {
-        await this.stopRecording();
+      if (this.recordingManager.isRecording) {
+        await this.recordingManager.stopRecording();
         await new Promise((resolve) => setTimeout(resolve, 1000));
         window.electronAPI.windowClose();
       }
     });
 
     window.electronAPI.onConversionStarted(() => {
-      this.processingText.textContent = "Converting video...";
+      this.processingOverlay.classList.add("active");
+      this.processingTitle.textContent = "Processing Video";
+      this.processingStatus.textContent = "Converting video...";
+      this.processingStartTime = Date.now();
+      this.progressFill.style.width = "0%";
+      this.progressPercent.textContent = "0%";
+      this.progressEta.textContent = "Starting...";
+      this.showToast("Video conversion started in background", "info");
     });
 
     window.electronAPI.onConversionProgress((progress) => {
       if (progress && progress.warning) {
         this.showToast(progress.warning, "warning");
-        this.processingText.textContent = "Converting (software fallback)";
+        this.processingStatus.textContent = "Converting (software fallback)";
         return;
       }
 
-      this.progressFill.style.width = `${progress.percent || 0}%`;
-      this.progressPercent.textContent = `${Math.round(progress.percent || 0)}%`;
+      const percent = progress.percent || 0;
+      this.progressFill.style.width = `${percent}%`;
+      this.progressPercent.textContent = `${Math.round(percent)}%`;
+
+      if (progress.stage) {
+        const stageMessages = {
+          converting: "Converting video...",
+          muxing: "Muxing audio...",
+          encoding: "Encoding...",
+          saving: "Saving file...",
+          finalizing: "Finalizing..."
+        };
+        this.processingStatus.textContent = stageMessages[progress.stage] || "Processing...";
+      }
+
+      if (this.processingStartTime && percent > 0) {
+        const elapsed = (Date.now() - this.processingStartTime) / 1000;
+        const estimatedTotal = elapsed / (percent / 100);
+        const remaining = estimatedTotal - elapsed;
+        if (remaining > 0) {
+          const mins = Math.floor(remaining / 60);
+          const secs = Math.floor(remaining % 60);
+          this.progressEta.textContent = mins > 0 ? `${mins}m ${secs}s remaining` : `${secs}s remaining`;
+        }
+      }
     });
 
     window.electronAPI.onConversionComplete(async (filePath) => {
       this.processingOverlay.classList.remove("active");
-      this.showToast("Recording saved successfully!", "success");
+      
+      const fileName = filePath.split(/[\\/]/).pop();
+      const isMp4 = filePath.toLowerCase().endsWith('.mp4');
+      
+      if (isMp4) {
+        this.showToast(`Conversion complete: ${fileName}`, "success");
+      } else {
+        this.showToast(`Recording saved: ${fileName}`, "success");
+      }
 
       const settings = await window.electronAPI.getSettings();
       if (settings.autoOpenAfterRecording) {
@@ -239,6 +469,7 @@ class ScreenRecorder {
     try {
       this.settings = await window.electronAPI.getSettings();
       this.applySettings();
+      this.updateQuickSettings();
       await this.loadRecentRecordings();
     } catch (err) {
       console.error("Failed to load settings:", err);
@@ -257,11 +488,11 @@ class ScreenRecorder {
   displayRecentRecordings(recordings) {
     if (!recordings || recordings.length === 0) {
       this.recentRecordingsList.innerHTML =
-        '<div class="no-recordings">No recordings yet</div>';
+        '<div class="no-recordings" role="status"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="5,3 19,12 5,21" /></svg><p class="no-recordings-text">No recordings yet</p><p class="no-recordings-hint">Your recorded videos will appear here</p></div>';
       return;
     }
 
-    const limitedRecordings = recordings.slice(0, 10);
+      const limitedRecordings = recordings.slice(0, 10);
 
     this.recentRecordingsList.innerHTML = limitedRecordings
       .map((recording) => {
@@ -273,16 +504,37 @@ class ScreenRecorder {
         const sizeStr = this.formatFileSize(recording.size);
 
         return `
-        <div class="recent-recording-item" data-path="${recording.filePath}" title="${recording.filePath}">
-          <svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5,3 19,12 5,21"/>
-          </svg>
+        <div class="recent-recording-item" role="listitem" data-path="${recording.filePath}" title="${recording.filePath}" tabindex="0" aria-label="${recording.fileName}, ${dateStr}, ${sizeStr}">
+          <div class="recent-recording-thumb">
+            <svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="5,3 19,12 5,21"/>
+            </svg>
+          </div>
           <div class="recent-recording-info">
             <div class="recent-recording-name">${recording.fileName}</div>
-            <div class="recent-recording-date">${dateStr} • ${sizeStr}</div>
+            <div class="recent-recording-meta">
+              <span class="recent-recording-date">${dateStr}</span>
+              <span class="recent-recording-divider">•</span>
+              <span class="recent-recording-size">${sizeStr}</span>
+            </div>
           </div>
           <div class="recent-recording-actions">
-            <button class="btn btn-icon btn-delete" data-path="${recording.filePath}" title="Remove">✕</button>
+            <button class="btn-action btn-play" data-path="${recording.filePath}" title="Play" aria-label="Play ${recording.fileName}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            </button>
+            <button class="btn-action btn-folder" data-path="${recording.filePath}" title="Open folder" aria-label="Open folder containing ${recording.fileName}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+            <button class="btn-action btn-delete" data-path="${recording.filePath}" title="Delete" aria-label="Delete ${recording.fileName}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
           </div>
         </div>
       `;
@@ -292,13 +544,35 @@ class ScreenRecorder {
     this.recentRecordingsList
       .querySelectorAll(".recent-recording-item")
       .forEach((item) => {
-        item.addEventListener("click", (e) => {
-          // ignore clicks on action buttons
-          if (e.target.closest(".btn-delete")) return;
+        const openRecording = (e) => {
+          if (e.target.closest(".btn-action")) return;
           const filePath = item.dataset.path;
           window.electronAPI.openFile(filePath);
+        };
+        item.addEventListener("click", openRecording);
+        item.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openRecording(e);
+          }
         });
       });
+
+    this.recentRecordingsList.querySelectorAll(".btn-play").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filePath = btn.dataset.path;
+        window.electronAPI.openFile(filePath);
+      });
+    });
+
+    this.recentRecordingsList.querySelectorAll(".btn-folder").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filePath = btn.dataset.path;
+        window.electronAPI.openFileLocation(filePath);
+      });
+    });
 
     this.recentRecordingsList.querySelectorAll(".btn-delete").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
@@ -336,549 +610,266 @@ class ScreenRecorder {
   }
 
   formatFileSize(bytes) {
-    if (!bytes || bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    return this.uiManager.formatFileSize(bytes);
+  }
+
+  updateFileSizeEstimate() {
+    const quality = document.getElementById("settingsQuality")?.value || "high";
+    const resolution = document.getElementById("settingsResolution")?.value || "1920x1080";
+    const frameRate = parseInt(document.getElementById("settingsFrameRate")?.value || "30");
+    const recordAudio = document.getElementById("settingsRecordAudio")?.checked !== false;
+
+    const [width, height] = resolution.split("x").map(Number);
+    const pixels = width * height;
+    const pixelsPerSecond = pixels * frameRate;
+
+    let bitrateMultiplier;
+    switch (quality) {
+      case "low":
+        bitrateMultiplier = 0.1;
+        break;
+      case "medium":
+        bitrateMultiplier = 0.25;
+        break;
+      case "high":
+        bitrateMultiplier = 0.5;
+        break;
+      case "ultra":
+        bitrateMultiplier = 1.0;
+        break;
+      default:
+        bitrateMultiplier = 0.5;
+    }
+
+    let videoBitrate = pixelsPerSecond * bitrateMultiplier / 8;
+    let audioBitrate = recordAudio ? 128 * 1024 / 8 : 0;
+
+    const totalBitratePerSecond = videoBitrate + audioBitrate;
+    const durationSeconds = 60;
+    const estimatedBytes = totalBitratePerSecond * durationSeconds;
+
+    const sizeValue = this.fileSizePreview?.querySelector(".size-value");
+    if (sizeValue) {
+      sizeValue.textContent = `~${this.formatFileSize(estimatedBytes)}`;
+    }
+  }
+
+  updateQuickSettings() {
+    const resolution = this.settings.resolution || "1920x1080";
+    const frameRate = this.settings.frameRate || 24;
+    const quality = this.settings.videoQuality || "high";
+
+    const resLabel = resolution === "1920x1080" ? "1080p" : 
+                     resolution === "1280x720" ? "720p" : 
+                     resolution === "2560x1440" ? "1440p" : 
+                     resolution === "3840x2160" ? "4K" : resolution;
+
+    const qualityLabel = quality.charAt(0).toUpperCase() + quality.slice(1);
+
+    if (this.quickResolution) this.quickResolution.textContent = resLabel;
+    if (this.quickFps) this.quickFps.textContent = `${frameRate} fps`;
+    if (this.quickQuality) this.quickQuality.textContent = qualityLabel;
+  }
+
+  showQuickSettings() {
+    if (this.quickSettings) {
+      this.quickSettings.classList.add("show");
+    }
+  }
+
+  hideQuickSettings() {
+    if (this.quickSettings) {
+      this.quickSettings.classList.remove("show");
+    }
   }
 
   applySettings() {
     document.getElementById("settingsQuality").value =
       this.settings.videoQuality || "high";
     document.getElementById("settingsFrameRate").value =
-      this.settings.frameRate || "30";
+      this.settings.frameRate || "24";
     document.getElementById("settingsResolution").value =
       this.settings.resolution || "1920x1080";
     document.getElementById("settingsRecordAudio").checked =
       this.settings.recordAudio !== false;
     document.getElementById("settingsCountdown").value =
-      this.settings.countdown || "5";
+      this.settings.countdown || "3";
     document.getElementById("settingsOutputDir").value =
       this.settings.outputDirectory || "";
     document.getElementById("settingsFilenamePattern").value =
       this.settings.filenamePattern || "Recording_{date}_{time}";
     document.getElementById("settingsAutoSave").checked =
-      this.settings.autoSave || false;
+      this.settings.autoSave !== false;
     document.getElementById("settingsAutoOpen").checked =
-      this.settings.autoOpen !== false;
+      this.settings.autoOpenAfterRecording !== false;
     document.getElementById("settingsHideWindow").checked =
       this.settings.hideWindowDuringRecording !== false;
     document.getElementById("settingsShortcut").checked =
       this.settings.shortcutEnabled !== false;
     document.getElementById("settingsShortcutKey").value =
       this.settings.shortcutKey || "F9";
+    document.getElementById("settingsShortcutKey").disabled =
+      this.settings.shortcutEnabled === false;
+    document.getElementById("settingsFormat").value =
+      this.settings.defaultFormat || "mp4";
+    
+    if (document.getElementById("settingsWebcam")) {
+      document.getElementById("settingsWebcam").checked = this.settings.webcamEnabled || false;
+      if (document.getElementById("settingsCamera")) {
+        document.getElementById("settingsCamera").value = this.settings.selectedCamera || "default";
+      }
+      document.getElementById("settingsWebcamPosition").value = this.settings.webcamPosition || "bottom-right";
+      document.getElementById("settingsWebcamSize").value = this.settings.webcamSize || "medium";
+      
+      const webcamGroups = document.querySelectorAll('[id$="Group"][id*="webcam"]');
+      webcamGroups.forEach(el => {
+        el.style.display = (this.settings.webcamEnabled || false) ? "block" : "none";
+      });
+    }
   }
 
   async loadAudioDevices() {
-    // Audio devices are now loaded via settings modal
-  }
-
-  async openSourceModal() {
-    try {
-      this.sourceGrid.innerHTML =
-        '<div class="loading">Loading sources...</div>';
-      this.sourceModal.classList.add("active");
-
-      const sources = await window.electronAPI.getCaptureSources();
-      this.displaySources(sources);
-    } catch (err) {
-      this.showToast("Failed to get sources", "error");
-      console.error(err);
-    }
-  }
-
-  displaySources(sources) {
-    this.sourceGrid.innerHTML = "";
-
-    if (sources.length === 0) {
-      this.sourceGrid.innerHTML =
-        '<div class="no-sources">No sources available</div>';
-      return;
-    }
-
-    sources.forEach((source) => {
-      const item = document.createElement("div");
-      item.className = "source-grid-item";
-      item.dataset.id = source.id;
-
-      const img = document.createElement("img");
-      img.src = source.thumbnail;
-      img.alt = source.name;
-
-      const label = document.createElement("div");
-      label.className = "source-label";
-      label.textContent = source.name;
-
-      item.appendChild(img);
-      item.appendChild(label);
-
-      item.addEventListener("click", () => this.selectSource(source, item));
-
-      this.sourceGrid.appendChild(item);
-    });
-  }
-
-  async selectSource(source, element) {
-    document
-      .querySelectorAll(".source-grid-item")
-      .forEach((el) => el.classList.remove("selected"));
-    element.classList.add("selected");
-
-    this.selectedSource = source;
-    await this.setupVideoStream(source);
-    this.updateSourcePreview(source);
-    this.closeModal(this.sourceModal);
-    this.startBtn.disabled = false;
-  }
-
-  updateSourcePreview(source) {
-    const sourceList = document.getElementById("sourceList");
-    sourceList.innerHTML = `
-      <div class="source-item active">
-        <img src="${source.thumbnail}" alt="${source.name}" class="source-thumbnail">
-        <span class="source-name">${source.name}</span>
-      </div>
-    `;
-  }
-
-  async setupVideoStream(source) {
-    try {
-      this.stopCurrentStream();
-
-      this.videoStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          mandatory: {
-            chromeMediaSource: "desktop",
-            chromeMediaSourceId: source.id,
-            minWidth: 1920,
-            maxWidth: 1920,
-            minHeight: 1080,
-            maxHeight: 1080,
-            minFrameRate: 30,
-            maxFrameRate: 30,
-          },
-        },
-        audio: false,
-      });
-
-      this.previewVideo.srcObject = this.videoStream;
-      this.previewVideo.play();
-      this.noSourceMessage.classList.add("hidden");
-
-      this.showToast("Source connected", "success");
-    } catch (err) {
-      this.showToast(`Failed to connect: ${err.message}`, "error");
-      console.error(err);
-    }
-  }
-
-  runCountdown(seconds) {
-    return new Promise((resolve) => {
-      this.countdownOverlay.classList.remove("hidden");
-      this.countdownNumber.textContent = seconds;
-
-      let remaining = seconds;
-      let cancelled = false;
-
-      const originalStopRecording = this.stopRecording.bind(this);
-
-      const countdownInterval = setInterval(() => {
-        remaining--;
-
-        if (remaining <= 0) {
-          clearInterval(countdownInterval);
-          this.countdownOverlay.classList.add("hidden");
-          this.stopRecording = originalStopRecording;
-          resolve(false);
-        } else {
-          this.countdownNumber.textContent = remaining;
-        }
-      }, 1000);
-
-      this._countdownCancelled = false;
-
-      this.stopRecording = () => {
-        cancelled = true;
-        clearInterval(countdownInterval);
-        this.countdownOverlay.classList.add("hidden");
-        this._countdownCancelled = true;
-        this.stopRecording = originalStopRecording;
-        this.showToast("Countdown cancelled", "info");
-        this.startBtn.disabled = false;
-        this.selectSourceBtn.disabled = false;
-        this.startBtn.textContent = "Start Recording";
-      };
-    }).then((cancelled) => {
-      return cancelled;
-    });
-  }
-
-  stopCurrentStream() {
-    if (this.videoStream) {
-      this.videoStream.getTracks().forEach((track) => track.stop());
-      this.videoStream = null;
-    }
-    if (this.audioStream) {
-      this.audioStream.getTracks().forEach((track) => track.stop());
-      this.audioStream = null;
-    }
-    this.previewVideo.srcObject = null;
-  }
-
-  async startRecording() {
-    if (this.isRecording) {
-      this.showToast("Recording already in progress", "error");
-      return;
-    }
-
-    if (!this.selectedSource) {
-      this.showToast("Please select a screen or window first", "error");
-      return;
-    }
-
-    if (!this.videoStream || !this.videoStream.active) {
-      this.showToast(
-        "Source stream is no longer active. Please select source again.",
-        "error",
-      );
-      return;
-    }
-
-    if (
-      document.getElementById("settingsRecordAudio").checked &&
-      !navigator.mediaDevices
-    ) {
-      this.showToast("Media devices not available", "error");
-      return;
-    }
-
-    const countdownSeconds = this.settings.countdown || 0;
-
-    if (countdownSeconds > 0) {
-      const cancelled = await this.runCountdown(countdownSeconds);
-      if (cancelled) return;
-    }
-
-    try {
-      this.recordedChunks = [];
-      this.startBtn.disabled = true;
-      this.selectSourceBtn.disabled = true;
-      this.pauseBtn.disabled = true;
-      this.stopBtn.disabled = true;
-      this.startBtn.textContent = "Starting...";
-
-      if (document.getElementById("settingsRecordAudio").checked) {
-        try {
-          const micDeviceId =
-            this.settings.selectedMicrophone !== "default"
-              ? this.settings.selectedMicrophone
-              : undefined;
-          this.audioStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-              deviceId: micDeviceId ? { exact: micDeviceId } : undefined,
-            },
-          });
-        } catch (audioErr) {
-          console.warn("Could not get audio stream:", audioErr);
-          this.showToast(
-            "Audio device unavailable, recording video only",
-            "info",
-          );
-        }
-      }
-
-      const videoTracks = this.videoStream.getTracks();
-      const audioTracks = this.audioStream ? this.audioStream.getTracks() : [];
-
-      if (videoTracks.length === 0) {
-        throw new Error("No video tracks available");
-      }
-
-      this.mixedStream = new MediaStream([...videoTracks, ...audioTracks]);
-
-      const mimeType = this.getSupportedMimeType();
-
-      if (!mimeType) {
-        throw new Error("No supported video format available");
-      }
-
-      this.mediaRecorder = new MediaRecorder(this.mixedStream, {
-        mimeType,
-        videoBitsPerSecond: this.getVideoBitrate(),
-      });
-
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          this.recordedChunks.push(e.data);
-        }
-      };
-
-      this.mediaRecorder.onstop = () => this.handleRecordingComplete();
-
-      this.mediaRecorder.start(100);
-      this.isRecording = true;
-      this.recordingStartTime = Date.now();
-
-      await window.electronAPI.setRecordingState(true);
-
-      this.updateUIForRecording();
-      this.startRecordingTimer();
-
-      if (this.settings.hideWindowDuringRecording) {
-        await window.electronAPI.windowMinimize();
-      }
-
-      this.showToast("Recording started", "info");
-    } catch (err) {
-      this.showToast(`Failed to start: ${err.message}`, "error");
-      console.error(err);
-    }
-  }
-
-  getSupportedMimeType() {
-    const types = [
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm",
-      "video/mp4",
-    ];
-
-    for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        return type;
-      }
-    }
-
-    return "video/webm";
-  }
-
-  getVideoBitrate() {
-    switch (this.settings.videoQuality) {
-      case "low":
-        return 1000000;
-      case "medium":
-        return 2500000;
-      case "high":
-        return 5000000;
-      case "ultra":
-        return 10000000;
-      default:
-        return 5000000;
-    }
-  }
-
-  startRecordingTimer() {
-    this.recordingTimer = setInterval(() => {
-      const elapsed = Date.now() - this.recordingStartTime;
-      this.recordingTime.textContent = this.formatTime(elapsed);
-    }, 1000);
-  }
-
-  formatTime(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return [hours, minutes, seconds]
-      .map((v) => v.toString().padStart(2, "0"))
-      .join(":");
-  }
-
-  async stopRecording() {
-    if (!this.isRecording || !this.mediaRecorder) return;
-
-    try {
-      this.mediaRecorder.stop();
-      this.isRecording = false;
-
-      if (this.recordingTimer) {
-        clearInterval(this.recordingTimer);
-        this.recordingTimer = null;
-      }
-
-      this.updateUIForStopped();
-      await window.electronAPI.setRecordingState(false);
-
-      this.processingOverlay.classList.add("active");
-      this.processingText.textContent = "Saving recording...";
-      this.progressFill.style.width = "0%";
-      this.progressPercent.textContent = "0%";
-    } catch (err) {
-      this.showToast(`Failed to stop: ${err.message}`, "error");
-      console.error(err);
-    }
   }
 
   togglePause() {
-    if (!this.isRecording || !this.mediaRecorder) return;
+    if (!this.recordingManager.isRecording || !this.recordingManager.mediaRecorder) return;
 
-    if (this.isPaused) {
-      this.resumeRecording();
+    if (this.recordingManager.isPaused) {
+      this.recordingManager.resumeRecording();
     } else {
-      this.pauseRecording();
+      this.recordingManager.pauseRecording();
     }
   }
 
-  pauseRecording() {
-    if (!this.mediaRecorder || this.isPaused) return;
+  toggleAnnotation() {
+    if (!this.annotationManager) return;
 
-    try {
-      this.mediaRecorder.pause();
-      this.isPaused = true;
-
-      if (this.recordingTimer) {
-        clearInterval(this.recordingTimer);
-        this.recordingTimer = null;
-      }
-
-      this.updateUIPaused();
-      this.showToast("Recording paused", "info");
-
-      window.electronAPI.setRecordingState(true, true);
-    } catch (err) {
-      console.error("Failed to pause:", err);
-      this.showToast(`Failed to pause: ${err.message}`, "error");
-    }
-  }
-
-  resumeRecording() {
-    if (!this.mediaRecorder || !this.isPaused) return;
-
-    try {
-      this.mediaRecorder.resume();
-      this.isPaused = false;
-
-      this.recordingStartTime = Date.now();
-      this.startRecordingTimer();
-
-      this.updateUIForRecording();
-      this.showToast("Recording resumed", "info");
-
-      window.electronAPI.setRecordingState(true, false);
-    } catch (err) {
-      console.error("Failed to resume:", err);
-      this.showToast(`Failed to resume: ${err.message}`, "error");
+    if (this.annotationManager.isActive) {
+      this.annotationManager.deactivate();
+      this.annotationToggleBtn.classList.remove("active");
+      this.annotationToggleBtn.querySelector("span").textContent = "Annotate";
+    } else {
+      this.annotationManager.activate();
+      this.annotationToggleBtn.classList.add("active");
+      this.annotationToggleBtn.querySelector("span").textContent = "Drawing";
     }
   }
 
   updateUIPaused() {
     this.pauseBtn.disabled = false;
+    this.pauseBtn.setAttribute("aria-label", "Resume recording");
     this.pauseIcon.style.display = "none";
     this.resumeIcon.style.display = "block";
     this.pauseBtnText.textContent = "Resume";
     this.stopBtn.disabled = false;
     this.recordingIndicator.classList.add("hidden");
-  }
-
-  async handleRecordingComplete() {
-    try {
-      const settings = await window.electronAPI.getSettings();
-      const blob = new Blob(this.recordedChunks, {
-        type: this.getSupportedMimeType(),
-      });
-      const arrayBuffer = await blob.arrayBuffer();
-
-      const result = await window.electronAPI.saveRecording(arrayBuffer);
-
-      if (result.canceled) {
-        this.processingOverlay.classList.remove("active");
-        this.showToast("Recording cancelled", "info");
-        return;
-      }
-
-      if (!result.success) {
-        this.processingOverlay.classList.remove("active");
-        this.showToast(result.error || "Failed to save recording", "error");
-        return;
-      }
-
-      if (settings.defaultFormat === "webm" || !settings.defaultFormat) {
-        this.processingOverlay.classList.remove("active");
-        this.showToast("Recording saved!", "success");
-        if (settings.autoOpenAfterRecording) {
-          window.electronAPI.openFile(result.filePath);
-        }
-        this.showCompletionOptions(result.filePath);
-      }
-    } catch (err) {
-      this.processingOverlay.classList.remove("active");
-      this.showToast(`Error: ${err.message}`, "error");
-      console.error(err);
-    }
-
-    if (this.mixedStream) {
-      this.mixedStream.getTracks().forEach((track) => track.stop());
-      this.mixedStream = null;
-    }
-  }
-
-  showCompletionOptions(filePath) {
-    const toast = document.createElement("div");
-    toast.className = "toast success";
-    toast.innerHTML = `
-      <span>Recording saved!</span>
-      <button class="toast-btn" id="openLocation">Open Location</button>
-      <button class="toast-btn" id="playVideo">Play</button>
-      <button class="toast-btn" id="closeToast">Close</button>
-    `;
-
-    this.toastContainer.appendChild(toast);
-
-    document.getElementById("openLocation")?.addEventListener("click", () => {
-      window.electronAPI.openFileLocation(filePath);
-    });
-
-    document.getElementById("playVideo")?.addEventListener("click", () => {
-      window.electronAPI.openFile(filePath);
-    });
-
-    document.getElementById("closeToast")?.addEventListener("click", () => {
-      toast.remove();
-    });
-
-    setTimeout(() => toast.remove(), 15000);
+    this.recordingPill?.classList.add("hidden");
   }
 
   updateUIForRecording() {
     this.startBtn.disabled = true;
     this.pauseBtn.disabled = false;
+    this.pauseBtn.setAttribute("aria-label", "Pause recording");
     this.pauseIcon.style.display = "block";
     this.resumeIcon.style.display = "none";
     this.pauseBtnText.textContent = "Pause";
     this.stopBtn.disabled = false;
+    this.annotationToggleBtn.disabled = false;
     this.selectSourceBtn.disabled = true;
     this.stopBtn.classList.add("recording");
     this.recordingIndicator.classList.remove("hidden");
+    this.recordingPill?.classList.remove("hidden");
     this.recordingTime.textContent = "00:00:00";
+    if (this.pillTime) this.pillTime.textContent = "00:00";
+
+    this.recordingStats?.classList.remove("hidden");
+    this.recordingManager.recordedBytes = 0;
+    this.recordingManager.updateRecordingStats();
+    this.hideQuickSettings();
 
     this.hotkeyKey.textContent = this.settings.shortcutKey || "F9";
     this.hotkeyOverlay.classList.remove("hidden");
   }
 
   updateUIForStopped() {
+    this.recordingManager.stopCurrentStream();
+    this.recordingManager.selectedRegion = null;
+    
+    if (this.cropDrawId) {
+      cancelAnimationFrame(this.cropDrawId);
+      this.cropDrawId = null;
+    }
+    if (this.currentPreviewStream) {
+      this.currentPreviewStream.getTracks().forEach(t => t.stop());
+      this.currentPreviewStream = null;
+    }
+    this.currentCropCanvas = null;
+    
+    this.previewVideo.srcObject = null;
+    this.previewVideo.poster = "";
+    this.previewVideo.load();
+    
+    this.noSourceMessage.classList.remove("hidden");
+    this.noSourceMessage.innerHTML = `
+      <div class="empty-state-icon">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="22 4 12 14.01 9 11.01" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <p class="empty-state-title">Recording Complete!</p>
+      <p class="empty-state-desc">Select a source to record again</p>
+      <button class="empty-state-btn" id="emptySourceBtn" aria-label="Select a screen source">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+          <circle cx="8" cy="10" r="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+        Select Source
+      </button>
+    `;
+    
     this.startBtn.disabled = false;
     this.startBtn.textContent = "Start Recording";
     this.pauseBtn.disabled = true;
+    this.pauseBtn.setAttribute("aria-label", "Pause recording");
     this.pauseIcon.style.display = "block";
     this.resumeIcon.style.display = "none";
     this.pauseBtnText.textContent = "Pause";
     this.stopBtn.disabled = true;
+    this.annotationToggleBtn.disabled = true;
+    this.annotationToggleBtn.classList.remove("active");
+    this.annotationToggleBtn.querySelector("span").textContent = "Annotate";
     this.selectSourceBtn.disabled = false;
     this.stopBtn.classList.remove("recording");
     this.recordingIndicator.classList.add("hidden");
+    this.recordingPill?.classList.add("hidden");
+    this.recordingStats?.classList.add("hidden");
+    this.recordingManager.stopAudioMeter();
     this.hotkeyOverlay.classList.add("hidden");
-    this.isPaused = false;
+    
+    this.annotationManager?.deactivate();
+    this.recordingManager.isPaused = false;
+    this.showQuickSettings();
+    this.timerPreset = 0;
+    document.querySelectorAll(".timer-preset").forEach(btn => {
+      btn.disabled = true;
+      btn.classList.remove("active");
+    });
+    document.querySelector('.timer-preset[data-minutes="0"]')?.classList.add("active");
+    
+    const newEmptyBtn = document.getElementById("emptySourceBtn");
+    if (newEmptyBtn) {
+      newEmptyBtn.addEventListener("click", () => this.sourceManager.openSourceModal());
+    }
   }
 
   openSettingsModal() {
     document.getElementById("settingsQuality").value =
       this.settings.videoQuality || "high";
     document.getElementById("settingsFrameRate").value =
-      this.settings.frameRate || 30;
+      this.settings.frameRate || "24";
     document.getElementById("settingsResolution").value =
       this.settings.resolution || "1920x1080";
     document.getElementById("settingsOutputDir").value =
@@ -886,7 +877,7 @@ class ScreenRecorder {
     document.getElementById("settingsRecordAudio").checked =
       this.settings.recordAudio !== false;
     document.getElementById("settingsCountdown").value =
-      this.settings.countdown || 5;
+      this.settings.countdown || 3;
     document.getElementById("settingsFilenamePattern").value =
       this.settings.filenamePattern || "Recording_{date}_{time}";
     document.getElementById("settingsCompression").value =
@@ -908,8 +899,78 @@ class ScreenRecorder {
 
     this.loadAudioDevicesForSettings();
     this.updateHardwareAccelerationOptions();
+    this.updateFileSizeEstimate();
+    this.loadRecordingStats();
+    this.updateAdvancedSettings();
 
-    this.settingsModal.classList.add("active");
+    this.openModal(this.settingsModal);
+  }
+
+  updateAdvancedSettings() {
+    if (this.settingsTimerPreset) {
+      const timerPreset = this.settings.timerPreset || 0;
+      if (timerPreset > 120) {
+        this.settingsTimerPreset.value = "custom";
+        if (this.settingsCustomTimer) this.settingsCustomTimer.value = timerPreset;
+        if (this.customTimerGroup) this.customTimerGroup.style.display = "block";
+      } else {
+        this.settingsTimerPreset.value = timerPreset.toString();
+        if (this.customTimerGroup) this.customTimerGroup.style.display = "none";
+      }
+    }
+
+    if (this.settingsScheduledRecording) {
+      this.settingsScheduledRecording.checked = this.settings.scheduledRecording || false;
+      if (this.scheduleTimeGroup) {
+        this.scheduleTimeGroup.style.display = this.settings.scheduledRecording ? "block" : "none";
+      }
+    }
+
+    if (this.settingsScheduleTime) {
+      this.settingsScheduleTime.value = this.settings.scheduleTime || "09:00";
+    }
+
+    if (document.getElementById("settingsCountdownSound")) {
+      document.getElementById("settingsCountdownSound").checked = this.settings.countdownSound !== false;
+    }
+
+    if (document.getElementById("settingsAutoHideUI")) {
+      document.getElementById("settingsAutoHideUI").checked = this.settings.autoHideUI !== false;
+    }
+
+    const shortcutKeyEl = document.getElementById("shortcutStartStop");
+    if (shortcutKeyEl) {
+      shortcutKeyEl.innerHTML = `<kbd>${this.settings.shortcutKey || "F9"}</kbd>`;
+    }
+  }
+
+  loadRecordingStats() {
+    window.electronAPI.getRecentRecordings().then((recordings) => {
+      if (!recordings || recordings.length === 0) {
+        if (this.totalRecordingsEl) this.totalRecordingsEl.textContent = "0";
+        if (this.totalDurationEl) this.totalDurationEl.textContent = "0h";
+        if (this.totalStorageEl) this.totalStorageEl.textContent = "0 MB";
+        return;
+      }
+
+      const totalRecordings = recordings.length;
+      let totalSize = 0;
+
+      recordings.forEach((r) => {
+        totalSize += r.size || 0;
+      });
+
+      if (this.totalRecordingsEl) this.totalRecordingsEl.textContent = totalRecordings.toString();
+      if (this.totalStorageEl) this.totalStorageEl.textContent = this.formatFileSize(totalSize);
+      if (this.totalDurationEl) this.totalDurationEl.textContent = "~" + Math.round(totalSize / 5000000) + "m";
+    });
+  }
+
+  openShortcutsModal() {
+    this.closeModal(this.settingsModal);
+    setTimeout(() => {
+      this.openModal(this.shortcutsModal);
+    }, 200);
   }
 
   async updateHardwareAccelerationOptions() {
@@ -948,7 +1009,6 @@ class ScreenRecorder {
           : "none";
     }
 
-    // Show non-destructive NVENC suggestion if available and user hasn't opted in or dismissed
     try {
       const shouldShow =
         this.availableEncoders &&
@@ -959,19 +1019,30 @@ class ScreenRecorder {
         !this.settings.nvencPromptDismissed;
 
       if (shouldShow && this.nvencPrompt) {
-        this.nvencPrompt.style.display = "block";
+        this.nvencPrompt.classList.add("show");
       } else if (this.nvencPrompt) {
-        this.nvencPrompt.style.display = "none";
+        this.nvencPrompt.classList.remove("show");
       }
     } catch (e) {
-      // ignore
     }
   }
 
   async loadAudioDevicesForSettings() {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioDevices = devices.filter((d) => d.kind === "audioinput");
+      let audioDevices = [];
+      let videoDevices = [];
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        stream.getTracks().forEach(track => track.stop());
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        audioDevices = devices.filter((d) => d.kind === "audioinput");
+        videoDevices = devices.filter((d) => d.kind === "videoinput");
+      } catch (e) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        audioDevices = devices.filter((d) => d.kind === "audioinput");
+        videoDevices = devices.filter((d) => d.kind === "videoinput");
+      }
 
       const micSelect = document.getElementById("settingsMicrophone");
       micSelect.innerHTML =
@@ -988,12 +1059,35 @@ class ScreenRecorder {
       if (this.settings.selectedMicrophone) {
         micSelect.value = this.settings.selectedMicrophone;
       }
+
+      const cameraSelect = document.getElementById("settingsCamera");
+      if (cameraSelect) {
+        cameraSelect.innerHTML = '<option value="default">Default Camera</option>';
+
+        videoDevices.forEach((device) => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.textContent =
+            device.label || `Camera ${device.deviceId.slice(0, 8)}`;
+          cameraSelect.appendChild(option);
+        });
+
+        if (this.settings.selectedCamera) {
+          cameraSelect.value = this.settings.selectedCamera;
+        }
+      }
     } catch (err) {
-      console.error("Failed to load audio devices:", err);
+      console.error("Failed to load devices:", err);
     }
   }
 
   async saveSettings() {
+    const shortcutEnabled = document.getElementById("settingsShortcut").checked;
+    const timerPresetValue = document.getElementById("settingsTimerPreset").value;
+    const timerPreset = timerPresetValue === "custom" 
+      ? parseInt(document.getElementById("settingsCustomTimer").value) || 45
+      : parseInt(timerPresetValue) || 0;
+
     const newSettings = {
       videoQuality: document.getElementById("settingsQuality").value,
       frameRate: parseInt(document.getElementById("settingsFrameRate").value),
@@ -1003,8 +1097,10 @@ class ScreenRecorder {
       selectedMicrophone: document.getElementById("settingsMicrophone").value,
       hideWindowDuringRecording:
         document.getElementById("settingsHideWindow").checked,
-      shortcutEnabled: document.getElementById("settingsShortcut").checked,
-      shortcutKey: document.getElementById("settingsShortcutKey").value,
+      shortcutEnabled: shortcutEnabled,
+      shortcutKey: shortcutEnabled
+        ? document.getElementById("settingsShortcutKey").value
+        : this.settings.shortcutKey || "F9",
       showNotifications: document.getElementById("settingsShowNotifications")
         .checked,
       countdown: parseInt(document.getElementById("settingsCountdown").value),
@@ -1013,16 +1109,26 @@ class ScreenRecorder {
       hardwareAcceleration: document.getElementById(
         "settingsHardwareAcceleration",
       ).value,
+      defaultFormat: document.getElementById("settingsFormat").value,
       autoSave: document.getElementById("settingsAutoSave").checked,
       autoOpenAfterRecording:
         document.getElementById("settingsAutoOpen").checked,
+      timerPreset: timerPreset,
+      scheduledRecording: document.getElementById("settingsScheduledRecording").checked,
+      scheduleTime: document.getElementById("settingsScheduleTime").value,
+      countdownSound: document.getElementById("settingsCountdownSound").checked,
+      autoHideUI: document.getElementById("settingsAutoHideUI").checked,
+      webcamEnabled: document.getElementById("settingsWebcam").checked,
+      selectedCamera: document.getElementById("settingsCamera")?.value || "default",
+      webcamPosition: document.getElementById("settingsWebcamPosition").value,
+      webcamSize: document.getElementById("settingsWebcamSize").value,
     };
-
-    console.log("Saving newSettings:", JSON.stringify(newSettings));
 
     try {
       this.settings = await window.electronAPI.saveSettings(newSettings);
       this.applySettings();
+      this.updateQuickSettings();
+      this.updateTimerPresetFromSettings();
       this.closeModal(this.settingsModal);
       this.showToast("Settings saved", "success");
     } catch (err) {
@@ -1031,8 +1137,23 @@ class ScreenRecorder {
     }
   }
 
+  updateTimerPresetFromSettings() {
+    this.timerPreset = this.settings.timerPreset || 0;
+    if (this.timerPreset > 0 && this.timerPreset !== this.recordingTimeout) {
+      const presetBtn = document.querySelector(`.timer-preset[data-minutes="${Math.min(this.timerPreset, 30)}"]`);
+      if (presetBtn) {
+        document.querySelectorAll(".timer-preset").forEach(b => b.classList.remove("active"));
+        presetBtn.classList.add("active");
+      }
+    }
+  }
+
   closeModal(modal) {
-    modal.classList.remove("active");
+    this.uiManager.closeModal(modal);
+  }
+
+  openModal(modal) {
+    this.uiManager.openModal(modal);
   }
 
   async toggleMaximize() {
@@ -1050,13 +1171,40 @@ class ScreenRecorder {
   }
 
   showToast(message, type = "info") {
+    this.uiManager.showToast(message, type);
+  }
+
+  runCountdown(seconds) {
+    return this.uiManager.runCountdown(seconds);
+  }
+
+  showCompletionOptions(filePath) {
     const toast = document.createElement("div");
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
+    toast.className = "toast success";
+    toast.innerHTML = `
+      <span class="toast-message">Recording saved!</span>
+      <div class="toast-buttons">
+        <button class="toast-btn" id="openLocation">Open Location</button>
+        <button class="toast-btn primary" id="playVideo">Play</button>
+        <button class="toast-btn" id="closeToast">Close</button>
+      </div>
+    `;
 
     this.toastContainer.appendChild(toast);
 
-    setTimeout(() => toast.remove(), 4000);
+    document.getElementById("openLocation")?.addEventListener("click", () => {
+      window.electronAPI.openFileLocation(filePath);
+    });
+
+    document.getElementById("playVideo")?.addEventListener("click", () => {
+      window.electronAPI.openFile(filePath);
+    });
+
+    document.getElementById("closeToast")?.addEventListener("click", () => {
+      toast.remove();
+    });
+
+    setTimeout(() => toast.remove(), 15000);
   }
 }
 

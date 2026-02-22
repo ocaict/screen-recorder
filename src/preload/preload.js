@@ -7,8 +7,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   windowIsMaximized: () => ipcRenderer.invoke("window-is-maximized"),
 
   getCaptureSources: () => ipcRenderer.invoke("get-capture-sources"),
-  getAudioDevices: () => ipcRenderer.invoke("get-audio-devices"),
-
   saveRecording: (streamData) =>
     ipcRenderer.invoke("save-recording", streamData),
   openFileLocation: (filePath) =>
@@ -30,8 +28,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("remove-recent-recording-and-file", filePath),
 
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
+  selectDirectory: () => ipcRenderer.invoke("select-directory"),
   getAppPaths: () => ipcRenderer.invoke("get-app-paths"),
   getAvailableEncoders: () => ipcRenderer.invoke("get-available-encoders"),
+  getDisplays: () => ipcRenderer.invoke("get-displays"),
+  startRegionSelection: () => ipcRenderer.invoke("start-region-selection"),
+  sendRegionSelected: (region) => ipcRenderer.send("region-selected", region),
+  sendRegionCancelled: () => ipcRenderer.send("region-cancelled"),
 
   onStopRecordingFromTray: (callback) => {
     ipcRenderer.on("stop-recording-from-tray", () => callback());

@@ -245,6 +245,8 @@ async function convertVideo(inputPath, outputPath, onProgress) {
       .outputOptions("-r", (settings.frameRate || 24).toString())
       .outputOptions("-c:a", "aac")
       .outputOptions("-b:a", audioBitrate)
+      .outputOptions("-shortest")
+      .outputOptions("-avoid_negative_ts", "make_zero")
       .format("mp4");
 
     cmd
@@ -280,7 +282,7 @@ async function convertVideo(inputPath, outputPath, onProgress) {
         resolve(outputPath);
       })
       .on("error", async (err) => {
-        log("error", `Conversion error: ${err.message}`);
+        log("error", `Conversion error: ${err.message}, input: ${inputPath}, output: ${outputPath}`);
 
         // If a hardware encoder failed due to driver/API issues, attempt software fallback
         const msg = err && err.message ? err.message.toLowerCase() : "";
@@ -290,7 +292,9 @@ async function convertVideo(inputPath, outputPath, onProgress) {
           msg.includes("amf") ||
           msg.includes("driver does not support") ||
           msg.includes("required") ||
-          msg.includes("failed to open encoder");
+          msg.includes("failed to open encoder") ||
+          msg.includes("encoder") ||
+          msg.includes("codec");
 
         if (useHwEncoder && hwError) {
           log(

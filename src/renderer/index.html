@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
   <title>Oca Screen Recorder</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -17,17 +17,17 @@
       <span class="app-title">Oca Screen Recorder</span>
     </div>
     <div class="titlebar-buttons">
-      <button class="titlebar-btn minimize-btn" id="minimizeBtn" title="Minimize">
+      <button class="titlebar-btn minimize-btn" id="minimizeBtn" aria-label="Minimize window" data-tooltip="Minimize">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect x="1" y="5.5" width="10" height="1" fill="currentColor" />
         </svg>
       </button>
-      <button class="titlebar-btn maximize-btn" id="maximizeBtn" title="Maximize">
+      <button class="titlebar-btn maximize-btn" id="maximizeBtn" aria-label="Maximize window" data-tooltip="Maximize">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
         </svg>
       </button>
-      <button class="titlebar-btn close-btn" id="closeBtn" title="Close">
+      <button class="titlebar-btn close-btn" id="closeBtn" aria-label="Close window" data-tooltip="Close">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" />
           <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" />
@@ -40,18 +40,184 @@
     <div class="preview-section">
       <div class="preview-container">
         <video id="previewVideo" autoplay muted playsinline></video>
-        <div class="no-source-message" id="noSourceMessage">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-          <p>Select a screen or window to start recording</p>
+        <div class="no-source-message" id="noSourceMessage" role="status" aria-live="polite">
+          <div class="empty-state-icon">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <circle cx="8" cy="10" r="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+              <path d="M12 8v4m0 0l-2-2m2 2l2-2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <p class="empty-state-title">No Source Selected</p>
+          <p class="empty-state-desc">Click "Select Source" to choose a screen or window to record</p>
+          <button class="empty-state-btn" id="emptySourceBtn" aria-label="Select a screen source">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            Select Source
+          </button>
         </div>
-        <div class="recording-indicator hidden" id="recordingIndicator">
-          <span class="recording-dot"></span>
+        <div class="recording-indicator hidden" id="recordingIndicator" role="status" aria-live="polite"
+          aria-atomic="true">
+          <span class="recording-dot" aria-hidden="true"></span>
           <span class="recording-text">Recording</span>
-          <span class="recording-time" id="recordingTime">00:00:00</span>
+          <span class="recording-time" id="recordingTime" aria-label="Recording duration">00:00:00</span>
+        </div>
+        <div class="recording-pill" id="recordingPill" aria-hidden="true">
+          <span class="pill-dot"></span>
+          <span class="pill-time" id="pillTime">00:00</span>
+        </div>
+        <div class="quick-settings" id="quickSettings">
+          <div class="quick-setting-item" id="quickResolution" title="Resolution">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>1080p</span>
+          </div>
+          <div class="quick-setting-divider"></div>
+          <div class="quick-setting-item" id="quickFps" title="Frame Rate">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span>24 fps</span>
+          </div>
+          <div class="quick-setting-divider"></div>
+          <div class="quick-setting-item" id="quickQuality" title="Quality">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon
+                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            <span>High</span>
+          </div>
+        </div>
+        
+        <div class="annotation-toolbar hidden" id="annotationToolbar" role="toolbar" aria-label="Annotation tools">
+          <div class="annotation-tools">
+            <button class="annotation-btn active" data-tool="pen" title="Pen (P)" aria-label="Pen tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                <path d="M2 2l7.586 7.586"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" data-tool="highlighter" title="Highlighter (H)" aria-label="Highlighter tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 11l-6 6v3h9l3-3"/>
+                <path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" data-tool="arrow" title="Arrow (A)" aria-label="Arrow tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" data-tool="rectangle" title="Rectangle (R)" aria-label="Rectangle tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" data-tool="ellipse" title="Ellipse (E)" aria-label="Ellipse tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <ellipse cx="12" cy="12" rx="10" ry="8"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" data-tool="text" title="Text (T)" aria-label="Text tool">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 7 4 4 20 4 20 7"/>
+                <line x1="9" y1="20" x2="15" y2="20"/>
+                <line x1="12" y1="4" x2="12" y2="20"/>
+              </svg>
+            </button>
+            <div class="annotation-divider"></div>
+            <button class="annotation-btn" id="annotationUndo" title="Undo (Ctrl+Z)" aria-label="Undo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 7v6h6"/>
+                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+              </svg>
+            </button>
+            <button class="annotation-btn" id="annotationClear" title="Clear All (C)" aria-label="Clear all">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <div class="annotation-divider"></div>
+            <div class="annotation-color-group">
+              <button class="annotation-color-btn active" data-color="#ff0000" style="background:#ff0000" title="Red" aria-label="Red color"></button>
+              <button class="annotation-color-btn" data-color="#00ff00" style="background:#00ff00" title="Green" aria-label="Green color"></button>
+              <button class="annotation-color-btn" data-color="#0000ff" style="background:#0000ff" title="Blue" aria-label="Blue color"></button>
+              <button class="annotation-color-btn" data-color="#ffff00" style="background:#ffff00" title="Yellow" aria-label="Yellow color"></button>
+              <button class="annotation-color-btn" data-color="#ffffff" style="background:#ffffff" title="White" aria-label="White color"></button>
+              <button class="annotation-color-btn" data-color="#000000" style="background:#000000" title="Black" aria-label="Black color"></button>
+            </div>
+            <div class="annotation-divider"></div>
+            <button class="annotation-btn" id="annotationClose" title="Close Annotations" aria-label="Close annotation toolbar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="recording-stats hidden" id="recordingStats" role="status" aria-live="polite">
+          <div class="stat-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span class="stat-value" id="statFps">--</span>
+            <span class="stat-label">FPS</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span class="stat-value" id="statSize">0 MB</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span class="stat-value" id="statRes">1080p</span>
+          </div>
+        </div>
+        <div class="audio-meter hidden" id="audioMeter" role="status" aria-live="polite" aria-label="Audio level">
+          <div class="audio-meter-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+            <span>MIC</span>
+          </div>
+          <div class="audio-meter-bars" id="audioMeterBars">
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+            <div class="audio-bar"></div>
+          </div>
         </div>
         <div class="hotkey-overlay hidden" id="hotkeyOverlay">
           <span>Press</span>
@@ -65,8 +231,10 @@
       </div>
 
       <div class="controls-section">
-        <button class="control-btn select-source-btn" id="selectSourceBtn">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button class="control-btn select-source-btn" id="selectSourceBtn" aria-label="Select screen source to record"
+          data-tooltip="Choose screen or window to record">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
@@ -74,29 +242,53 @@
           <span>Select Source</span>
         </button>
 
-        <button class="control-btn start-btn" id="startBtn" disabled>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <button class="control-btn select-region-btn" id="selectRegionBtn" aria-label="Select region to record"
+          data-tooltip="Select a specific area to record">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+          <span>Select Region</span>
+        </button>
+
+        <button class="control-btn start-btn" id="startBtn" disabled aria-label="Start recording"
+          data-tooltip="Start recording (F9)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
           </svg>
           <span>Start Recording</span>
         </button>
 
-        <button class="control-btn pause-btn" id="pauseBtn" disabled>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="pauseIcon">
+        <button class="control-btn pause-btn" id="pauseBtn" disabled aria-label="Pause recording"
+          data-tooltip="Pause/Resume recording">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="pauseIcon" aria-hidden="true">
             <rect x="6" y="4" width="4" height="16" rx="1" />
             <rect x="14" y="4" width="4" height="16" rx="1" />
           </svg>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="resumeIcon" style="display:none;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" id="resumeIcon" style="display:none;"
+            aria-hidden="true">
             <polygon points="5,3 19,12 5,21" />
           </svg>
           <span id="pauseBtnText">Pause</span>
         </button>
 
-        <button class="control-btn stop-btn" id="stopBtn" disabled>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <button class="control-btn stop-btn" id="stopBtn" disabled aria-label="Stop recording"
+          data-tooltip="Stop recording (F9)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <rect x="4" y="4" width="16" height="16" rx="2" />
           </svg>
           <span>Stop Recording</span>
+        </button>
+
+        <button class="control-btn annotation-btn" id="annotationToggleBtn" disabled aria-label="Toggle annotation"
+          data-tooltip="Toggle annotation (F2)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <path d="M2 2l7.586 7.586"/>
+            <circle cx="11" cy="11" r="2"/>
+          </svg>
+          <span>Annotate</span>
         </button>
       </div>
     </div>
@@ -104,10 +296,12 @@
     <div class="sidebar">
       <div class="sidebar-section">
         <h3>Source Preview</h3>
-        <div class="source-list" id="sourceList">
-          <div class="source-item no-source" id="noSourcePreview">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <div class="source-list" id="sourceList" role="list" aria-label="Selected source">
+          <div class="source-item no-source" id="noSourcePreview" role="status">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+              aria-hidden="true">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <circle cx="8" cy="10" r="1.5" />
               <line x1="8" y1="21" x2="16" y2="21" />
               <line x1="12" y1="17" x2="12" y2="21" />
             </svg>
@@ -117,17 +311,23 @@
       </div>
 
       <div class="sidebar-section">
-        <h3>Recent Recordings</h3>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
-          <h3 style="margin:0">Recent Recordings</h3>
-          <button class="btn" id="clearRecentBtn" style="font-size:12px;padding:6px 8px">Clear All</button>
+        <div class="section-header">
+          <h3>Recent Recordings</h3>
+          <button class="btn" id="clearRecentBtn" aria-label="Clear all recent recordings">Clear All</button>
         </div>
-        <div class="recent-recordings-list" id="recentRecordingsList">
-          <div class="no-recordings">No recordings yet</div>
+        <div class="recent-recordings-list" id="recentRecordingsList" role="list" aria-label="Recent recordings">
+          <div class="no-recordings" role="status">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+              aria-hidden="true">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+            <p class="no-recordings-text">No recordings yet</p>
+            <p class="no-recordings-hint">Your recorded videos will appear here</p>
+          </div>
         </div>
       </div>
 
-      <button class="settings-btn" id="settingsBtn">
+      <button class="settings-btn" id="settingsBtn" data-tooltip="Open settings (Ctrl+,)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
@@ -156,13 +356,50 @@
         <h2>Settings</h2>
         <button class="modal-close" id="closeSettingsModal">&times;</button>
       </div>
-      <div class="settings-tabs">
-        <button class="settings-tab active" data-tab="recording">Recording</button>
-        <button class="settings-tab" data-tab="save">Save</button>
-        <button class="settings-tab" data-tab="general">General</button>
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button class="settings-tab active" data-tab="recording" role="tab" aria-selected="true"
+          aria-controls="tab-recording" id="tab-recording-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" />
+          </svg>
+          Recording
+        </button>
+        <button class="settings-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="tab-advanced"
+          id="tab-advanced-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          Advanced
+        </button>
+        <button class="settings-tab" data-tab="save" role="tab" aria-selected="false" aria-controls="tab-save"
+          id="tab-save-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          Save
+        </button>
+        <button class="settings-tab" data-tab="general" role="tab" aria-selected="false" aria-controls="tab-general"
+          id="tab-general-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          General
+        </button>
       </div>
       <div class="modal-body">
-        <div class="settings-form tab-content active" id="tab-recording">
+        <div class="settings-form tab-content active" id="tab-recording" role="tabpanel"
+          aria-labelledby="tab-recording-btn">
           <div class="form-group">
             <label for="settingsQuality">Video Quality</label>
             <select id="settingsQuality" class="form-select">
@@ -202,6 +439,35 @@
             </select>
           </div>
           <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsWebcam">
+              Enable Webcam Overlay
+            </label>
+          </div>
+          <div class="form-group" id="webcamSettingsGroup" style="display: none; margin-left: 20px;">
+            <label for="settingsCamera">Camera</label>
+            <select id="settingsCamera" class="form-select">
+              <option value="default">Default Camera</option>
+            </select>
+          </div>
+          <div class="form-group" id="webcamPositionGroup" style="display: none; margin-left: 20px;">
+            <label for="settingsWebcamPosition">Webcam Position</label>
+            <select id="settingsWebcamPosition" class="form-select">
+              <option value="bottom-right">Bottom Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="top-right">Top Right</option>
+              <option value="top-left">Top Left</option>
+            </select>
+          </div>
+          <div class="form-group" id="webcamSizeGroup" style="display: none; margin-left: 20px;">
+            <label for="settingsWebcamSize">Webcam Size</label>
+            <select id="settingsWebcamSize" class="form-select">
+              <option value="small">Small (120px)</option>
+              <option value="medium">Medium (180px)</option>
+              <option value="large">Large (240px)</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="settingsCountdown">Countdown</label>
             <select id="settingsCountdown" class="form-select">
               <option value="0">No countdown</option>
@@ -210,12 +476,136 @@
               <option value="10">10 seconds</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Estimated File Size</label>
+            <div class="file-size-preview" id="fileSizePreview">
+              <span class="size-value">~0 MB</span>
+              <span class="size-note">(for 1 minute recording)</span>
+            </div>
+          </div>
         </div>
 
-        <div class="settings-form tab-content" id="tab-save">
+        <div class="settings-form tab-content" id="tab-advanced" role="tabpanel" aria-labelledby="tab-advanced-btn">
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              Timer & Schedule
+            </h4>
+            <div class="form-group">
+              <label for="settingsTimerPreset">Recording Duration</label>
+              <select id="settingsTimerPreset" class="form-select">
+                <option value="0">No limit (∞)</option>
+                <option value="5">5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            <div class="form-group" id="customTimerGroup" style="display: none;">
+              <label for="settingsCustomTimer">Custom Duration (minutes)</label>
+              <input type="number" id="settingsCustomTimer" class="form-input" min="1" max="480" value="45">
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsScheduledRecording">
+                Scheduled Recording
+              </label>
+              <p class="form-hint">Automatically start recording at a specific time</p>
+            </div>
+            <div class="form-group" id="scheduleTimeGroup" style="display: none;">
+              <label for="settingsScheduleTime">Start Time</label>
+              <input type="time" id="settingsScheduleTime" class="form-input" value="09:00">
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Recording Experience
+            </h4>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsCountdownSound" checked>
+                Countdown Sound
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsAutoHideUI" checked>
+                Auto-hide UI During Recording
+              </label>
+              <p class="form-hint">Hide controls and sidebar for cleaner recording</p>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+              Keyboard Shortcuts
+            </h4>
+            <button type="button" class="btn" id="showShortcutsBtn" style="width: 100%;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                style="margin-right: 8px;">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" />
+              </svg>
+              View All Shortcuts
+            </button>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              Recording History Stats
+            </h4>
+            <div class="stats-grid" id="recordingStats">
+              <div class="stat-card">
+                <span class="stat-number" id="totalRecordings">0</span>
+                <span class="stat-label">Total Recordings</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-number" id="totalDuration">0h</span>
+                <span class="stat-label">Total Duration</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-number" id="totalStorage">0 MB</span>
+                <span class="stat-label">Storage Used</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-form tab-content" id="tab-save" role="tabpanel" aria-labelledby="tab-save-btn">
           <div class="form-group">
             <label for="settingsOutputDir">Output Directory</label>
-            <input type="text" id="settingsOutputDir" class="form-input" placeholder="Default: Videos folder">
+            <div class="input-with-button">
+              <input type="text" id="settingsOutputDir" class="form-input" placeholder="Default: Videos folder">
+              <button type="button" class="btn" id="browseOutputDir"
+                aria-label="Browse for output directory">Browse</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="settingsFormat">Video Format</label>
+            <select id="settingsFormat" class="form-select">
+              <option value="mp4">MP4 (Recommended - better compatibility)</option>
+              <option value="webm">WebM (Smaller file, no conversion needed)</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="settingsFilenamePattern">Filename Pattern</label>
@@ -243,7 +633,7 @@
               <option value="qsv">Intel Quick Sync Video (QSV)</option>
               <option value="amf">AMD AMF</option>
             </select>
-            <div class="form-note" id="hardwareInfo" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+            <div class="form-note" id="hardwareInfo"></div>
             <button type="button" class="btn" id="autoSelectNvenc" style="margin-top:8px;display:none">Auto-select
               NVENC</button>
           </div>
@@ -261,7 +651,7 @@
           </div>
         </div>
 
-        <div class="settings-form tab-content" id="tab-general">
+        <div class="settings-form tab-content" id="tab-general" role="tabpanel" aria-labelledby="tab-general-btn">
           <div class="form-group">
             <label>
               <input type="checkbox" id="settingsHideWindow" checked>
@@ -292,33 +682,95 @@
           </div>
         </div>
 
-        <button class="save-settings-btn" id="saveSettingsBtn">Save Settings</button>
+        <div class="settings-actions">
+          <button type="button" class="btn" id="resetSettingsBtn">Reset to Defaults</button>
+          <button class="save-settings-btn" id="saveSettingsBtn">Save Settings</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="toast-container" id="toastContainer"></div>
-  <div id="nvencPrompt" class="nvenc-prompt"
-    style="display:none;position:fixed;bottom:80px;right:20px;background:var(--bg-card);border:1px solid rgba(0,0,0,0.08);padding:12px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.08);z-index:1200;max-width:320px;">
-    <div style="margin-bottom:8px;font-size:13px;color:var(--text)">Fast hardware encoding is available on your system.
-      Would you like to enable NVIDIA NVENC for faster exports?</div>
-    <div style="text-align:right">
-      <button id="nvencDismissBtn" class="btn" style="margin-right:8px">Dismiss</button>
+  <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="nvencPrompt" class="nvenc-prompt" role="alert" aria-live="polite">
+    <div class="nvenc-prompt-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      </svg>
+    </div>
+    <div class="nvenc-prompt-content">
+      <p class="nvenc-prompt-title">Hardware Acceleration Available</p>
+      <p class="nvenc-prompt-text">Fast hardware encoding is available on your system. Would you like to enable NVIDIA
+        NVENC for faster exports?</p>
+    </div>
+    <div class="nvenc-prompt-actions">
+      <button id="nvencDismissBtn" class="btn">Not now</button>
       <button id="nvencEnableBtn" class="btn primary">Enable NVENC</button>
     </div>
   </div>
 
   <div class="processing-overlay" id="processingOverlay">
     <div class="processing-content">
-      <div class="spinner"></div>
-      <p id="processingText">Processing video...</p>
+      <div class="processing-icon">
+        <div class="spinner"></div>
+      </div>
+      <p class="processing-title" id="processingTitle">Processing Video</p>
+      <p class="processing-status" id="processingStatus">Preparing...</p>
       <div class="progress-bar">
         <div class="progress-fill" id="progressFill"></div>
       </div>
-      <p class="progress-percent" id="progressPercent">0%</p>
+      <div class="progress-info">
+        <span class="progress-percent" id="progressPercent">0%</span>
+        <span class="progress-eta" id="progressEta">Calculating...</span>
+      </div>
+      <button class="processing-cancel" id="processingCancel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+        Cancel
+      </button>
     </div>
   </div>
 
+  <div class="modal" id="shortcutsModal">
+    <div class="modal-content shortcuts-modal">
+      <div class="modal-header">
+        <h2>Keyboard Shortcuts</h2>
+        <button class="modal-close" id="closeShortcutsModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcuts-list">
+          <div class="shortcut-group">
+            <h3>General</h3>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Open Settings</span>
+              <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>,</kbd></span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Close Modal / Cancel</span>
+              <span class="shortcut-keys"><kbd>Esc</kbd></span>
+            </div>
+          </div>
+          <div class="shortcut-group">
+            <h3>Recording</h3>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Start/Stop Recording</span>
+              <span class="shortcut-keys" id="shortcutStartStop">F9</span>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Pause/Resume Recording</span>
+              <span class="shortcut-keys"><kbd>F9</kbd> (when recording)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+  <script src="recording.js"></script>
+  <script src="sources.js"></script>
+  <script src="annotation-manager.js"></script>
   <script src="renderer.js"></script>
 </body>
 

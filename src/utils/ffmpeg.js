@@ -281,6 +281,17 @@ async function convertVideo(inputPath, outputPath, onProgress) {
     cmd
       .on("start", (cmdLine) => {
         log("info", `FFmpeg started: ${cmdLine}`);
+        // Lower FFmpeg process priority entirely to background so system doesn't freeze
+        try {
+          const { exec } = require("child_process");
+          if (process.platform === "win32") {
+            exec(`powershell -command "Get-Process ffmpeg -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'BelowNormal' }"`, () => { });
+          } else {
+            exec(`renice -n 10 $(pgrep ffmpeg)`, () => { });
+          }
+        } catch (e) {
+          log("warn", "Could not lower FFmpeg priority: " + e.message);
+        }
       })
       .on("progress", (progress) => {
         if (onProgress) {
@@ -360,6 +371,16 @@ async function convertVideo(inputPath, outputPath, onProgress) {
 
             swCmd.on("start", (cmdLine) => {
               log("info", `FFmpeg (software) started: ${cmdLine}`);
+              try {
+                const { exec } = require("child_process");
+                if (process.platform === "win32") {
+                  exec(`powershell -command "Get-Process ffmpeg -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'BelowNormal' }"`, () => { });
+                } else {
+                  exec(`renice -n 10 $(pgrep ffmpeg)`, () => { });
+                }
+              } catch (e) {
+                log("warn", "Could not lower FFmpeg priority: " + e.message);
+              }
             });
 
             swCmd.on("progress", (progress) => {

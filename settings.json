@@ -5,7 +5,7 @@
   "recordAudio": false,
   "recordSystemAudio": false,
   "selectedMicrophone": "default",
-  "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
+  "outputDirectory": "",
   "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
@@ -14,6 +14,18 @@
   "defaultFormat": "mp4",
   "countdown": 5,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_10-04-45.mp4",
+      "fileName": "Recording_2026-02-25_10-04-45.mp4",
+      "recordedAt": "2026-02-25T09:06:58.322Z",
+      "size": 10115606
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_09-45-26.mp4",
+      "fileName": "Recording_2026-02-25_09-45-26.mp4",
+      "recordedAt": "2026-02-25T08:47:33.431Z",
+      "size": 11677379
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_09-10-26.mp4",
       "fileName": "Recording_2026-02-25_09-10-26.mp4",
@@ -61,18 +73,6 @@
       "fileName": "Recording_2026-02-25_07-11-31.mp4",
       "recordedAt": "2026-02-25T06:13:21.637Z",
       "size": 3730348
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_06-55-19.mp4",
-      "fileName": "Recording_2026-02-25_06-55-19.mp4",
-      "recordedAt": "2026-02-25T05:55:33.732Z",
-      "size": 860776
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_06-39-13.mp4",
-      "fileName": "Recording_2026-02-25_06-39-13.mp4",
-      "recordedAt": "2026-02-25T05:39:54.695Z",
-      "size": 2513485
     }
   ],
   "maxRecentRecordings": 10,

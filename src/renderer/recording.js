@@ -614,7 +614,7 @@ class RecordingManager {
       .join(":");
   }
 
-  startAudioMeter() {
+  async startAudioMeter() {
     if (!this.audioStream) return;
 
     this.app.audioMeter?.classList.remove("hidden");
@@ -623,50 +623,47 @@ class RecordingManager {
       this.audioContext = new (
         window.AudioContext || window.webkitAudioContext
       )();
-      this.audioAnalyser = this.audioContext.createAnalyser();
-      this.audioAnalyser.fftSize = 64;
 
-      const source = this.audioContext.createMediaStreamSource(
-        this.audioStream,
-      );
-      source.connect(this.audioAnalyser);
+      // Load Worklet to process audio securely off the main UI thread
+      await this.audioContext.audioWorklet.addModule('meter-processor.js');
 
-      const bufferLength = this.audioAnalyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      this.audioMeterNode = new AudioWorkletNode(this.audioContext, 'meter-processor');
+      const source = this.audioContext.createMediaStreamSource(this.audioStream);
+      source.connect(this.audioMeterNode);
+      this.audioMeterNode.connect(this.audioContext.destination); // Required for process execution tick
 
-      const updateMeter = () => {
-        if (!this.isRecording || !this.audioAnalyser) return;
+      const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
 
-        this.audioAnalyser.getByteFrequencyData(dataArray);
+      this.audioMeterNode.port.onmessage = (event) => {
+        if (!this.isRecording || !bars) return;
 
-        const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
-        if (!bars) return;
+        let scalarVol = event.data.volume; // Float 0.0 - 1.0
 
-        const step = Math.floor(bufferLength / bars.length);
-
+        // Dynamically style visual volume bars using off-loaded mathematics
         bars.forEach((bar, index) => {
-          const value = dataArray[index * step] || 0;
-          const height = Math.max(4, (value / 255) * 20);
+          let requiredThreshold = (index + 1) / bars.length;
 
-          bar.style.height = `${height}px`;
-
-          bar.classList.remove("active", "medium", "high");
-          if (value > 0) {
+          if (scalarVol >= requiredThreshold - 0.02) {
+            const height = Math.max(4, 20); // Maximum bar visual height
+            bar.style.height = `${height}px`;
             bar.classList.add("active");
-            if (value > 180) {
+
+            if (index > bars.length * 0.75) {
               bar.classList.add("high");
-            } else if (value > 100) {
+            } else if (index > bars.length * 0.4) {
               bar.classList.add("medium");
+            } else {
+              bar.classList.remove("high", "medium");
             }
+          } else {
+            bar.style.height = `4px`; // Resting state
+            bar.classList.remove("active", "medium", "high");
           }
         });
-
-        this.audioAnimationId = requestAnimationFrame(updateMeter);
       };
 
-      updateMeter();
     } catch (err) {
-      console.warn("Audio meter initialization failed:", err);
+      console.warn("Audio worklet initialization failed:", err);
     }
   }
 

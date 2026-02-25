@@ -20,7 +20,7 @@ const ICON_PATH = isDev
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
+    width: 1080,
     height: 700,
     minWidth: 800,
     minHeight: 600,

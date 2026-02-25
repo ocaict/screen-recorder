@@ -1,6 +1,7 @@
 class RecordingManager {
-  constructor(app) {
+  constructor(app, monitor) {
     this.app = app;
+    this.monitor = monitor;
     this.videoStream = null;
     this.audioStream = null;
     this.webcamStream = null;
@@ -15,19 +16,75 @@ class RecordingManager {
     this.recordingStartTime = null;
     this.recordingTimer = null;
     this.recordedBytes = 0;
-    
+
     this.chunkFiles = [];
     this.chunkInterval = null;
     this.tempDir = null;
-    
+
     this.compositor = null;
     this.canvasStream = null;
     this.compositorInterval = null;
   }
 
   async init() {
-    const paths = await window.electronAPI.getAppPaths();
-    this.tempDir = paths.temp;
+    try {
+      const paths = await window.electronAPI.getAppPaths();
+      if (!paths || !paths.temp) {
+        throw new Error("Failed to get app paths");
+      }
+      this.tempDir = paths.temp;
+    } catch (err) {
+      console.error("RecordingManager init failed:", err);
+      this.app.showToast(
+        `Failed to initialize recording: ${err.message}`,
+        "error",
+      );
+    }
+  }
+
+  destroy() {
+    // Stop any active recording
+    if (this.isRecording) {
+      this.stopRecording();
+    }
+
+    // Clean up streams
+    this.stopCurrentStream();
+
+    // Stop recording timer if active
+    if (this.recordingTimer) {
+      clearInterval(this.recordingTimer);
+      this.recordingTimer = null;
+    }
+
+    // Stop chunked recording interval
+    if (this.chunkInterval) {
+      clearInterval(this.chunkInterval);
+      this.chunkInterval = null;
+    }
+
+    // Cancel compositor RAF
+    if (this.compositorDrawId) {
+      cancelAnimationFrame(this.compositorDrawId);
+      this.compositorDrawId = null;
+    }
+
+    // Stop media recorder
+    if (this.mediaRecorder) {
+      try {
+        if (this.mediaRecorder.state !== "inactive") {
+          this.mediaRecorder.stop();
+        }
+      } catch (e) {
+        console.warn("Error stopping media recorder:", e);
+      }
+      this.mediaRecorder = null;
+    }
+
+    // Clear recorded chunks
+    this.recordedChunks = [];
+    this.recordedBytes = 0;
+    this.chunkFiles = [];
   }
 
   async setupVideoStream(source) {
@@ -55,7 +112,10 @@ class RecordingManager {
           audio: false,
         });
       } catch (streamErr) {
-        this.app.showToast(`Failed to access source: ${streamErr.message}`, "error");
+        this.app.showToast(
+          `Failed to access source: ${streamErr.message}`,
+          "error",
+        );
         console.error("Stream error:", streamErr);
         throw streamErr;
       }
@@ -84,9 +144,21 @@ class RecordingManager {
       const region = this.selectedRegion;
       const frameRate = this.app.settings.frameRate || 30;
 
-      const sources = await window.electronAPI.getCaptureSources();
-      const screenSource = sources.find(s => s.id.startsWith("screen:"));
-      
+      let sources;
+      try {
+        sources = await window.electronAPI.getCaptureSources();
+      } catch (sourcesErr) {
+        console.error("Failed to get capture sources:", sourcesErr);
+        this.app.showToast(
+          `Failed to get sources: ${sourcesErr.message}`,
+          "error",
+        );
+        this.videoStream = null;
+        return;
+      }
+
+      const screenSource = sources?.find((s) => s.id.startsWith("screen:"));
+
       if (!screenSource) {
         this.app.showToast("No screen available for region capture", "error");
         this.videoStream = null;
@@ -129,26 +201,45 @@ class RecordingManager {
         this.regionCompositorCtx = this.regionCompositor.getContext("2d");
 
         const drawRegionFrame = () => {
-          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2) return;
-          
+          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2)
+            return;
+
           this.regionCompositorCtx.drawImage(
-            this.fullScreenVideo, 
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
+            this.fullScreenVideo,
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            0,
+            0,
+            region.width,
+            region.height,
           );
 
           const annotationCanvas = this.app.annotationManager.getCanvas();
           const tempCanvas = this.app.annotationManager.getTempCanvas();
-          
+
           this.regionCompositorCtx.drawImage(
             annotationCanvas,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            0,
+            0,
+            region.width,
+            region.height,
           );
           this.regionCompositorCtx.drawImage(
             tempCanvas,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            0,
+            0,
+            region.width,
+            region.height,
           );
         };
 
@@ -162,14 +253,21 @@ class RecordingManager {
         this.cropCanvas.width = region.width;
         this.cropCanvas.height = region.height;
         this.cropCtx = this.cropCanvas.getContext("2d");
-        
+
         const cropFrame = () => {
-          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2) return;
-          
+          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2)
+            return;
+
           this.cropCtx.drawImage(
-            this.fullScreenVideo, 
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
+            this.fullScreenVideo,
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            0,
+            0,
+            region.width,
+            region.height,
           );
         };
 
@@ -272,15 +370,20 @@ class RecordingManager {
       clearInterval(this.compositorInterval);
       this.compositorInterval = null;
     }
+    if (this.compositorDrawId) {
+      cancelAnimationFrame(this.compositorDrawId);
+      this.compositorDrawId = null;
+    }
     this.canvasStream = null;
     this.compositor = null;
+    this.compositorOffscreenCanvas = null;
 
     if (this.cropInterval) {
       clearInterval(this.cropInterval);
       this.cropInterval = null;
     }
     if (this.fullScreenStream) {
-      this.fullScreenStream.getTracks().forEach(track => track.stop());
+      this.fullScreenStream.getTracks().forEach((track) => track.stop());
       this.fullScreenStream = null;
     }
     this.fullScreenVideo = null;
@@ -296,18 +399,25 @@ class RecordingManager {
     }
   }
 
-  async createCompositedStream(videoTracks, audioTracks, includeAnnotations = true) {
+  async createCompositedStream(
+    videoTracks,
+    audioTracks,
+    includeAnnotations = true,
+  ) {
     const screenTrack = videoTracks[0].clone();
-    
+
     const screenSettings = screenTrack.getSettings();
     const width = screenSettings.width || 1920;
     const height = screenSettings.height || 1080;
     const frameRate = screenSettings.frameRate || 30;
 
-    this.compositor = document.createElement("canvas");
-    this.compositor.width = width;
-    this.compositor.height = height;
-    const ctx = this.compositor.getContext("2d");
+    // Use OffscreenCanvas for better performance (render thread vs main thread)
+    const offscreenCanvas = new OffscreenCanvas(width, height);
+    const ctx = offscreenCanvas.getContext("2d");
+
+    if (!ctx) {
+      throw new Error("Failed to get OffscreenCanvas context");
+    }
 
     const screenStream = new MediaStream([screenTrack]);
     const screenVideo = document.createElement("video");
@@ -316,84 +426,120 @@ class RecordingManager {
     screenVideo.playsInline = true;
     await screenVideo.play();
 
+    // Use requestAnimationFrame for frame-sync drawing instead of setInterval
     const drawFrame = () => {
-      if (!this.isRecording) return;
-      
-      ctx.drawImage(screenVideo, 0, 0, width, height);
-      
-      if (this.webcamStream) {
-        const webcamWidth = 320;
-        const webcamHeight = 240;
-        let webcamX = 0;
-        let webcamY = 0;
-        
-        const position = this.app.settings.webcamPosition || "bottom-right";
-        const size = this.app.settings.webcamSize || "medium";
-        
-        let webcamDisplayWidth;
-        switch (size) {
-          case "small": webcamDisplayWidth = 120; break;
-          case "large": webcamDisplayWidth = 240; break;
-          default: webcamDisplayWidth = 180;
-        }
-        const webcamDisplayHeight = (webcamHeight / webcamWidth) * webcamDisplayWidth;
+      try {
+        if (!this.isRecording) return;
 
-        switch (position) {
-          case "top-left":
-            webcamX = 20;
-            webcamY = 20;
-            break;
-          case "top-right":
-            webcamX = width - webcamDisplayWidth - 20;
-            webcamY = 20;
-            break;
-          case "bottom-left":
-            webcamX = 20;
-            webcamY = height - webcamDisplayHeight - 20;
-            break;
-          case "bottom-right":
-          default:
-            webcamX = width - webcamDisplayWidth - 20;
-            webcamY = height - webcamDisplayHeight - 20;
-            break;
+        // Record frame timing for performance analysis
+        if (this.monitor) {
+          this.monitor.recordFrame();
         }
 
-        const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
-        const webcamStream = new MediaStream([webcamTrack]);
-        const webcamVideo = document.createElement("video");
-        webcamVideo.srcObject = webcamStream;
-        webcamVideo.muted = true;
-        webcamVideo.playsInline = true;
-        webcamVideo.play();
+        ctx.drawImage(screenVideo, 0, 0, width, height);
 
-        if (webcamVideo.readyState >= 2) {
-          ctx.drawImage(webcamVideo, webcamX, webcamY, webcamDisplayWidth, webcamDisplayHeight);
-          
-          ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-          ctx.beginPath();
-          ctx.roundRect(webcamX - 2, webcamY - 2, webcamDisplayWidth + 4, webcamDisplayHeight + 4, 8);
-          ctx.fill();
+        if (this.webcamStream) {
+          const webcamWidth = 320;
+          const webcamHeight = 240;
+          let webcamX = 0;
+          let webcamY = 0;
+
+          const position = this.app.settings.webcamPosition || "bottom-right";
+          const size = this.app.settings.webcamSize || "medium";
+
+          let webcamDisplayWidth;
+          switch (size) {
+            case "small":
+              webcamDisplayWidth = 120;
+              break;
+            case "large":
+              webcamDisplayWidth = 240;
+              break;
+            default:
+              webcamDisplayWidth = 180;
+          }
+          const webcamDisplayHeight =
+            (webcamHeight / webcamWidth) * webcamDisplayWidth;
+
+          switch (position) {
+            case "top-left":
+              webcamX = 20;
+              webcamY = 20;
+              break;
+            case "top-right":
+              webcamX = width - webcamDisplayWidth - 20;
+              webcamY = 20;
+              break;
+            case "bottom-left":
+              webcamX = 20;
+              webcamY = height - webcamDisplayHeight - 20;
+              break;
+            case "bottom-right":
+            default:
+              webcamX = width - webcamDisplayWidth - 20;
+              webcamY = height - webcamDisplayHeight - 20;
+              break;
+          }
+
+          const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
+          const webcamStream = new MediaStream([webcamTrack]);
+          const webcamVideo = document.createElement("video");
+          webcamVideo.srcObject = webcamStream;
+          webcamVideo.muted = true;
+          webcamVideo.playsInline = true;
+          webcamVideo.play();
+
+          if (webcamVideo.readyState >= 2) {
+            ctx.drawImage(
+              webcamVideo,
+              webcamX,
+              webcamY,
+              webcamDisplayWidth,
+              webcamDisplayHeight,
+            );
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.beginPath();
+            ctx.roundRect(
+              webcamX - 2,
+              webcamY - 2,
+              webcamDisplayWidth + 4,
+              webcamDisplayHeight + 4,
+              8,
+            );
+            ctx.fill();
+          }
         }
+
+        if (includeAnnotations && this.app.annotationManager?.isActive) {
+          const annotationCanvas = this.app.annotationManager.getCanvas();
+          const tempCanvas = this.app.annotationManager.getTempCanvas();
+
+          ctx.drawImage(annotationCanvas, 0, 0, width, height);
+          ctx.drawImage(tempCanvas, 0, 0, width, height);
+        }
+      } catch (err) {
+        console.error("Compositor frame draw error:", err);
       }
-      
-      if (includeAnnotations && this.app.annotationManager?.isActive) {
-        const annotationCanvas = this.app.annotationManager.getCanvas();
-        const tempCanvas = this.app.annotationManager.getTempCanvas();
-        
-        ctx.drawImage(annotationCanvas, 0, 0, width, height);
-        ctx.drawImage(tempCanvas, 0, 0, width, height);
+
+      if (this.isRecording && this.compositorDrawId) {
+        this.compositorDrawId = requestAnimationFrame(drawFrame);
       }
     };
 
-    drawFrame();
-    this.compositorInterval = setInterval(drawFrame, 1000 / frameRate);
+    // Start RAF-driven drawing loop
+    this.compositorDrawId = requestAnimationFrame(drawFrame);
 
-    const canvasStream = this.compositor.captureStream(frameRate);
-    
+    // Capture stream from offscreen canvas
+    const captureStream = offscreenCanvas.captureStream(frameRate);
+
     const finalStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...audioTracks
+      ...captureStream.getVideoTracks(),
+      ...audioTracks,
     ]);
+
+    // Store offscreenCanvas for cleanup
+    this.compositorOffscreenCanvas = offscreenCanvas;
 
     return finalStream;
   }
@@ -449,10 +595,16 @@ class RecordingManager {
 
     const resolution = this.app.settings.resolution || "1920x1080";
     const frameRate = this.app.settings.frameRate || 24;
-    const resLabel = resolution === "1920x1080" ? "1080p" : 
-                     resolution === "1280x720" ? "720p" : 
-                     resolution === "2560x1440" ? "1440p" : 
-                     resolution === "3840x2160" ? "4K" : resolution;
+    const resLabel =
+      resolution === "1920x1080"
+        ? "1080p"
+        : resolution === "1280x720"
+          ? "720p"
+          : resolution === "2560x1440"
+            ? "1440p"
+            : resolution === "3840x2160"
+              ? "4K"
+              : resolution;
 
     const estimatedFps = frameRate;
     const sizeStr = this.app.formatFileSize(this.recordedBytes);
@@ -478,11 +630,15 @@ class RecordingManager {
     this.app.audioMeter?.classList.remove("hidden");
 
     try {
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.audioContext = new (
+        window.AudioContext || window.webkitAudioContext
+      )();
       this.audioAnalyser = this.audioContext.createAnalyser();
       this.audioAnalyser.fftSize = 64;
-      
-      const source = this.audioContext.createMediaStreamSource(this.audioStream);
+
+      const source = this.audioContext.createMediaStreamSource(
+        this.audioStream,
+      );
       source.connect(this.audioAnalyser);
 
       const bufferLength = this.audioAnalyser.frequencyBinCount;
@@ -492,18 +648,18 @@ class RecordingManager {
         if (!this.isRecording || !this.audioAnalyser) return;
 
         this.audioAnalyser.getByteFrequencyData(dataArray);
-        
+
         const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
         if (!bars) return;
 
         const step = Math.floor(bufferLength / bars.length);
-        
+
         bars.forEach((bar, index) => {
           const value = dataArray[index * step] || 0;
           const height = Math.max(4, (value / 255) * 20);
-          
+
           bar.style.height = `${height}px`;
-          
+
           bar.classList.remove("active", "medium", "high");
           if (value > 0) {
             bar.classList.add("active");
@@ -556,7 +712,10 @@ class RecordingManager {
       return;
     }
 
-    if (this.selectedSource && (!this.videoStream || !this.videoStream.active)) {
+    if (
+      this.selectedSource &&
+      (!this.videoStream || !this.videoStream.active)
+    ) {
       this.app.showToast(
         "Source stream is no longer active. Please select source again.",
         "error",
@@ -564,7 +723,11 @@ class RecordingManager {
       return;
     }
 
-    if (this.selectedRegion && this.selectedRegion.width && this.selectedRegion.height) {
+    if (
+      this.selectedRegion &&
+      this.selectedRegion.width &&
+      this.selectedRegion.height
+    ) {
       await this.setupRegionStream(true);
       if (!this.videoStream) {
         this.app.showToast("Failed to capture region", "error");
@@ -611,49 +774,76 @@ class RecordingManager {
         throw new Error("No video tracks available");
       }
 
-      const webcamEnabled = this.app.settings.webcamEnabled || document.getElementById("settingsWebcam")?.checked;
-      
+      const webcamEnabled =
+        this.app.settings.webcamEnabled ||
+        document.getElementById("settingsWebcam")?.checked;
+
       if (webcamEnabled) {
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevices = devices.filter(d => d.kind === "videoinput");
-          
+          const videoDevices = devices.filter((d) => d.kind === "videoinput");
+
           if (videoDevices.length === 0) {
             this.app.showToast("No camera found", "error");
           } else {
-            const cameraId = this.app.settings.selectedCamera || document.getElementById("settingsCamera")?.value;
-            
+            const cameraId =
+              this.app.settings.selectedCamera ||
+              document.getElementById("settingsCamera")?.value;
+
             let constraints = {
               audio: false,
-              video: {}
+              video: {},
             };
-            
-            if (cameraId && cameraId !== "default" && videoDevices.find(d => d.deviceId === cameraId)) {
+
+            if (
+              cameraId &&
+              cameraId !== "default" &&
+              videoDevices.find((d) => d.deviceId === cameraId)
+            ) {
               constraints.video.deviceId = { exact: cameraId };
             }
-            
-            this.webcamStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+            this.webcamStream =
+              await navigator.mediaDevices.getUserMedia(constraints);
             this.app.showToast("Webcam enabled", "info");
           }
         } catch (webcamErr) {
-          console.error("Webcam error details:", webcamErr.message, webcamErr.name);
+          console.error(
+            "Webcam error details:",
+            webcamErr.message,
+            webcamErr.name,
+          );
           if (webcamErr.name === "NotReadableError") {
-            this.app.showToast("Webcam in use by another app - close other apps using camera", "error");
+            this.app.showToast(
+              "Webcam in use by another app - close other apps using camera",
+              "error",
+            );
           } else if (webcamErr.name === "NotAllowedError") {
             this.app.showToast("Webcam permission denied", "error");
           } else {
-            this.app.showToast("Webcam unavailable, recording screen only", "info");
+            this.app.showToast(
+              "Webcam unavailable, recording screen only",
+              "info",
+            );
           }
         }
       }
 
       try {
         const annotationsActive = this.app.annotationManager?.isActive;
-        
+
         if (this.webcamStream) {
-          this.mixedStream = await this.createCompositedStream(videoTracks, audioTracks, annotationsActive);
+          this.mixedStream = await this.createCompositedStream(
+            videoTracks,
+            audioTracks,
+            annotationsActive,
+          );
         } else if (annotationsActive) {
-          this.mixedStream = await this.createCompositedStream(videoTracks, audioTracks, true);
+          this.mixedStream = await this.createCompositedStream(
+            videoTracks,
+            audioTracks,
+            true,
+          );
         } else {
           this.mixedStream = new MediaStream([...videoTracks, ...audioTracks]);
         }
@@ -678,21 +868,66 @@ class RecordingManager {
         throw new Error("Failed to initialize recorder");
       }
 
+      try {
+        await this.startChunkedRecording({ mimeType });
+      } catch (startErr) {
+        console.warn(
+          "Failed to initialize chunked recording session:",
+          startErr,
+        );
+      }
+
       this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
+          this.recordedBytes += e.data.size;
+
+          // Update performance monitor with file size metrics
+          if (this.monitor) {
+            this.monitor.setRecordingFileSize(this.recordedBytes);
+          }
+
           const currentMemory = this.estimateMemoryUsage();
-          
+
           if (currentMemory > this.maxMemoryBytes * 1.2) {
             if (!this.warnedAboutMemory) {
               this.warnedAboutMemory = true;
-              this.app.showToast("Memory threshold reached. Saving partial recording...", "warning");
+              this.app.showToast(
+                "Memory threshold reached. Saving partial recording...",
+                "warning",
+              );
             }
             this.handleRecordingComplete(true);
             return;
           }
-          
-          this.recordedChunks.push(e.data);
-          this.recordedBytes += e.data.size;
+
+          try {
+            e.data
+              .arrayBuffer()
+              .then((ab) => {
+                try {
+                  if (this.chunkSessionId) {
+                    const startTime = Date.now();
+                    window.electronAPI.appendRecordingChunk(
+                      this.chunkSessionId,
+                      ab,
+                    );
+                    const latency = Date.now() - startTime;
+
+                    // Track IPC latency for performance analysis
+                    if (this.monitor) {
+                      this.monitor.recordIPCLatency(latency);
+                    }
+                  }
+                } catch (ipcErr) {
+                  console.error("appendRecordingChunk failed:", ipcErr);
+                }
+              })
+              .catch((arrErr) =>
+                console.error("Failed to read chunk arrayBuffer:", arrErr),
+              );
+          } catch (err) {
+            console.error("ondataavailable error:", err);
+          }
         }
       };
 
@@ -702,25 +937,44 @@ class RecordingManager {
       this.isRecording = true;
       this.recordingStartTime = Date.now();
 
-      await window.electronAPI.setRecordingState(true);
+      // Start performance monitoring
+      this.monitor.startRecording();
+
+      try {
+        await window.electronAPI.setRecordingState(true);
+      } catch (ipcErr) {
+        console.warn(
+          "Failed to notify main process about recording start:",
+          ipcErr,
+        );
+      }
 
       this.app.updateUIForRecording();
       this.startRecordingTimer();
-      this.startChunkedRecording();
 
       if (this.app.timerPreset > 0) {
         const durationMs = this.app.timerPreset * 60 * 1000;
         this.recordingTimeout = setTimeout(() => {
           if (this.isRecording) {
-            this.app.showToast(`Recording auto-stopped after ${this.app.timerPreset} minutes`, "info");
+            this.app.showToast(
+              `Recording auto-stopped after ${this.app.timerPreset} minutes`,
+              "info",
+            );
             this.stopRecording();
           }
         }, durationMs);
-        this.app.showToast(`Recording will auto-stop in ${this.app.timerPreset} minutes`, "info");
+        this.app.showToast(
+          `Recording will auto-stop in ${this.app.timerPreset} minutes`,
+          "info",
+        );
       }
 
       if (this.app.settings.hideWindowDuringRecording) {
-        await window.electronAPI.windowMinimize();
+        try {
+          await window.electronAPI.windowMinimize();
+        } catch (minErr) {
+          console.warn("Failed to minimize window:", minErr);
+        }
       }
 
       this.app.showToast("Recording started", "info");
@@ -749,7 +1003,14 @@ class RecordingManager {
       }
 
       this.app.updateUIForStopped();
-      await window.electronAPI.setRecordingState(false);
+      try {
+        await window.electronAPI.setRecordingState(false);
+      } catch (ipcErr) {
+        console.warn(
+          "Failed to notify main process about recording stop:",
+          ipcErr,
+        );
+      }
 
       this.app.processingOverlay.classList.add("active");
       this.app.processingTitle.textContent = "Processing Recording";
@@ -779,7 +1040,9 @@ class RecordingManager {
       this.app.updateUIPaused();
       this.app.showToast("Recording paused", "info");
 
-      window.electronAPI.setRecordingState(true, true);
+      window.electronAPI
+        .setRecordingState(true, true)
+        .catch((err) => console.warn("setRecordingState(pause) failed:", err));
     } catch (err) {
       console.error("Failed to pause:", err);
       this.app.showToast(`Failed to pause: ${err.message}`, "error");
@@ -799,40 +1062,61 @@ class RecordingManager {
       this.app.updateUIForRecording();
       this.app.showToast("Recording resumed", "info");
 
-      window.electronAPI.setRecordingState(true, false);
+      window.electronAPI
+        .setRecordingState(true, false)
+        .catch((err) => console.warn("setRecordingState(resume) failed:", err));
     } catch (err) {
       console.error("Failed to resume:", err);
       this.app.showToast(`Failed to resume: ${err.message}`, "error");
     }
   }
 
-  startChunkedRecording() {
+  async startChunkedRecording(options = {}) {
     this.maxMemoryBytes = 500 * 1024 * 1024;
     this.warnedAboutMemory = false;
-    
+
+    try {
+      const res = await window.electronAPI
+        .startChunkedRecording(options)
+        .catch((e) => {
+          console.warn("startChunkedRecording IPC failed:", e);
+          return null;
+        });
+      if (res && res.sessionId) {
+        this.chunkSessionId = res.sessionId;
+        this.tempChunkPath = res.tempFilePath;
+      } else {
+        console.warn("Chunked recording session not created");
+      }
+    } catch (err) {
+      console.warn("Failed to start chunked session:", err);
+    }
+
     this.chunkInterval = setInterval(async () => {
       if (!this.isRecording || this.isPaused) return;
 
       const memoryUsage = this.estimateMemoryUsage();
-      
+
       if (memoryUsage > this.maxMemoryBytes && !this.warnedAboutMemory) {
         this.warnedAboutMemory = true;
-        this.app.showToast("Warning: Recording is using significant memory. Consider stopping soon.", "warning");
+        this.app.showToast(
+          "Warning: Recording is using significant memory. Consider stopping soon.",
+          "warning",
+        );
       }
 
       if (memoryUsage > this.maxMemoryBytes * 1.5) {
-        this.app.showToast("Memory limit reached. Stopping recording to prevent crash.", "error");
+        this.app.showToast(
+          "Memory limit reached. Stopping recording to prevent crash.",
+          "error",
+        );
         await this.stopRecording();
       }
     }, 5000);
   }
 
   estimateMemoryUsage() {
-    let totalSize = 0;
-    for (const chunk of this.recordedChunks) {
-      totalSize += chunk.size;
-    }
-    return totalSize;
+    return this.recordedBytes || 0;
   }
 
   stopChunkedRecording() {
@@ -843,14 +1127,63 @@ class RecordingManager {
   }
 
   async handleRecordingComplete(isPartial = false) {
-    try {
-      const settings = await window.electronAPI.getSettings();
-      const blob = new Blob(this.recordedChunks, {
-        type: this.getSupportedMimeType(),
-      });
-      const arrayBuffer = await blob.arrayBuffer();
+    // Stop performance monitoring
+    if (this.monitor) {
+      this.monitor.stopRecording();
+    }
 
-      const result = await window.electronAPI.saveRecording(arrayBuffer, this.chunkFiles);
+    try {
+      let settings;
+      try {
+        settings = await window.electronAPI.getSettings();
+      } catch (settingsErr) {
+        console.error("Failed to get settings:", settingsErr);
+        settings = {};
+      }
+
+      let result;
+
+      if (this.chunkSessionId) {
+        try {
+          result = await window.electronAPI.finalizeChunkedRecording(
+            this.chunkSessionId,
+            { isPartial },
+          );
+        } catch (finalErr) {
+          throw new Error(
+            `Failed to finalize chunked recording: ${finalErr.message}`,
+          );
+        }
+      } else {
+        const blob = new Blob(this.recordedChunks, {
+          type: this.getSupportedMimeType(),
+        });
+        let arrayBuffer;
+        try {
+          arrayBuffer = await blob.arrayBuffer();
+        } catch (bufferErr) {
+          throw new Error(
+            `Failed to convert blob to array buffer: ${bufferErr.message}`,
+          );
+        }
+
+        try {
+          result = await window.electronAPI.saveRecording(
+            arrayBuffer,
+            this.chunkFiles,
+          );
+        } catch (saveErr) {
+          throw new Error(`IPC call failed: ${saveErr.message}`);
+        }
+      }
+
+      // clear session id after finalize attempt
+      this.chunkSessionId = null;
+      this.tempChunkPath = null;
+
+      if (!result) {
+        throw new Error("No response from save recording handler");
+      }
 
       if (result.canceled) {
         this.app.processingOverlay.classList.remove("active");
@@ -874,20 +1207,37 @@ class RecordingManager {
         this.app.processingOverlay.classList.add("active");
         this.app.showToast("Video is being converted in background", "info");
       } else {
-        const message = isPartial 
-          ? "Recording saved (partial - memory limit reached)!" 
+        const message = isPartial
+          ? "Recording saved (partial - memory limit reached)!"
           : "Recording saved!";
         this.app.processingOverlay.classList.remove("active");
         this.app.showToast(message, isPartial ? "warning" : "success");
-        
-        if (settings.autoOpenAfterRecording) {
-          window.electronAPI.openFile(result.filePath);
+
+        if (settings.autoOpenAfterRecording && result.filePath) {
+          try {
+            await window.electronAPI.openFile(result.filePath);
+          } catch (openErr) {
+            console.warn("Failed to open file:", openErr);
+          }
         }
         this.app.showCompletionOptions(result.filePath);
       }
     } catch (err) {
+      try {
+        if (this.chunkSessionId) {
+          await window.electronAPI
+            .abortChunkedRecording(this.chunkSessionId)
+            .catch((_) => {});
+          this.chunkSessionId = null;
+          this.tempChunkPath = null;
+        }
+      } catch (abortErr) {
+        console.warn("Failed to abort chunk session:", abortErr);
+      }
+
       this.app.processingOverlay.classList.remove("active");
       this.app.showToast(`Error: ${err.message}`, "error");
+      console.error("handleRecordingComplete error:", err);
       console.error(err);
     }
 
@@ -895,10 +1245,12 @@ class RecordingManager {
       this.mixedStream.getTracks().forEach((track) => track.stop());
       this.mixedStream = null;
     }
-    
+
     this.recordedChunks = [];
     this.recordedBytes = 0;
   }
 }
+
+window.RecordingManager = RecordingManager;
 
 window.RecordingManager = RecordingManager;

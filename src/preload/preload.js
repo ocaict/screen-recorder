@@ -36,6 +36,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendRegionSelected: (region) => ipcRenderer.send("region-selected", region),
   sendRegionCancelled: () => ipcRenderer.send("region-cancelled"),
 
+  // Chunked recording API
+  startChunkedRecording: (options) =>
+    ipcRenderer.invoke("start-chunked-recording", options),
+  appendRecordingChunk: (sessionId, arrayBuffer) =>
+    ipcRenderer.send("append-recording-chunk", sessionId, arrayBuffer),
+  finalizeChunkedRecording: (sessionId, options) =>
+    ipcRenderer.invoke("finalize-chunked-recording", sessionId, options),
+  abortChunkedRecording: (sessionId) =>
+    ipcRenderer.invoke("abort-chunked-recording", sessionId),
+
   onStopRecordingFromTray: (callback) => {
     ipcRenderer.on("stop-recording-from-tray", () => callback());
   },

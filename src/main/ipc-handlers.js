@@ -1,4 +1,11 @@
-const { ipcMain, dialog, shell, desktopCapturer, app, Notification } = require("electron");
+const {
+  ipcMain,
+  dialog,
+  shell,
+  desktopCapturer,
+  app,
+  Notification,
+} = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { log } = require("../utils/logger");
@@ -17,6 +24,9 @@ const state = require("./state");
 
 let mainWindow = null;
 let ICON_PATH = null;
+
+// Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
+const chunkSessions = new Map();
 
 function setMainWindowRef(window, iconPath) {
   mainWindow = window;
@@ -111,7 +121,10 @@ async function saveRecording(streamData, chunkFiles = []) {
   }
 
   const format = settings.defaultFormat || "mp4";
-  log("info", `Saving recording: format=${format}, defaultFormat=${settings.defaultFormat}, autoSave=${settings.autoSave}`);
+  log(
+    "info",
+    `Saving recording: format=${format}, defaultFormat=${settings.defaultFormat}, autoSave=${settings.autoSave}`,
+  );
   const pattern = settings.filenamePattern || "Recording_{date}_{time}";
   const defaultName = generateFilename(pattern, format);
   const autoSave = settings.autoSave || false;
@@ -139,7 +152,7 @@ async function saveRecording(streamData, chunkFiles = []) {
         { name: "MP4 Video", extensions: ["mp4"] },
         { name: "WebM Video (no conversion)", extensions: ["webm"] },
       ],
-      properties: ["dontAddToRecent"]
+      properties: ["dontAddToRecent"],
     });
 
     filePath = result.filePath;
@@ -187,8 +200,11 @@ async function saveRecording(streamData, chunkFiles = []) {
 
     if (ext === ".mp4") {
       const convertedPath = filePath;
-      
-      log("info", `Starting conversion: temp=${tempFilePath}, output=${convertedPath}, exists=${fs.existsSync(tempFilePath)}`);
+
+      log(
+        "info",
+        `Starting conversion: temp=${tempFilePath}, output=${convertedPath}, exists=${fs.existsSync(tempFilePath)}`,
+      );
 
       mainWindow?.webContents.send("conversion-started");
 
@@ -281,34 +297,246 @@ function setupIpcHandlers() {
     return await saveRecording(streamData, chunkFiles);
   });
 
+  // Chunked recording: create session, append chunks (via ipc send), finalize/abort
+  ipcMain.handle("start-chunked-recording", async (_, options = {}) => {
+    try {
+      const tempDir = app.getPath("temp");
+      const tempFilePath = path.join(
+        tempDir,
+        `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`,
+      );
+      const ws = fs.createWriteStream(tempFilePath, { flags: "w" });
+      const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0 });
+      log("info", `Started chunked session ${sessionId} -> ${tempFilePath}`);
+      return { sessionId, tempFilePath };
+    } catch (err) {
+      log("error", `start-chunked-recording failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.on("append-recording-chunk", (_, sessionId, arrayBuffer) => {
+    try {
+      const sess = chunkSessions.get(sessionId);
+      if (!sess) {
+        log("warn", `append-recording-chunk: session not found ${sessionId}`);
+        return;
+      }
+      const buf = Buffer.from(new Uint8Array(arrayBuffer));
+      sess.ws.write(buf);
+      sess.size = (sess.size || 0) + buf.length;
+    } catch (err) {
+      log("error", `append-recording-chunk failed: ${err.message}`);
+    }
+  });
+
+  ipcMain.handle(
+    "finalize-chunked-recording",
+    async (_, sessionId, options = {}) => {
+      try {
+        const sess = chunkSessions.get(sessionId);
+        if (!sess) {
+          return { success: false, error: "Session not found" };
+        }
+
+        await new Promise((resolve, reject) => {
+          sess.ws.end(() => resolve());
+          sess.ws.on("error", reject);
+        });
+
+        const tempFilePath = sess.tempFilePath;
+        chunkSessions.delete(sessionId);
+
+        // Reuse save flow: prompt for save/convert depending on settings
+        const settings = getSettings();
+        const outputDir = settings.outputDirectory || app.getPath("videos");
+
+        if (!fs.existsSync(outputDir)) {
+          try {
+            fs.mkdirSync(outputDir, { recursive: true });
+          } catch (mkdirErr) {
+            log(
+              "error",
+              `Failed to create output directory: ${mkdirErr.message}`,
+            );
+            return { success: false, error: "Cannot access output directory" };
+          }
+        }
+
+        const format = settings.defaultFormat || "mp4";
+        let filePath;
+        let canceled = false;
+
+        if (settings.autoSave) {
+          const pattern = settings.filenamePattern || "Recording_{date}_{time}";
+          const defaultName = generateFilename(pattern, format);
+          filePath = path.join(outputDir, defaultName);
+          let counter = 1;
+          const basePath = filePath;
+          while (fs.existsSync(filePath)) {
+            const ext = path.extname(basePath);
+            const name = path.basename(basePath, ext);
+            filePath = path.join(outputDir, `${name}_${counter}${ext}`);
+            counter++;
+          }
+        } else {
+          const defaultName = generateFilename(
+            settings.filenamePattern || "Recording_{date}_{time}",
+            format,
+          );
+          const result = await dialog.showSaveDialog(mainWindow, {
+            title: "Save Recording",
+            defaultPath: path.join(outputDir, defaultName),
+            filters: [
+              { name: "MP4 Video", extensions: ["mp4"] },
+              { name: "WebM Video (no conversion)", extensions: ["webm"] },
+            ],
+            properties: ["dontAddToRecent"],
+          });
+          filePath = result.filePath;
+          canceled = result.canceled;
+        }
+
+        if (canceled || !filePath) {
+          // Remove temp file
+          try {
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+          } catch (e) {}
+          return { success: false, canceled: true };
+        }
+
+        const ext = path.extname(filePath).toLowerCase();
+
+        if (ext === ".mp4") {
+          const convertedPath = filePath;
+          mainWindow?.webContents.send("conversion-started");
+
+          convertVideo(tempFilePath, convertedPath, (progress) => {
+            mainWindow?.webContents.send("conversion-progress", progress);
+          })
+            .then(() => {
+              try {
+                if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+              } catch (e) {}
+              log("info", `Recording converted and saved: ${convertedPath}`);
+              mainWindow?.webContents.send(
+                "conversion-complete",
+                convertedPath,
+              );
+              addRecentRecording(convertedPath);
+              showRecordingNotification(convertedPath);
+            })
+            .catch((convertErr) => {
+              log(
+                "error",
+                `Conversion failed: ${convertErr.message}, saving as webm`,
+              );
+              const webmPath = filePath.replace(/\.mp4$/i, ".webm");
+              try {
+                fs.renameSync(tempFilePath, webmPath);
+              } catch (e) {}
+              mainWindow?.webContents.send("conversion-complete", webmPath);
+              addRecentRecording(webmPath);
+              showRecordingNotification(webmPath);
+            });
+
+          return {
+            success: true,
+            filePath: convertedPath,
+            backgroundProcessing: true,
+          };
+        } else {
+          try {
+            fs.renameSync(tempFilePath, filePath);
+            addRecentRecording(filePath);
+            return { success: true, filePath };
+          } catch (err) {
+            log("error", `Failed to move temp file: ${err.message}`);
+            return { success: false, error: err.message };
+          }
+        }
+      } catch (err) {
+        log("error", `finalize-chunked-recording failed: ${err.message}`);
+        return { success: false, error: err.message };
+      }
+    },
+  );
+
+  ipcMain.handle("abort-chunked-recording", async (_, sessionId) => {
+    try {
+      const sess = chunkSessions.get(sessionId);
+      if (sess) {
+        try {
+          sess.ws.destroy();
+        } catch (e) {}
+        try {
+          if (fs.existsSync(sess.tempFilePath))
+            fs.unlinkSync(sess.tempFilePath);
+        } catch (e) {}
+        chunkSessions.delete(sessionId);
+      }
+      return { success: true };
+    } catch (err) {
+      log("error", `abort-chunked-recording failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("open-file-location", async (_, filePath) => {
-    openFileLocation(filePath);
+    try {
+      if (!filePath) {
+        log("warn", "open-file-location: No file path provided");
+        return { success: false, error: "No file path provided" };
+      }
+      openFileLocation(filePath);
+      return { success: true };
+    } catch (err) {
+      log("error", `open-file-location failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
   });
 
   ipcMain.handle("open-file", async (_, filePath) => {
-    await openFile(filePath);
+    try {
+      if (!filePath) {
+        log("warn", "open-file: No file path provided");
+        return { success: false, error: "No file path provided" };
+      }
+      await openFile(filePath);
+      return { success: true };
+    } catch (err) {
+      log("error", `open-file failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
   });
 
   ipcMain.handle("set-recording-state", (_, recording, isPaused = false) => {
-    state.setRecordingState(recording);
-    
-    if (recording && !isPaused) {
-      tray.createRecordingTray();
-      const settings = getSettings();
-      if (settings.hideWindowDuringRecording && mainWindow) {
-        mainWindow.hide();
-      }
-    } else if (recording && isPaused) {
-      tray.createPausedTray();
-    } else {
-      tray.restoreNormalTray();
-      if (mainWindow && !mainWindow.isVisible()) {
-        mainWindow.show();
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore();
+    try {
+      state.setRecordingState(recording);
+
+      if (recording && !isPaused) {
+        tray.createRecordingTray();
+        const settings = getSettings();
+        if (settings.hideWindowDuringRecording && mainWindow) {
+          mainWindow.hide();
         }
-        mainWindow.focus();
+      } else if (recording && isPaused) {
+        tray.createPausedTray();
+      } else {
+        tray.restoreNormalTray();
+        if (mainWindow && !mainWindow.isVisible()) {
+          mainWindow.show();
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.focus();
+        }
       }
+      return { success: true };
+    } catch (err) {
+      log("error", `set-recording-state failed: ${err.message}`);
+      return { success: false, error: err.message };
     }
   });
 
@@ -415,9 +643,12 @@ function setupIpcHandlers() {
       nvencPromptDismissed: Boolean(newSettings.nvencPromptDismissed),
       webcamEnabled: Boolean(newSettings.webcamEnabled),
       selectedCamera: newSettings.selectedCamera || "default",
-      webcamPosition: ["top-left", "top-right", "bottom-left", "bottom-right"].includes(
-        newSettings.webcamPosition,
-      )
+      webcamPosition: [
+        "top-left",
+        "top-right",
+        "bottom-left",
+        "bottom-right",
+      ].includes(newSettings.webcamPosition)
         ? newSettings.webcamPosition
         : "bottom-right",
       webcamSize: ["small", "medium", "large"].includes(newSettings.webcamSize)
@@ -431,16 +662,45 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("show-save-dialog", async (_, options) => {
-    const result = await dialog.showSaveDialog(mainWindow, options);
-    return result;
+    try {
+      if (!mainWindow) {
+        log("error", "show-save-dialog: Main window not available");
+        return {
+          canceled: true,
+          filePath: null,
+          error: "Main window not available",
+        };
+      }
+      const result = await dialog.showSaveDialog(mainWindow, options);
+      return result;
+    } catch (err) {
+      log("error", `show-save-dialog failed: ${err.message}`);
+      return { canceled: true, filePath: null, error: err.message };
+    }
   });
 
   ipcMain.handle("select-directory", async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ["openDirectory"],
-      title: "Select Output Directory",
-    });
-    return result.canceled ? null : result.filePaths[0];
+    try {
+      if (!mainWindow) {
+        log("error", "select-directory: Main window not available");
+        return null;
+      }
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ["openDirectory"],
+        title: "Select Output Directory",
+      });
+      if (
+        result.canceled ||
+        !result.filePaths ||
+        result.filePaths.length === 0
+      ) {
+        return null;
+      }
+      return result.filePaths[0];
+    } catch (err) {
+      log("error", `select-directory failed: ${err.message}`);
+      return null;
+    }
   });
 
   ipcMain.handle("get-app-paths", () => {
@@ -452,59 +712,101 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("get-displays", async () => {
-    const { screen } = require("electron");
-    const displays = screen.getAllDisplays();
-    return displays.map((display) => ({
-      id: display.id,
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-      isPrimary: display.id === screen.getPrimaryDisplay().id,
-    }));
+    try {
+      const { screen } = require("electron");
+      const displays = screen.getAllDisplays();
+      if (!displays || displays.length === 0) {
+        log("warn", "get-displays: No displays found");
+        return [];
+      }
+      const primaryDisplay = screen.getPrimaryDisplay();
+      return displays.map((display) => ({
+        id: display.id,
+        bounds: display.bounds,
+        workArea: display.workArea,
+        scaleFactor: display.scaleFactor,
+        isPrimary: display.id === primaryDisplay.id,
+      }));
+    } catch (err) {
+      log("error", `get-displays failed: ${err.message}`);
+      return [];
+    }
   });
 
   ipcMain.handle("start-region-selection", async () => {
-    const { screen, BrowserWindow } = require("electron");
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.size;
+    try {
+      const { screen, BrowserWindow } = require("electron");
+      const primaryDisplay = screen.getPrimaryDisplay();
+      if (!primaryDisplay) {
+        log("error", "start-region-selection: No primary display found");
+        return null;
+      }
+      const { width, height } = primaryDisplay.size;
 
-    const regionWindow = new BrowserWindow({
-      x: 0,
-      y: 0,
-      width: width,
-      height: height,
-      frame: false,
-      transparent: true,
-      alwaysOnTop: true,
-      fullscreen: true,
-      skipTaskbar: true,
-      resizable: false,
-      movable: false,
-      hasShadow: false,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-      },
-    });
-
-    regionWindow.loadFile(path.join(__dirname, "..", "renderer", "region-select.html"));
-    regionWindow.setIgnoreMouseEvents(false);
-
-    return new Promise((resolve) => {
-      ipcMain.once("region-selected-result", (_, region) => {
-        if (!regionWindow.isDestroyed()) {
-          regionWindow.close();
-        }
-        resolve(region);
+      const regionWindow = new BrowserWindow({
+        x: 0,
+        y: 0,
+        width: width,
+        height: height,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        fullscreen: true,
+        skipTaskbar: true,
+        resizable: false,
+        movable: false,
+        hasShadow: false,
+        webPreferences: {
+          nodeIntegration: true,
+          contextIsolation: false,
+        },
       });
-      
-      ipcMain.once("region-cancelled-result", () => {
-        if (!regionWindow.isDestroyed()) {
-          regionWindow.close();
-        }
-        resolve(null);
+
+      regionWindow.on("closed", () => {
+        log("info", "Region selection window closed");
       });
-    });
+
+      regionWindow.on("error", (err) => {
+        log("error", `Region selection window error: ${err.message}`);
+      });
+
+      regionWindow.loadFile(
+        path.join(__dirname, "..", "renderer", "region-select.html"),
+      );
+      regionWindow.setIgnoreMouseEvents(false);
+
+      return new Promise((resolve) => {
+        const timeoutId = setTimeout(
+          () => {
+            log("warn", "Region selection timed out after 5 minutes");
+            if (!regionWindow.isDestroyed()) {
+              regionWindow.close();
+            }
+            resolve(null);
+          },
+          5 * 60 * 1000,
+        );
+
+        ipcMain.once("region-selected-result", (_, region) => {
+          clearTimeout(timeoutId);
+          if (!regionWindow.isDestroyed()) {
+            regionWindow.close();
+          }
+          resolve(region);
+        });
+
+        ipcMain.once("region-cancelled-result", () => {
+          clearTimeout(timeoutId);
+          if (!regionWindow.isDestroyed()) {
+            regionWindow.close();
+          }
+          resolve(null);
+        });
+      });
+    } catch (err) {
+      log("error", `start-region-selection failed: ${err.message}`);
+      return null;
+    }
   });
 
   ipcMain.handle("get-available-encoders", async () => {

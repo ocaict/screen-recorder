@@ -8,7 +8,11 @@ let ffmpegPath = null;
 
 function checkHardwareEncoders() {
   return new Promise((resolve) => {
-    const encoders = { nvenc: false, qsv: false, amf: false };
+    const encoders = {
+      nvenc: { h264: false, hevc: false },
+      qsv: { h264: false, hevc: false },
+      amf: { h264: false, hevc: false },
+    };
 
     const systemFfmpeg = getSystemFfmpegPath();
     if (systemFfmpeg) {
@@ -18,15 +22,26 @@ function checkHardwareEncoders() {
           `"${systemFfmpeg}" -hide_banner -encoders 2>&1`,
           { encoding: "utf8", timeout: 10000 },
         );
-        encoders.nvenc =
-          output.includes("h264_nvenc") || output.includes("hevc_nvenc");
-        encoders.qsv =
-          output.includes("h264_qsv") || output.includes("hevc_qsv");
-        encoders.amf =
-          output.includes("h264_amf") || output.includes("hevc_amf");
+
+        // Check NVIDIA NVENC
+        encoders.nvenc.h264 = output.includes("h264_nvenc");
+        encoders.nvenc.hevc = output.includes("hevc_nvenc");
+
+        // Check Intel QSV
+        encoders.qsv.h264 = output.includes("h264_qsv");
+        encoders.qsv.hevc = output.includes("hevc_qsv");
+
+        // Check AMD AMF
+        encoders.amf.h264 = output.includes("h264_amf");
+        encoders.amf.hevc = output.includes("hevc_amf");
+
+        const nvencAvailable = encoders.nvenc.h264 || encoders.nvenc.hevc;
+        const qsvAvailable = encoders.qsv.h264 || encoders.qsv.hevc;
+        const amfAvailable = encoders.amf.h264 || encoders.amf.hevc;
+
         log(
           "info",
-          `System FFmpeg found. Hardware encoders - NVENC: ${encoders.nvenc}, QSV: ${encoders.qsv}, AMF: ${encoders.amf}`,
+          `Hardware encoders - NVENC: ${nvencAvailable ? "available" : "unavailable"}, QSV: ${qsvAvailable ? "available" : "unavailable"}, AMF: ${amfAvailable ? "available" : "unavailable"}`,
         );
       } catch (err) {
         log(
@@ -173,13 +188,8 @@ async function convertVideo(inputPath, outputPath, onProgress) {
     }
 
     const hwAccel = settings.hardwareAcceleration || "none";
-    const encoderMap = {
-      nvenc: "h264_nvenc",
-      qsv: "h264_qsv",
-      amf: "h264_amf",
-    };
-
     let useHwEncoder = false;
+    let selectedEncoder = null;
     let cmd = ffmpeg(inputPath);
 
     if (hwAccel !== "none") {
@@ -187,8 +197,8 @@ async function convertVideo(inputPath, outputPath, onProgress) {
       const systemFfmpeg = getSystemFfmpegPath();
 
       log(
-        `info`,
-        `HW Accel check: hwAccel=${hwAccel}, encoders=${JSON.stringify(encoders)}, systemFfmpeg=${systemFfmpeg}`,
+        "info",
+        `HW check: requested=${hwAccel}, available=${JSON.stringify(encoders)}`,
       );
 
       if (
@@ -197,40 +207,59 @@ async function convertVideo(inputPath, outputPath, onProgress) {
         systemFfmpeg &&
         fs.existsSync(systemFfmpeg)
       ) {
-        useHwEncoder = true;
-        try {
-          ffmpeg.setFfmpegPath(systemFfmpeg);
-          ffmpegPath = systemFfmpeg;
-        } catch (err) {
-          log(
-            "warn",
-            `Failed to set system ffmpeg path globally: ${err.message}`,
-          );
+        const hwEncoders = encoders[hwAccel];
+
+        // Prefer HEVC for better compression if available, otherwise use H.264
+        if (hwEncoders.hevc) {
+          selectedEncoder = `hevc_${hwAccel}`;
+        } else if (hwEncoders.h264) {
+          selectedEncoder = `h264_${hwAccel}`;
         }
 
-        log(
-          "info",
-          `Using hardware encoder: ${encoderMap[hwAccel]} with system FFmpeg at ${systemFfmpeg}`,
-        );
+        if (selectedEncoder) {
+          useHwEncoder = true;
+          try {
+            ffmpeg.setFfmpegPath(systemFfmpeg);
+            ffmpegPath = systemFfmpeg;
+          } catch (err) {
+            log("warn", `Failed to set system FFmpeg path: ${err.message}`);
+          }
+
+          log(
+            "info",
+            `Using hardware encoder: ${selectedEncoder} (${hwAccel.toUpperCase()})`,
+          );
+        }
       } else {
         log(
           "warn",
-          `Hardware acceleration not available. encoders=${JSON.stringify(encoders)}, systemFfmpeg=${systemFfmpeg}. Using software encoding.`,
+          `Hardware encoder ${hwAccel} not available or system FFmpeg not found. Using software encoding.`,
         );
       }
     }
 
-    if (useHwEncoder) {
+    if (useHwEncoder && selectedEncoder) {
       if (hwAccel === "nvenc") {
+        const isHevc = selectedEncoder.includes("hevc");
         cmd = cmd
-          .outputOptions("-c:v", "h264_nvenc")
-          .outputOptions("-preset", "p1")
-          .outputOptions("-tune", "hq")
-          .outputOptions("-rc", "cbr");
+          .outputOptions("-c:v", selectedEncoder)
+          .outputOptions("-preset", "default")
+          .outputOptions("-rc", "vbr")
+          .outputOptions("-cq", "19");
+        if (!isHevc) {
+          cmd.outputOptions("-tune", "hq");
+        }
       } else if (hwAccel === "qsv") {
-        cmd = cmd.outputOptions("-c:v", "h264_qsv");
+        const bitrate = settings.compression === "maximum" ? "2000k" : "4000k";
+        cmd = cmd
+          .outputOptions("-c:v", selectedEncoder)
+          .outputOptions("-preset", "balanced")
+          .outputOptions("-b:v", bitrate);
       } else if (hwAccel === "amf") {
-        cmd = cmd.outputOptions("-c:v", "h264_amf");
+        cmd = cmd
+          .outputOptions("-c:v", selectedEncoder)
+          .outputOptions("-quality", "quality")
+          .outputOptions("-rc", "vbr");
       }
     } else {
       cmd = cmd
@@ -282,19 +311,23 @@ async function convertVideo(inputPath, outputPath, onProgress) {
         resolve(outputPath);
       })
       .on("error", async (err) => {
-        log("error", `Conversion error: ${err.message}, input: ${inputPath}, output: ${outputPath}`);
+        log(
+          "error",
+          `Conversion error: ${err.message}, input: ${inputPath}, output: ${outputPath}`,
+        );
 
         // If a hardware encoder failed due to driver/API issues, attempt software fallback
         const msg = err && err.message ? err.message.toLowerCase() : "";
         const hwError =
-          msg.includes("nvenc") ||
-          msg.includes("qsv") ||
-          msg.includes("amf") ||
-          msg.includes("driver does not support") ||
-          msg.includes("required") ||
-          msg.includes("failed to open encoder") ||
-          msg.includes("encoder") ||
-          msg.includes("codec");
+          useHwEncoder &&
+          (msg.includes("nvenc") ||
+            msg.includes("qsv") ||
+            msg.includes("amf") ||
+            msg.includes("driver") ||
+            msg.includes("codec") ||
+            msg.includes("encoder") ||
+            msg.includes("not found") ||
+            msg.includes("unknown"));
 
         if (useHwEncoder && hwError) {
           log(

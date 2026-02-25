@@ -1,6 +1,7 @@
 class SourceManager {
   constructor(app) {
     this.app = app;
+    this.sourceHandlers = []; // Track handlers for cleanup
   }
 
   async openSourceModal() {
@@ -18,6 +19,14 @@ class SourceManager {
   }
 
   displaySources(sources) {
+    // Clean up old handlers
+    this.sourceHandlers.forEach(({ element, handlers }) => {
+      handlers.forEach(({ event, handler }) => {
+        element.removeEventListener(event, handler);
+      });
+    });
+    this.sourceHandlers = [];
+
     this.app.sourceGrid.innerHTML = "";
 
     if (sources.length === 0) {
@@ -48,12 +57,23 @@ class SourceManager {
       item.appendChild(label);
 
       const selectSourceHandler = () => this.selectSource(source, item);
-      item.addEventListener("click", selectSourceHandler);
-      item.addEventListener("keydown", (e) => {
+      const keydownHandler = (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           selectSourceHandler(e);
         }
+      };
+
+      item.addEventListener("click", selectSourceHandler);
+      item.addEventListener("keydown", keydownHandler);
+
+      // Track handlers for cleanup
+      this.sourceHandlers.push({
+        element: item,
+        handlers: [
+          { event: "click", handler: selectSourceHandler },
+          { event: "keydown", handler: keydownHandler },
+        ],
       });
 
       this.app.sourceGrid.appendChild(item);
@@ -71,11 +91,11 @@ class SourceManager {
       this.app.cropDrawId = null;
     }
     if (this.app.currentPreviewStream) {
-      this.app.currentPreviewStream.getTracks().forEach(t => t.stop());
+      this.app.currentPreviewStream.getTracks().forEach((t) => t.stop());
       this.app.currentPreviewStream = null;
     }
     this.app.currentCropCanvas = null;
-    
+
     this.app.recordingManager.selectedSource = source;
     this.app.recordingManager.selectedRegion = null;
     await this.app.recordingManager.setupVideoStream(source);
@@ -84,7 +104,9 @@ class SourceManager {
     this.app.showQuickSettings();
     this.app.closeModal(this.app.sourceModal);
     this.app.startBtn.disabled = false;
-    document.querySelectorAll(".timer-preset").forEach(btn => btn.disabled = false);
+    document
+      .querySelectorAll(".timer-preset")
+      .forEach((btn) => (btn.disabled = false));
   }
 
   updateSourcePreview(source) {
@@ -95,6 +117,16 @@ class SourceManager {
         <span class="source-name">${source.name}</span>
       </div>
     `;
+  }
+
+  destroy() {
+    // Clean up all tracked event listeners
+    this.sourceHandlers.forEach(({ element, handlers }) => {
+      handlers.forEach(({ event, handler }) => {
+        element.removeEventListener(event, handler);
+      });
+    });
+    this.sourceHandlers = [];
   }
 }
 

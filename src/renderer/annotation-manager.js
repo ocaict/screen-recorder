@@ -12,7 +12,7 @@ class AnnotationManager {
     this.historyIndex = -1;
     this.currentPath = [];
     this.textInput = null;
-    
+
     this.canvas = null;
     this.ctx = null;
     this.tempCanvas = null;
@@ -31,48 +31,61 @@ class AnnotationManager {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
     document.body.insertBefore(this.canvas, document.body.firstChild);
-    
+
     this.ctx = this.canvas.getContext("2d");
     this.ctx.lineCap = "round";
     this.ctx.lineJoin = "round";
-    
+
     this.tempCanvas = document.createElement("canvas");
     this.tempCanvas.className = "annotation-canvas";
     this.tempCanvas.width = window.innerWidth;
     this.tempCanvas.height = window.innerHeight;
     document.body.insertBefore(this.tempCanvas, document.body.firstChild);
-    
+
     this.tempCtx = this.tempCanvas.getContext("2d");
     this.tempCtx.lineCap = "round";
     this.tempCtx.lineJoin = "round";
 
-    window.addEventListener("resize", () => {
+    // Store resize handler for cleanup
+    const resizeHandler = () => {
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
       this.tempCanvas.width = window.innerWidth;
       this.tempCanvas.height = window.innerHeight;
       this.redrawHistory();
-    });
+    };
+    window.__resizeHandler = resizeHandler;
+    window.addEventListener("resize", resizeHandler);
 
-    this.canvas.addEventListener("mousedown", (e) => this.startDrawing(e));
-    this.canvas.addEventListener("mousemove", (e) => this.draw(e));
-    this.canvas.addEventListener("mouseup", (e) => this.stopDrawing(e));
-    this.canvas.addEventListener("mouseleave", () => this.stopDrawing());
-    
-    this.canvas.addEventListener("touchstart", (e) => {
+    // Store canvas event handlers for cleanup
+    this.canvasMousedownHandler = (e) => this.startDrawing(e);
+    this.canvasMousemoveHandler = (e) => this.draw(e);
+    this.canvasMouseupHandler = (e) => this.stopDrawing(e);
+    this.canvasMouseleaveHandler = () => this.stopDrawing();
+
+    this.canvasTouchstartHandler = (e) => {
       e.preventDefault();
       const touch = e.touches[0];
       this.startDrawing({ clientX: touch.clientX, clientY: touch.clientY });
-    });
-    this.canvas.addEventListener("touchmove", (e) => {
+    };
+    this.canvasTouchmoveHandler = (e) => {
       e.preventDefault();
       const touch = e.touches[0];
       this.draw({ clientX: touch.clientX, clientY: touch.clientY });
-    });
-    this.canvas.addEventListener("touchend", (e) => {
+    };
+    this.canvasTouchendHandler = (e) => {
       e.preventDefault();
       this.stopDrawing();
-    });
+    };
+
+    this.canvas.addEventListener("mousedown", this.canvasMousedownHandler);
+    this.canvas.addEventListener("mousemove", this.canvasMousemoveHandler);
+    this.canvas.addEventListener("mouseup", this.canvasMouseupHandler);
+    this.canvas.addEventListener("mouseleave", this.canvasMouseleaveHandler);
+
+    this.canvas.addEventListener("touchstart", this.canvasTouchstartHandler);
+    this.canvas.addEventListener("touchmove", this.canvasTouchmoveHandler);
+    this.canvas.addEventListener("touchend", this.canvasTouchendHandler);
   }
 
   setupToolbar() {
@@ -83,35 +96,43 @@ class AnnotationManager {
     this.clearBtn = document.getElementById("annotationClear");
     this.closeBtn = document.getElementById("annotationClose");
 
-    this.toolBtns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        this.toolBtns.forEach(b => b.classList.remove("active"));
+    this.toolBtns.forEach((btn) => {
+      btn._selectHandler = () => {
+        this.toolBtns.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         this.currentTool = btn.dataset.tool;
-      });
+      };
+      btn.addEventListener("click", btn._selectHandler);
     });
 
-    this.colorBtns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        this.colorBtns.forEach(b => b.classList.remove("active"));
+    this.colorBtns.forEach((btn) => {
+      btn._selectHandler = () => {
+        this.colorBtns.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         this.currentColor = btn.dataset.color;
-      });
+      };
+      btn.addEventListener("click", btn._selectHandler);
     });
 
-    this.undoBtn?.addEventListener("click", () => this.undo());
-    this.clearBtn?.addEventListener("click", () => this.clearAll());
-    this.closeBtn?.addEventListener("click", () => this.deactivate());
+    this.undoBtn._clickHandler = () => this.undo();
+    this.undoBtn?.addEventListener("click", this.undoBtn._clickHandler);
+
+    this.clearBtn._clickHandler = () => this.clearAll();
+    this.clearBtn?.addEventListener("click", this.clearBtn._clickHandler);
+
+    this.closeBtn._clickHandler = () => this.deactivate(false);
+    this.closeBtn?.addEventListener("click", this.closeBtn._clickHandler);
   }
 
   setupKeyboardShortcuts() {
-    document.addEventListener("keydown", (e) => {
+    this.keydownHandler = (e) => {
       if (!this.isActive) return;
-      
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      
+
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+        return;
+
       const key = e.key.toLowerCase();
-      
+
       if (key === "p") {
         this.setTool("pen");
       } else if (key === "h") {
@@ -130,21 +151,22 @@ class AnnotationManager {
         e.preventDefault();
         this.undo();
       } else if (key === "escape") {
-        this.deactivate();
+        this.deactivate(false);
       }
-    });
+    };
+    document.addEventListener("keydown", this.keydownHandler);
   }
 
   setTool(tool) {
     this.currentTool = tool;
-    this.toolBtns.forEach(btn => {
+    this.toolBtns.forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tool === tool);
     });
   }
 
   activate() {
     if (this.isActive) return;
-    
+
     this.isActive = true;
     this.toolbar.classList.remove("hidden");
     this.canvas.classList.add("active");
@@ -152,23 +174,27 @@ class AnnotationManager {
     this.app.showToast("Annotation mode activated", "info");
   }
 
-  deactivate() {
+  deactivate(clearContent = false) {
     if (!this.isActive) return;
-    
+
     this.isActive = false;
     this.toolbar.classList.add("hidden");
     this.canvas.classList.remove("active");
     this.tempCanvas.classList.remove("active");
-    
+
     if (this.textInput) {
       this.textInput.remove();
       this.textInput = null;
+    }
+
+    if (clearContent) {
+      this.clearAll();
     }
   }
 
   startDrawing(e) {
     if (!this.isActive) return;
-    
+
     if (this.currentTool === "text") {
       this.addText(e.clientX, e.clientY);
       return;
@@ -177,13 +203,16 @@ class AnnotationManager {
     this.isDrawing = true;
     this.startX = e.clientX;
     this.startY = e.clientY;
-    this.currentPath = [{
-      x: this.startX,
-      y: this.startY
-    }];
+    this.currentPath = [
+      {
+        x: this.startX,
+        y: this.startY,
+      },
+    ];
 
     this.tempCtx.strokeStyle = this.currentColor;
-    this.tempCtx.lineWidth = this.currentTool === "highlighter" ? 20 : this.strokeWidth;
+    this.tempCtx.lineWidth =
+      this.currentTool === "highlighter" ? 20 : this.strokeWidth;
     this.tempCtx.globalAlpha = this.currentTool === "highlighter" ? 0.4 : 1;
   }
 
@@ -197,7 +226,8 @@ class AnnotationManager {
     this.redrawHistory();
 
     this.tempCtx.strokeStyle = this.currentColor;
-    this.tempCtx.lineWidth = this.currentTool === "highlighter" ? 20 : this.strokeWidth;
+    this.tempCtx.lineWidth =
+      this.currentTool === "highlighter" ? 20 : this.strokeWidth;
     this.tempCtx.globalAlpha = this.currentTool === "highlighter" ? 0.4 : 1;
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
@@ -211,9 +241,20 @@ class AnnotationManager {
     } else if (this.currentTool === "arrow") {
       this.drawArrow(this.tempCtx, this.startX, this.startY, x, y);
     } else if (this.currentTool === "rectangle") {
-      this.tempCtx.strokeRect(this.startX, this.startY, x - this.startX, y - this.startY);
+      this.tempCtx.strokeRect(
+        this.startX,
+        this.startY,
+        x - this.startX,
+        y - this.startY,
+      );
     } else if (this.currentTool === "ellipse") {
-      this.drawEllipse(this.tempCtx, this.startX, this.startY, x - this.startX, y - this.startY);
+      this.drawEllipse(
+        this.tempCtx,
+        this.startX,
+        this.startY,
+        x - this.startX,
+        y - this.startY,
+      );
     }
   }
 
@@ -227,7 +268,8 @@ class AnnotationManager {
     this.redrawHistory();
 
     this.ctx.strokeStyle = this.currentColor;
-    this.ctx.lineWidth = this.currentTool === "highlighter" ? 20 : this.strokeWidth;
+    this.ctx.lineWidth =
+      this.currentTool === "highlighter" ? 20 : this.strokeWidth;
     this.ctx.globalAlpha = this.currentTool === "highlighter" ? 0.4 : 1;
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
@@ -237,13 +279,13 @@ class AnnotationManager {
         this.ctx.lineTo(this.currentPath[i].x, this.currentPath[i].y);
       }
       this.ctx.stroke();
-      
+
       this.saveToHistory({
         type: this.currentTool,
         path: [...this.currentPath],
         color: this.currentColor,
         strokeWidth: this.strokeWidth,
-        alpha: this.currentTool === "highlighter" ? 0.4 : 1
+        alpha: this.currentTool === "highlighter" ? 0.4 : 1,
       });
     } else if (this.currentTool === "arrow") {
       this.drawArrow(this.ctx, this.startX, this.startY, endX, endY);
@@ -254,10 +296,15 @@ class AnnotationManager {
         endX: endX,
         endY: endY,
         color: this.currentColor,
-        strokeWidth: this.strokeWidth
+        strokeWidth: this.strokeWidth,
       });
     } else if (this.currentTool === "rectangle") {
-      this.ctx.strokeRect(this.startX, this.startY, endX - this.startX, endY - this.startY);
+      this.ctx.strokeRect(
+        this.startX,
+        this.startY,
+        endX - this.startX,
+        endY - this.startY,
+      );
       this.saveToHistory({
         type: "rectangle",
         x: this.startX,
@@ -265,10 +312,16 @@ class AnnotationManager {
         width: endX - this.startX,
         height: endY - this.startY,
         color: this.currentColor,
-        strokeWidth: this.strokeWidth
+        strokeWidth: this.strokeWidth,
       });
     } else if (this.currentTool === "ellipse") {
-      this.drawEllipse(this.ctx, this.startX, this.startY, endX - this.startX, endY - this.startY);
+      this.drawEllipse(
+        this.ctx,
+        this.startX,
+        this.startY,
+        endX - this.startX,
+        endY - this.startY,
+      );
       this.saveToHistory({
         type: "ellipse",
         x: this.startX,
@@ -276,7 +329,7 @@ class AnnotationManager {
         width: endX - this.startX,
         height: endY - this.startY,
         color: this.currentColor,
-        strokeWidth: this.strokeWidth
+        strokeWidth: this.strokeWidth,
       });
     }
 
@@ -297,19 +350,27 @@ class AnnotationManager {
     ctx.moveTo(toX, toY);
     ctx.lineTo(
       toX - headLength * Math.cos(angle - Math.PI / 6),
-      toY - headLength * Math.sin(angle - Math.PI / 6)
+      toY - headLength * Math.sin(angle - Math.PI / 6),
     );
     ctx.moveTo(toX, toY);
     ctx.lineTo(
       toX - headLength * Math.cos(angle + Math.PI / 6),
-      toY - headLength * Math.sin(angle + Math.PI / 6)
+      toY - headLength * Math.sin(angle + Math.PI / 6),
     );
     ctx.stroke();
   }
 
   drawEllipse(ctx, x, y, width, height) {
     ctx.beginPath();
-    ctx.ellipse(x + width / 2, y + height / 2, Math.abs(width / 2), Math.abs(height / 2), 0, 0, 2 * Math.PI);
+    ctx.ellipse(
+      x + width / 2,
+      y + height / 2,
+      Math.abs(width / 2),
+      Math.abs(height / 2),
+      0,
+      0,
+      2 * Math.PI,
+    );
     ctx.stroke();
   }
 
@@ -325,14 +386,20 @@ class AnnotationManager {
     input.style.left = x + "px";
     input.style.top = y + "px";
     input.style.borderColor = this.currentColor;
+    input.style.color = this.currentColor;
     document.body.appendChild(input);
-    
-    input.focus();
-    this.textInput = input;
 
-    input.addEventListener("blur", () => this.commitText(input));
+    setTimeout(() => {
+      input.focus();
+      this.textInput = input;
+    }, 10);
+
+    input.addEventListener("blur", () => {
+      setTimeout(() => this.commitText(input), 100);
+    });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
+        e.preventDefault();
         this.commitText(input);
       } else if (e.key === "Escape") {
         input.remove();
@@ -346,18 +413,18 @@ class AnnotationManager {
     if (text) {
       const x = parseInt(input.style.left);
       const y = parseInt(input.style.top);
-      
+
       this.ctx.font = "bold 24px sans-serif";
       this.ctx.fillStyle = this.currentColor;
       this.ctx.fillText(text, x + 10, y + 30);
-      
+
       this.saveToHistory({
         type: "text",
         text: text,
         x: x + 10,
         y: y + 30,
         color: this.currentColor,
-        font: "bold 24px sans-serif"
+        font: "bold 24px sans-serif",
       });
     }
     input.remove();
@@ -372,7 +439,7 @@ class AnnotationManager {
 
   undo() {
     if (this.historyIndex < 0) return;
-    
+
     this.history.pop();
     this.historyIndex--;
     this.redrawHistory();
@@ -387,7 +454,7 @@ class AnnotationManager {
 
   redrawHistory() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
+
     for (const action of this.history) {
       this.ctx.strokeStyle = action.color;
       this.ctx.fillStyle = action.color;
@@ -406,17 +473,29 @@ class AnnotationManager {
           this.ctx.stroke();
         }
       } else if (action.type === "arrow") {
-        this.drawArrow(this.ctx, action.startX, action.startY, action.endX, action.endY);
+        this.drawArrow(
+          this.ctx,
+          action.startX,
+          action.startY,
+          action.endX,
+          action.endY,
+        );
       } else if (action.type === "rectangle") {
         this.ctx.strokeRect(action.x, action.y, action.width, action.height);
       } else if (action.type === "ellipse") {
-        this.drawEllipse(this.ctx, action.x, action.y, action.width, action.height);
+        this.drawEllipse(
+          this.ctx,
+          action.x,
+          action.y,
+          action.width,
+          action.height,
+        );
       } else if (action.type === "text") {
         this.ctx.font = action.font;
         this.ctx.fillText(action.text, action.x, action.y);
       }
     }
-    
+
     this.ctx.globalAlpha = 1;
   }
 
@@ -430,8 +509,84 @@ class AnnotationManager {
 
   destroy() {
     this.deactivate();
-    if (this.canvas) this.canvas.remove();
-    if (this.tempCanvas) this.tempCanvas.remove();
+
+    // Remove all event listeners
+    if (this.canvas) {
+      this.canvas.removeEventListener("mousedown", this.canvasMousedownHandler);
+      this.canvas.removeEventListener("mousemove", this.canvasMousemoveHandler);
+      this.canvas.removeEventListener("mouseup", this.canvasMouseupHandler);
+      this.canvas.removeEventListener(
+        "mouseleave",
+        this.canvasMouseleaveHandler,
+      );
+      this.canvas.removeEventListener(
+        "touchstart",
+        this.canvasTouchstartHandler,
+      );
+      this.canvas.removeEventListener("touchmove", this.canvasTouchmoveHandler);
+      this.canvas.removeEventListener("touchend", this.canvasTouchendHandler);
+      this.canvas.remove();
+    }
+
+    if (this.tempCanvas) {
+      this.tempCanvas.remove();
+    }
+
+    if (window.__resizeHandler) {
+      window.removeEventListener("resize", window.__resizeHandler);
+      delete window.__resizeHandler;
+    }
+
+    if (this.keydownHandler) {
+      document.removeEventListener("keydown", this.keydownHandler);
+      this.keydownHandler = null;
+    }
+
+    // Clean up toolbar listeners
+    if (this.toolBtns) {
+      this.toolBtns.forEach((btn) => {
+        if (btn._selectHandler) {
+          btn.removeEventListener("click", btn._selectHandler);
+          delete btn._selectHandler;
+        }
+      });
+    }
+
+    if (this.colorBtns) {
+      this.colorBtns.forEach((btn) => {
+        if (btn._selectHandler) {
+          btn.removeEventListener("click", btn._selectHandler);
+          delete btn._selectHandler;
+        }
+      });
+    }
+
+    if (this.undoBtn && this.undoBtn._clickHandler) {
+      this.undoBtn.removeEventListener("click", this.undoBtn._clickHandler);
+      delete this.undoBtn._clickHandler;
+    }
+
+    if (this.clearBtn && this.clearBtn._clickHandler) {
+      this.clearBtn.removeEventListener("click", this.clearBtn._clickHandler);
+      delete this.clearBtn._clickHandler;
+    }
+
+    if (this.closeBtn && this.closeBtn._clickHandler) {
+      this.closeBtn.removeEventListener("click", this.closeBtn._clickHandler);
+      delete this.closeBtn._clickHandler;
+    }
+
+    // Clear references
+    this.canvas = null;
+    this.ctx = null;
+    this.tempCanvas = null;
+    this.tempCtx = null;
+    this.toolbar = null;
+    this.toolBtns = null;
+    this.colorBtns = null;
+    this.undoBtn = null;
+    this.clearBtn = null;
+    this.closeBtn = null;
   }
 }
 

@@ -63,10 +63,15 @@ class RecordingManager {
       this.chunkInterval = null;
     }
 
-    // Cancel compositor RAF
+    // Cancel compositor RAF and Worker
     if (this.compositorDrawId) {
       cancelAnimationFrame(this.compositorDrawId);
       this.compositorDrawId = null;
+    }
+
+    if (this.compositorWorker) {
+      this.compositorWorker.terminate();
+      this.compositorWorker = null;
     }
 
     // Stop media recorder
@@ -374,9 +379,15 @@ class RecordingManager {
       cancelAnimationFrame(this.compositorDrawId);
       this.compositorDrawId = null;
     }
+
+    if (this.compositorWorker) {
+      this.compositorWorker.postMessage({ type: "stop" });
+      this.compositorWorker.terminate();
+      this.compositorWorker = null;
+    }
+
     this.canvasStream = null;
-    this.compositor = null;
-    this.compositorOffscreenCanvas = null;
+    this.compositorCanvasElement = null;
 
     if (this.cropInterval) {
       clearInterval(this.cropInterval);
@@ -411,13 +422,14 @@ class RecordingManager {
     const height = screenSettings.height || 1080;
     const frameRate = screenSettings.frameRate || 30;
 
-    // Use OffscreenCanvas for better performance (render thread vs main thread)
-    const offscreenCanvas = new OffscreenCanvas(width, height);
-    const ctx = offscreenCanvas.getContext("2d");
+    // Use a regular canvas and transfer its control to an offscreen compositor
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
 
-    if (!ctx) {
-      throw new Error("Failed to get OffscreenCanvas context");
-    }
+    // We can capture stream directly from the canvas element on the main thread
+    const captureStream = canvas.captureStream(frameRate);
+    const offscreenCanvas = canvas.transferControlToOffscreen();
 
     const screenStream = new MediaStream([screenTrack]);
     const screenVideo = document.createElement("video");
@@ -426,100 +438,83 @@ class RecordingManager {
     screenVideo.playsInline = true;
     await screenVideo.play();
 
-    // Use requestAnimationFrame for frame-sync drawing instead of setInterval
-    const drawFrame = () => {
+    // Set up webcam video if enabled
+    let webcamVideo = null;
+    if (this.webcamStream) {
+      const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
+      const webcamStream = new MediaStream([webcamTrack]);
+      webcamVideo = document.createElement("video");
+      webcamVideo.srcObject = webcamStream;
+      webcamVideo.muted = true;
+      webcamVideo.playsInline = true;
+      await webcamVideo.play();
+    }
+
+    // Initialize dedicated Offscreen Worker
+    this.compositorWorker = new Worker("compositor-worker.js");
+    this.compositorWorker.postMessage({
+      type: "init",
+      payload: {
+        offscreenCanvas,
+        width,
+        height,
+        frameRate,
+        settings: {
+          includeWebcam: !!this.webcamStream,
+          includeAnnotations: includeAnnotations,
+          webcamPosition: this.app.settings.webcamPosition || "bottom-right",
+          webcamSize: this.app.settings.webcamSize || "medium",
+        }
+      }
+    }, [offscreenCanvas]);
+
+    // We send bitmaps to the worker to render on its dedicated thread
+    const drawFrame = async () => {
       try {
         if (!this.isRecording) return;
 
-        // Record frame timing for performance analysis
         if (this.monitor) {
           this.monitor.recordFrame();
         }
 
-        ctx.drawImage(screenVideo, 0, 0, width, height);
-
-        if (this.webcamStream) {
-          const webcamWidth = 320;
-          const webcamHeight = 240;
-          let webcamX = 0;
-          let webcamY = 0;
-
-          const position = this.app.settings.webcamPosition || "bottom-right";
-          const size = this.app.settings.webcamSize || "medium";
-
-          let webcamDisplayWidth;
-          switch (size) {
-            case "small":
-              webcamDisplayWidth = 120;
-              break;
-            case "large":
-              webcamDisplayWidth = 240;
-              break;
-            default:
-              webcamDisplayWidth = 180;
-          }
-          const webcamDisplayHeight =
-            (webcamHeight / webcamWidth) * webcamDisplayWidth;
-
-          switch (position) {
-            case "top-left":
-              webcamX = 20;
-              webcamY = 20;
-              break;
-            case "top-right":
-              webcamX = width - webcamDisplayWidth - 20;
-              webcamY = 20;
-              break;
-            case "bottom-left":
-              webcamX = 20;
-              webcamY = height - webcamDisplayHeight - 20;
-              break;
-            case "bottom-right":
-            default:
-              webcamX = width - webcamDisplayWidth - 20;
-              webcamY = height - webcamDisplayHeight - 20;
-              break;
-          }
-
-          const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
-          const webcamStream = new MediaStream([webcamTrack]);
-          const webcamVideo = document.createElement("video");
-          webcamVideo.srcObject = webcamStream;
-          webcamVideo.muted = true;
-          webcamVideo.playsInline = true;
-          webcamVideo.play();
-
-          if (webcamVideo.readyState >= 2) {
-            ctx.drawImage(
-              webcamVideo,
-              webcamX,
-              webcamY,
-              webcamDisplayWidth,
-              webcamDisplayHeight,
-            );
-
-            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-            ctx.beginPath();
-            ctx.roundRect(
-              webcamX - 2,
-              webcamY - 2,
-              webcamDisplayWidth + 4,
-              webcamDisplayHeight + 4,
-              8,
-            );
-            ctx.fill();
-          }
+        // Grab current screen frame
+        let screenBitmap;
+        if (screenVideo.readyState >= 2) {
+          screenBitmap = await createImageBitmap(screenVideo);
         }
 
+        // Grab current webcam frame
+        let webcamBitmap;
+        if (webcamVideo && webcamVideo.readyState >= 2) {
+          webcamBitmap = await createImageBitmap(webcamVideo);
+        }
+
+        // Grab annotations
+        let annotationBitmap, tempAnnotationBitmap;
         if (includeAnnotations && this.app.annotationManager?.isActive) {
-          const annotationCanvas = this.app.annotationManager.getCanvas();
+          const annCanvas = this.app.annotationManager.getCanvas();
           const tempCanvas = this.app.annotationManager.getTempCanvas();
-
-          ctx.drawImage(annotationCanvas, 0, 0, width, height);
-          ctx.drawImage(tempCanvas, 0, 0, width, height);
+          annotationBitmap = await createImageBitmap(annCanvas);
+          tempAnnotationBitmap = await createImageBitmap(tempCanvas);
         }
+
+        const transferables = [];
+        if (screenBitmap) transferables.push(screenBitmap);
+        if (webcamBitmap) transferables.push(webcamBitmap);
+        if (annotationBitmap) transferables.push(annotationBitmap);
+        if (tempAnnotationBitmap) transferables.push(tempAnnotationBitmap);
+
+        this.compositorWorker.postMessage({
+          type: "renderFrame",
+          payload: {
+            screenBitmap,
+            webcamBitmap,
+            annotationBitmap,
+            tempAnnotationBitmap
+          }
+        }, transferables);
       } catch (err) {
-        console.error("Compositor frame draw error:", err);
+        console.error("Main thread frame dispatch error:", err);
       }
 
       if (this.isRecording && this.compositorDrawId) {
@@ -527,20 +522,15 @@ class RecordingManager {
       }
     };
 
-    // Start RAF-driven drawing loop
+    // Start dispatching loop
     this.compositorDrawId = requestAnimationFrame(drawFrame);
-
-    // Capture stream from offscreen canvas
-    const captureStream = offscreenCanvas.captureStream(frameRate);
 
     const finalStream = new MediaStream([
       ...captureStream.getVideoTracks(),
       ...audioTracks,
     ]);
 
-    // Store offscreenCanvas for cleanup
-    this.compositorOffscreenCanvas = offscreenCanvas;
-
+    this.compositorCanvasElement = canvas;
     return finalStream;
   }
 
@@ -907,9 +897,11 @@ class RecordingManager {
                 try {
                   if (this.chunkSessionId) {
                     const startTime = Date.now();
+                    // Fast-path zero-copy IPC: passing Uint8Array allows V8 renderer to directly copy memory, bypassing expensive JSON strings or Object deep cloning.
+                    const uint8Array = new Uint8Array(ab);
                     window.electronAPI.appendRecordingChunk(
                       this.chunkSessionId,
-                      ab,
+                      uint8Array
                     );
                     const latency = Date.now() - startTime;
 
@@ -1227,7 +1219,7 @@ class RecordingManager {
         if (this.chunkSessionId) {
           await window.electronAPI
             .abortChunkedRecording(this.chunkSessionId)
-            .catch((_) => {});
+            .catch((_) => { });
           this.chunkSessionId = null;
           this.tempChunkPath = null;
         }

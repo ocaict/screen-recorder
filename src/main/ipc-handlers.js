@@ -316,14 +316,18 @@ function setupIpcHandlers() {
     }
   });
 
-  ipcMain.on("append-recording-chunk", (_, sessionId, arrayBuffer) => {
+  ipcMain.on("append-recording-chunk", (_, sessionId, uint8Array) => {
     try {
+      if (!sessionId || !uint8Array) {
+        log("warn", "append-recording-chunk received invalid message payload");
+        return;
+      }
       const sess = chunkSessions.get(sessionId);
       if (!sess) {
         log("warn", `append-recording-chunk: session not found ${sessionId}`);
         return;
       }
-      const buf = Buffer.from(new Uint8Array(arrayBuffer));
+      const buf = Buffer.from(uint8Array); // Zero-copy Uint8Array to Node.js Buffer
       sess.ws.write(buf);
       sess.size = (sess.size || 0) + buf.length;
     } catch (err) {
@@ -402,7 +406,7 @@ function setupIpcHandlers() {
           // Remove temp file
           try {
             if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-          } catch (e) {}
+          } catch (e) { }
           return { success: false, canceled: true };
         }
 
@@ -418,7 +422,7 @@ function setupIpcHandlers() {
             .then(() => {
               try {
                 if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-              } catch (e) {}
+              } catch (e) { }
               log("info", `Recording converted and saved: ${convertedPath}`);
               mainWindow?.webContents.send(
                 "conversion-complete",
@@ -435,7 +439,7 @@ function setupIpcHandlers() {
               const webmPath = filePath.replace(/\.mp4$/i, ".webm");
               try {
                 fs.renameSync(tempFilePath, webmPath);
-              } catch (e) {}
+              } catch (e) { }
               mainWindow?.webContents.send("conversion-complete", webmPath);
               addRecentRecording(webmPath);
               showRecordingNotification(webmPath);
@@ -469,11 +473,11 @@ function setupIpcHandlers() {
       if (sess) {
         try {
           sess.ws.destroy();
-        } catch (e) {}
+        } catch (e) { }
         try {
           if (fs.existsSync(sess.tempFilePath))
             fs.unlinkSync(sess.tempFilePath);
-        } catch (e) {}
+        } catch (e) { }
         chunkSessions.delete(sessionId);
       }
       return { success: true };
@@ -581,7 +585,7 @@ function setupIpcHandlers() {
       console.error("remove-recent-recording-and-file error:", err);
       try {
         removeRecentRecording(filePath);
-      } catch (e) {}
+      } catch (e) { }
       return { success: false, error: err.message };
     }
   });

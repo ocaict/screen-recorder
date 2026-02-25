@@ -39,8 +39,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Chunked recording API
   startChunkedRecording: (options) =>
     ipcRenderer.invoke("start-chunked-recording", options),
-  appendRecordingChunk: (sessionId, arrayBuffer) =>
-    ipcRenderer.send("append-recording-chunk", sessionId, arrayBuffer),
+  appendRecordingChunk: (sessionId, chunkData) =>
+    ipcRenderer.send("append-recording-chunk", sessionId, chunkData),
   finalizeChunkedRecording: (sessionId, options) =>
     ipcRenderer.invoke("finalize-chunked-recording", sessionId, options),
   abortChunkedRecording: (sessionId) =>

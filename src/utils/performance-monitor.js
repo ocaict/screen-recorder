@@ -30,10 +30,15 @@ class PerformanceMonitor {
         progress: 0,
         throughput: 0,
         avgThroughput: 0,
+        throughputs: new Float32Array(100),
+        throughputsCursor: 0,
+        throughputsCount: 0,
         slowSegments: [],
       },
       ipc: {
-        latencies: [],
+        latencies: new Float32Array(100),
+        latencyCursor: 0,
+        latencyCount: 0,
         avgLatency: 0,
         maxLatency: 0,
       },
@@ -50,7 +55,15 @@ class PerformanceMonitor {
     this.recordingStartTime = null;
     this.frameCount = 0;
     this.lastFrameTime = 0;
-    this.frameTimes = [];
+    this.frameTimes = new Float32Array(100);
+    this.frameTimesCursor = 0;
+    this.frameTimesCount = 0;
+
+    this.memoryHistoryTimestamps = new Float64Array(30);
+    this.memoryHistoryRenderer = new Float32Array(30);
+    this.memoryHistoryCursor = 0;
+    this.memoryHistoryCount = 0;
+
     this.memoryCheckInterval = null;
     this.enabled = false;
     this.encoderSegmentStart = null;
@@ -65,7 +78,8 @@ class PerformanceMonitor {
     this.recordingStartTime = Date.now();
     this.frameCount = 0;
     this.lastFrameTime = 0;
-    this.frameTimes = [];
+    this.frameTimesCursor = 0;
+    this.frameTimesCount = 0;
 
     this.metrics.recording = {
       startTime: this.recordingStartTime,
@@ -114,11 +128,12 @@ class PerformanceMonitor {
 
       if (this.lastFrameTime > 0) {
         const frameTime = now - this.lastFrameTime;
-        this.frameTimes.push(frameTime);
 
-        // Keep only last 100 frame times for analysis
-        if (this.frameTimes.length > 100) {
-          this.frameTimes.shift();
+        // Circular buffer insertion
+        this.frameTimes[this.frameTimesCursor] = frameTime;
+        this.frameTimesCursor = (this.frameTimesCursor + 1) % this.frameTimes.length;
+        if (this.frameTimesCount < this.frameTimes.length) {
+          this.frameTimesCount++;
         }
 
         // Detect dropped frames (frame time > 50ms means dropped at 20fps)
@@ -128,8 +143,9 @@ class PerformanceMonitor {
         }
 
         // Calculate average frame time
-        this.metrics.recording.avgFrameTime =
-          this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
+        let sum = 0;
+        for (let i = 0; i < this.frameTimesCount; i++) sum += this.frameTimes[i];
+        this.metrics.recording.avgFrameTime = sum / this.frameTimesCount;
       }
 
       this.lastFrameTime = now;
@@ -161,23 +177,32 @@ class PerformanceMonitor {
         this.metrics.memory.peak = totalMemory;
       }
 
-      // Keep last 30 samples (1 minute of history)
-      this.metrics.memory.history.push({
-        timestamp: Date.now(),
-        renderer: this.metrics.memory.renderer,
-      });
+      // Circular buffer for 30 samples
+      this.memoryHistoryTimestamps[this.memoryHistoryCursor] = Date.now();
+      this.memoryHistoryRenderer[this.memoryHistoryCursor] = this.metrics.memory.renderer;
 
-      if (this.metrics.memory.history.length > 30) {
-        this.metrics.memory.history.shift();
+      let previousIndex = (this.memoryHistoryCursor - 1 + 30) % 30;
+
+      this.memoryHistoryCursor = (this.memoryHistoryCursor + 1) % 30;
+      if (this.memoryHistoryCount < 30) {
+        this.memoryHistoryCount++;
       }
+
+      // Reconstruct historical array of objects for listeners
+      const historyArr = [];
+      for (let i = 0; i < this.memoryHistoryCount; i++) {
+        const idx = (this.memoryHistoryCursor - this.memoryHistoryCount + i + 30) % 30;
+        historyArr.push({
+          timestamp: this.memoryHistoryTimestamps[idx],
+          renderer: this.memoryHistoryRenderer[idx]
+        });
+      }
+      this.metrics.memory.history = historyArr;
 
       // Detect memory spikes (>10MB increase in one sample)
       if (
-        this.metrics.memory.history.length > 1 &&
-        this.metrics.memory.renderer -
-        this.metrics.memory.history[this.metrics.memory.history.length - 2]
-          .renderer >
-        10
+        this.memoryHistoryCount > 1 &&
+        this.metrics.memory.renderer - this.memoryHistoryRenderer[previousIndex] > 10
       ) {
         this.metrics.memory.spikes.push({
           timestamp: Date.now(),
@@ -231,7 +256,8 @@ class PerformanceMonitor {
     this.metrics.encoder.throughput = 0;
     this.metrics.encoder.avgThroughput = 0;
     this.metrics.encoder.slowSegments = [];
-    this.metrics.encoder.throughputs = [];
+    this.metrics.encoder.throughputsCursor = 0;
+    this.metrics.encoder.throughputsCount = 0;
 
     this.emit("encoding-started", this.metrics.encoder);
   }
@@ -251,13 +277,15 @@ class PerformanceMonitor {
     this.metrics.encoder.duration = Date.now() - this.metrics.encoder.startTime;
 
     // Track throughput for averaging
-    if (!this.metrics.encoder.throughputs) {
-      this.metrics.encoder.throughputs = [];
+    this.metrics.encoder.throughputs[this.metrics.encoder.throughputsCursor] = throughputMbps;
+    this.metrics.encoder.throughputsCursor = (this.metrics.encoder.throughputsCursor + 1) % this.metrics.encoder.throughputs.length;
+    if (this.metrics.encoder.throughputsCount < this.metrics.encoder.throughputs.length) {
+      this.metrics.encoder.throughputsCount++;
     }
-    this.metrics.encoder.throughputs.push(throughputMbps);
-    this.metrics.encoder.avgThroughput =
-      this.metrics.encoder.throughputs.reduce((a, b) => a + b, 0) /
-      this.metrics.encoder.throughputs.length;
+
+    let sum = 0;
+    for (let i = 0; i < this.metrics.encoder.throughputsCount; i++) sum += this.metrics.encoder.throughputs[i];
+    this.metrics.encoder.avgThroughput = sum / this.metrics.encoder.throughputsCount;
 
     // Detect slow encoding segments
     if (
@@ -425,17 +453,22 @@ class PerformanceMonitor {
    * Record IPC latency
    */
   recordIPCLatency(latencyMs) {
-    this.metrics.ipc.latencies.push(latencyMs);
-
-    // Keep last 100 samples
-    if (this.metrics.ipc.latencies.length > 100) {
-      this.metrics.ipc.latencies.shift();
+    this.metrics.ipc.latencies[this.metrics.ipc.latencyCursor] = latencyMs;
+    this.metrics.ipc.latencyCursor = (this.metrics.ipc.latencyCursor + 1) % this.metrics.ipc.latencies.length;
+    if (this.metrics.ipc.latencyCount < this.metrics.ipc.latencies.length) {
+      this.metrics.ipc.latencyCount++;
     }
 
-    this.metrics.ipc.avgLatency =
-      this.metrics.ipc.latencies.reduce((a, b) => a + b, 0) /
-      this.metrics.ipc.latencies.length;
-    this.metrics.ipc.maxLatency = Math.max(...this.metrics.ipc.latencies);
+    let sum = 0;
+    let max = 0;
+    for (let i = 0; i < this.metrics.ipc.latencyCount; i++) {
+      let val = this.metrics.ipc.latencies[i];
+      sum += val;
+      if (val > max) max = val;
+    }
+
+    this.metrics.ipc.avgLatency = sum / this.metrics.ipc.latencyCount;
+    this.metrics.ipc.maxLatency = max;
 
     // Alert if IPC latency is high
     if (this.metrics.ipc.maxLatency > 100) {
@@ -523,7 +556,7 @@ class PerformanceMonitor {
       ipc: {
         avgLatency: avgLatency.toFixed(2),
         maxLatency: this.metrics.ipc.maxLatency || 0,
-        sampleCount: this.metrics.ipc.latencies.length,
+        sampleCount: this.metrics.ipc.latencyCount,
       },
       hotspots: this.metrics.hotspots,
       recommendations: this.metrics.recommendations,

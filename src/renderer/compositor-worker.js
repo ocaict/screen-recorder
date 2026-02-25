@@ -5,22 +5,13 @@
 
 let canvas = null;
 let ctx = null;
-let isRunning = false;
-let frameId = null;
 let config = {
   width: 1920,
   height: 1080,
   frameRate: 30,
 };
 
-// Video elements and tracks (cloned from main thread)
-let screenVideo = null;
-let webcamVideo = null;
-let annotationCanvas = null;
-let tempAnnotationCanvas = null;
-
-// Settings for compositing
-let compositorSettings = {
+let settings = {
   includeWebcam: false,
   includeAnnotations: false,
   webcamPosition: "bottom-right",
@@ -34,27 +25,15 @@ self.onmessage = (event) => {
     case "init":
       handleInit(payload);
       break;
-    case "start":
-      handleStart();
+    case "updateSettings":
+      settings = { ...settings, ...payload };
+      break;
+    case "renderFrame":
+      handleRenderFrame(payload);
       break;
     case "stop":
-      handleStop();
-      break;
-    case "updateScreenVideo":
-      screenVideo = payload.videoTrack;
-      break;
-    case "updateWebcamVideo":
-      webcamVideo = payload.videoTrack;
-      break;
-    case "updateAnnotationCanvases":
-      annotationCanvas = payload.annotationCanvas;
-      tempAnnotationCanvas = payload.tempCanvas;
-      break;
-    case "updateSettings":
-      compositorSettings = { ...compositorSettings, ...payload };
-      break;
-    case "updateConfig":
-      config = { ...config, ...payload };
+      canvas = null;
+      ctx = null;
       break;
     default:
       console.warn(`Unknown message type: ${type}`);
@@ -63,12 +42,21 @@ self.onmessage = (event) => {
 
 function handleInit(payload) {
   try {
-    const { offscreenCanvas, width, height, frameRate } = payload;
+    const { offscreenCanvas, width, height, frameRate, settings: initialSettings } = payload;
     canvas = offscreenCanvas;
     ctx = canvas.getContext("2d");
+
+    // High-performance hint for rendering images at full speed
+    ctx.imageSmoothingEnabled = false;
+
     config.width = width;
     config.height = height;
     config.frameRate = frameRate;
+
+    if (initialSettings) {
+      settings = { ...settings, ...initialSettings };
+    }
+
     self.postMessage({ type: "ready" });
   } catch (err) {
     console.error("Compositor worker init failed:", err);
@@ -76,66 +64,47 @@ function handleInit(payload) {
   }
 }
 
-function handleStart() {
-  if (isRunning) return;
-  isRunning = true;
+function handleRenderFrame(payload) {
+  if (!ctx) return;
+  const { screenBitmap, webcamBitmap, annotationBitmap, tempAnnotationBitmap } = payload;
 
-  const drawFrame = () => {
-    try {
-      if (!isRunning || !ctx) return;
-
-      // Draw screen video
-      if (screenVideo && screenVideo.readyState >= 2) {
-        ctx.drawImage(screenVideo, 0, 0, config.width, config.height);
-      }
-
-      // Draw webcam overlay if enabled
-      if (compositorSettings.includeWebcam && webcamVideo) {
-        drawWebcamOverlay();
-      }
-
-      // Draw annotations if enabled
-      if (compositorSettings.includeAnnotations && annotationCanvas) {
-        ctx.drawImage(annotationCanvas, 0, 0, config.width, config.height);
-        if (tempAnnotationCanvas) {
-          ctx.drawImage(
-            tempAnnotationCanvas,
-            0,
-            0,
-            config.width,
-            config.height,
-          );
-        }
-      }
-    } catch (err) {
-      console.error("Frame draw error:", err);
+  try {
+    // 1. Draw Screen Video Frame
+    if (screenBitmap) {
+      ctx.drawImage(screenBitmap, 0, 0, config.width, config.height);
+      screenBitmap.close(); // Immediate GC cleanup
     }
 
-    if (isRunning) {
-      frameId = requestAnimationFrame(drawFrame);
+    // 2. Draw Webcam Overlay Frame if enabled
+    if (settings.includeWebcam && webcamBitmap) {
+      drawWebcamOverlay(webcamBitmap);
+      webcamBitmap.close();
     }
-  };
 
-  drawFrame();
-}
+    // 3. Draw Annotation Overlays if enabled
+    if (settings.includeAnnotations) {
+      if (annotationBitmap) {
+        ctx.drawImage(annotationBitmap, 0, 0, config.width, config.height);
+        annotationBitmap.close();
+      }
+      if (tempAnnotationBitmap) {
+        ctx.drawImage(tempAnnotationBitmap, 0, 0, config.width, config.height);
+        tempAnnotationBitmap.close();
+      }
+    }
 
-function handleStop() {
-  isRunning = false;
-  if (frameId) {
-    cancelAnimationFrame(frameId);
-    frameId = null;
+  } catch (err) {
+    console.error("Frame draw error in worker:", err);
   }
 }
 
-function drawWebcamOverlay() {
-  if (!webcamVideo || webcamVideo.readyState < 2) return;
-
-  const webcamWidth = 320;
-  const webcamHeight = 240;
+function drawWebcamOverlay(webcamBitmap) {
+  const webcamWidth = webcamBitmap.width;
+  const webcamHeight = webcamBitmap.height;
   let webcamX = 0;
   let webcamY = 0;
 
-  const size = compositorSettings.webcamSize || "medium";
+  const size = settings.webcamSize || "medium";
   let webcamDisplayWidth;
 
   switch (size) {
@@ -150,7 +119,7 @@ function drawWebcamOverlay() {
   }
 
   const webcamDisplayHeight = (webcamHeight / webcamWidth) * webcamDisplayWidth;
-  const position = compositorSettings.webcamPosition || "bottom-right";
+  const position = settings.webcamPosition || "bottom-right";
 
   switch (position) {
     case "top-left":
@@ -174,7 +143,7 @@ function drawWebcamOverlay() {
 
   try {
     ctx.drawImage(
-      webcamVideo,
+      webcamBitmap,
       webcamX,
       webcamY,
       webcamDisplayWidth,
@@ -193,6 +162,6 @@ function drawWebcamOverlay() {
     );
     ctx.fill();
   } catch (err) {
-    console.warn("Webcam draw error:", err);
+    console.warn("Webcam worker draw error:", err);
   }
 }

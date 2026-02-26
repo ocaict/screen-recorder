@@ -2,77 +2,65 @@
   "videoQuality": "high",
   "frameRate": 24,
   "resolution": "1920x1080",
-  "recordAudio": false,
+  "recordAudio": true,
   "recordSystemAudio": false,
   "selectedMicrophone": "default",
-  "outputDirectory": "",
+  "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
   "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
   "showNotifications": false,
   "autoOpenAfterRecording": false,
   "defaultFormat": "mp4",
-  "countdown": 5,
+  "countdown": 0,
   "recentRecordings": [
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_10-04-45.mp4",
-      "fileName": "Recording_2026-02-25_10-04-45.mp4",
-      "recordedAt": "2026-02-25T09:06:58.322Z",
-      "size": 10115606
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-58-31.mp4",
+      "fileName": "Recording_2026-02-26_07-58-31.mp4",
+      "recordedAt": "2026-02-26T07:00:33.195Z",
+      "size": 8911318
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_09-45-26.mp4",
-      "fileName": "Recording_2026-02-25_09-45-26.mp4",
-      "recordedAt": "2026-02-25T08:47:33.431Z",
-      "size": 11677379
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-39-46.mp4",
+      "fileName": "Recording_2026-02-26_07-39-46.mp4",
+      "recordedAt": "2026-02-26T06:41:34.125Z",
+      "size": 9356456
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_09-10-26.mp4",
-      "fileName": "Recording_2026-02-25_09-10-26.mp4",
-      "recordedAt": "2026-02-25T08:11:53.151Z",
-      "size": 6362735
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-29-53.mp4",
+      "fileName": "Recording_2026-02-26_07-29-53.mp4",
+      "recordedAt": "2026-02-26T06:30:19.082Z",
+      "size": 1821025
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_08-59-07.webm",
-      "fileName": "Recording_2026-02-25_08-59-07.webm",
-      "recordedAt": "2026-02-25T07:59:11.921Z",
-      "size": 0
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-26-18.mp4",
+      "fileName": "Recording_2026-02-26_07-26-18.mp4",
+      "recordedAt": "2026-02-26T06:26:54.439Z",
+      "size": 4439389
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_08-31-16.webm",
-      "fileName": "Recording_2026-02-25_08-31-16.webm",
-      "recordedAt": "2026-02-25T07:31:19.529Z",
-      "size": 0
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-17-30.mp4",
+      "fileName": "Recording_2026-02-26_07-17-30.mp4",
+      "recordedAt": "2026-02-26T06:18:29.660Z",
+      "size": 4912790
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_08-13-46.mp4",
-      "fileName": "Recording_2026-02-25_08-13-46.mp4",
-      "recordedAt": "2026-02-25T07:16:05.100Z",
-      "size": 13661207
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_07-06-12.mp4",
+      "fileName": "Recording_2026-02-26_07-06-12.mp4",
+      "recordedAt": "2026-02-26T06:07:54.341Z",
+      "size": 8593037
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_07-51-25.mp4",
-      "fileName": "Recording_2026-02-25_07-51-25.mp4",
-      "recordedAt": "2026-02-25T06:52:02.976Z",
-      "size": 3544426
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_06-46-30.mp4",
+      "fileName": "Recording_2026-02-26_06-46-30.mp4",
+      "recordedAt": "2026-02-26T05:47:37.976Z",
+      "size": 8695227
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_07-47-30.mp4",
-      "fileName": "Recording_2026-02-25_07-47-30.mp4",
-      "recordedAt": "2026-02-25T06:48:33.016Z",
-      "size": 3710486
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_07-19-51.mp4",
-      "fileName": "Recording_2026-02-25_07-19-51.mp4",
-      "recordedAt": "2026-02-25T06:21:16.507Z",
-      "size": 1983808
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-25_07-11-31.mp4",
-      "fileName": "Recording_2026-02-25_07-11-31.mp4",
-      "recordedAt": "2026-02-25T06:13:21.637Z",
-      "size": 3730348
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_06-21-40.mp4",
+      "fileName": "Recording_2026-02-26_06-21-40.mp4",
+      "recordedAt": "2026-02-26T05:22:31.070Z",
+      "size": 4827886
     }
   ],
   "maxRecentRecordings": 10,
@@ -84,5 +72,5 @@
   "selectedCamera": "default",
   "webcamPosition": "bottom-right",
   "webcamSize": "medium",
-  "nvencPromptDismissed": true
+  "nvencPromptDismissed": false
 }

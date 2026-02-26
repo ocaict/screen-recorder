@@ -5,6 +5,7 @@ class ScreenRecorder {
     this.sourceManager = null;
     this.uiManager = null;
     this.annotationManager = null;
+    this.overlayAnnotationActive = false; // Tracks whether the fullscreen overlay is shown
 
     this.initialize();
   }
@@ -179,6 +180,39 @@ class ScreenRecorder {
     this.annotationToggleBtn.addEventListener("click", () =>
       this.toggleAnnotation(),
     );
+
+    // ── Live-relay annotation toolbar selections into the overlay ────────────
+    // Tool selector buttons
+    document.querySelectorAll(".annotation-btn[data-tool]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (this.overlayAnnotationActive) {
+          window.electronAPI.sendOverlaySettings({ tool: btn.dataset.tool });
+        }
+      });
+    });
+
+    // Colour picker buttons
+    document.querySelectorAll(".annotation-color-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (this.overlayAnnotationActive) {
+          window.electronAPI.sendOverlaySettings({ color: btn.dataset.color });
+        }
+      });
+    });
+
+    // Undo button
+    document.getElementById("annotationUndo")?.addEventListener("click", () => {
+      if (this.overlayAnnotationActive) {
+        window.electronAPI.sendOverlayCommand("undo");
+      }
+    });
+
+    // Clear button
+    document.getElementById("annotationClear")?.addEventListener("click", () => {
+      if (this.overlayAnnotationActive) {
+        window.electronAPI.sendOverlayCommand("clear");
+      }
+    });
     this.closeSourceModal.addEventListener("click", () =>
       this.closeModal(this.sourceModal),
     );
@@ -564,6 +598,13 @@ class ScreenRecorder {
       }
     });
 
+    // Relay overlay drawing actions to the local annotation manager (for compositing)
+    window.electronAPI.onOverlayAction((action) => {
+      if (this.annotationManager) {
+        this.annotationManager.handleOverlayAction(action);
+      }
+    });
+
     window.electronAPI.onError((error) => {
       this.processingOverlay.classList.remove("active");
       this.showToast(error.message || "An error occurred", "error");
@@ -865,7 +906,7 @@ class ScreenRecorder {
     }
   }
 
-  async loadAudioDevices() {}
+  async loadAudioDevices() { }
 
   togglePause() {
     if (
@@ -881,17 +922,70 @@ class ScreenRecorder {
     }
   }
 
-  toggleAnnotation() {
-    if (!this.annotationManager) return;
+  async toggleAnnotation() {
+    const isActive = this.overlayAnnotationActive;
 
-    if (this.annotationManager.isActive) {
-      this.annotationManager.deactivate();
+    if (isActive) {
+      // ── Deactivate overlay ───────────────────────────────────────────────
+      try {
+        await window.electronAPI.setOverlayDrawMode(false);
+        await window.electronAPI.hideOverlay();
+      } catch (e) {
+        console.warn("Failed to deactivate overlay:", e);
+      }
+      this.overlayAnnotationActive = false;
       this.annotationToggleBtn.classList.remove("active");
       this.annotationToggleBtn.querySelector("span").textContent = "Annotate";
+
+      // Also hide the tools toolbar in the main app
+      if (this.annotationManager) {
+        this.annotationManager.deactivate(true);
+      }
+
+      this.showToast("Annotation overlay hidden", "info");
     } else {
-      this.annotationManager.activate();
+      // ── Activate overlay ─────────────────────────────────────────────────
+      // Get display ID from selected source (:Y or windowformat: screen:X:X:Y)
+      let displayId = null;
+      const selectedSource = this.recordingManager?.selectedSource;
+      if (selectedSource?.id) {
+        const match = selectedSource.id.match(/^screen:(\d+):/);
+        if (match) {
+          displayId = parseInt(match[1], 10);
+        }
+      }
+
+      try {
+        await window.electronAPI.showOverlay(displayId);
+        // Wait for overlay to be fully ready
+        await new Promise(r => setTimeout(r, 300));
+        window.electronAPI.setOverlayDrawMode(true);
+
+        // Clear any leftover drawings from a previous session
+        if (window.electronAPI.sendOverlayCommand) {
+          window.electronAPI.sendOverlayCommand("clear");
+        }
+
+        // Push current toolbar selections into the overlay immediately
+        window.electronAPI.sendOverlaySettings({
+          tool: this.annotationManager?.currentTool || "pen",
+          color: this.annotationManager?.currentColor || "#ff0000",
+          width: this.annotationManager?.strokeWidth || 3,
+        });
+      } catch (e) {
+        console.error("Failed to activate overlay:", e);
+      }
+      this.overlayAnnotationActive = true;
       this.annotationToggleBtn.classList.add("active");
       this.annotationToggleBtn.querySelector("span").textContent = "Drawing";
+
+      // Also show the tools toolbar in the main app
+      if (this.annotationManager) {
+        this.annotationManager.clearAll(); // Clear any leftover drawings
+        this.annotationManager.activate(true);
+      }
+
+      this.showToast("Annotation mode active. Use the toolbar to draw.", "info");
     }
   }
 
@@ -989,6 +1083,15 @@ class ScreenRecorder {
     this.recordingManager.stopAudioMeter();
     this.hotkeyOverlay.classList.add("hidden");
 
+    // Hide the transparent overlay and clean up old in-app canvas too
+    if (this.overlayAnnotationActive) {
+      if (window.electronAPI.sendOverlayCommand) {
+        window.electronAPI.sendOverlayCommand("clear");
+      }
+      window.electronAPI.setOverlayDrawMode(false);
+      window.electronAPI.hideOverlay().catch(() => { });
+      this.overlayAnnotationActive = false;
+    }
     this.annotationManager?.deactivate(true);
     this.recordingManager.isPaused = false;
     this.showQuickSettings();
@@ -1189,7 +1292,7 @@ class ScreenRecorder {
       } else if (this.nvencPrompt) {
         this.nvencPrompt.classList.remove("show");
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async loadAudioDevicesForSettings() {

@@ -101,6 +101,10 @@ class AnnotationManager {
         this.toolBtns.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         this.currentTool = btn.dataset.tool;
+        // Sync configuration with the overlay process
+        if (window.electronAPI?.sendOverlaySettings) {
+          window.electronAPI.sendOverlaySettings({ tool: this.currentTool });
+        }
       };
       btn.addEventListener("click", btn._selectHandler);
     });
@@ -110,6 +114,10 @@ class AnnotationManager {
         this.colorBtns.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         this.currentColor = btn.dataset.color;
+        // Sync color configuration with the overlay process
+        if (window.electronAPI?.sendOverlaySettings) {
+          window.electronAPI.sendOverlaySettings({ color: this.currentColor });
+        }
       };
       btn.addEventListener("click", btn._selectHandler);
     });
@@ -120,7 +128,14 @@ class AnnotationManager {
     this.clearBtn._clickHandler = () => this.clearAll();
     this.clearBtn?.addEventListener("click", this.clearBtn._clickHandler);
 
-    this.closeBtn._clickHandler = () => this.deactivate(false);
+    this.closeBtn._clickHandler = () => {
+      // Call the parent app's toggleAnnotation to properly tear down the overlay
+      if (this.app && typeof this.app.toggleAnnotation === "function") {
+        this.app.toggleAnnotation();
+      } else {
+        this.deactivate(false);
+      }
+    };
     this.closeBtn?.addEventListener("click", this.closeBtn._clickHandler);
   }
 
@@ -162,16 +177,66 @@ class AnnotationManager {
     this.toolBtns.forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tool === tool);
     });
+    if (window.electronAPI?.sendOverlaySettings) {
+      window.electronAPI.sendOverlaySettings({ tool: this.currentTool });
+    }
   }
 
-  activate() {
+  handleOverlayAction(action) {
+    // If we're not active, don't draw anything locally
+    if (!this.isActive) return;
+
+    // Simulate mouse events from overlay data
+    const e = { clientX: action.x, clientY: action.y };
+
+    if (action.type === "mousedown") {
+      this.currentTool = action.tool || this.currentTool;
+      this.currentColor = action.color || this.currentColor;
+      this.strokeWidth = action.width || this.strokeWidth;
+      this.startDrawing(e);
+    } else if (action.type === "mousemove") {
+      this.draw(e);
+    } else if (action.type === "mouseup") {
+      this.stopDrawing(e);
+    } else if (action.type === "textCommand") {
+      this.ctx.font = action.font || "bold 24px sans-serif";
+      this.ctx.fillStyle = action.color || this.currentColor;
+      const maxW = action.maxWidth || this.canvas.width;
+      this.wrapText(this.ctx, action.text, action.x, action.y, maxW, 29);
+      this.saveToHistory({
+        type: "text",
+        text: action.text,
+        x: action.x,
+        y: action.y,
+        color: action.color || this.currentColor,
+        font: action.font || "bold 24px sans-serif",
+        maxWidth: maxW,
+      });
+    }
+  }
+
+  setDrawingResolution(width, height) {
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.tempCanvas.width = width;
+    this.tempCanvas.height = height;
+    this.redrawHistory();
+  }
+
+  activate(isActiveOverlay = false) {
     if (this.isActive) return;
 
     this.isActive = true;
+    this.isActiveOverlay = isActiveOverlay;
     this.toolbar.classList.remove("hidden");
-    this.canvas.classList.add("active");
-    this.tempCanvas.classList.add("active");
-    this.app.showToast("Annotation mode activated", "info");
+
+    // Only show local canvases if we are NOT in overlay mode
+    if (!isActiveOverlay) {
+      this.canvas.classList.add("active");
+      this.tempCanvas.classList.add("active");
+    }
+
+    this.app.showToast(isActiveOverlay ? "Screen Annotation Active" : "Local Annotation Active", "info");
   }
 
   deactivate(clearContent = false) {
@@ -181,6 +246,7 @@ class AnnotationManager {
     this.toolbar.classList.add("hidden");
     this.canvas.classList.remove("active");
     this.tempCanvas.classList.remove("active");
+    this.isActiveOverlay = false;
 
     if (this.textInput) {
       this.textInput.remove();
@@ -443,6 +509,10 @@ class AnnotationManager {
     this.history.pop();
     this.historyIndex--;
     this.redrawHistory();
+
+    if (this.isActiveOverlay && window.electronAPI?.sendOverlayCommand) {
+      window.electronAPI.sendOverlayCommand("undo");
+    }
   }
 
   clearAll() {
@@ -450,6 +520,10 @@ class AnnotationManager {
     this.historyIndex = -1;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+
+    if (this.isActiveOverlay && window.electronAPI?.sendOverlayCommand) {
+      window.electronAPI.sendOverlayCommand("clear");
+    }
   }
 
   redrawHistory() {
@@ -492,11 +566,34 @@ class AnnotationManager {
         );
       } else if (action.type === "text") {
         this.ctx.font = action.font;
-        this.ctx.fillText(action.text, action.x, action.y);
+        this.wrapText(this.ctx, action.text, action.x, action.y, action.maxWidth || this.canvas.width, 29);
       }
     }
 
     this.ctx.globalAlpha = 1;
+  }
+
+  wrapText(context, text, x, y, maxWidth, lineHeight) {
+    const lines = text.split("\n");
+    let curY = y;
+    for (const line of lines) {
+      const words = line.split(" ");
+      let currentLine = "";
+      for (let i = 0; i < words.length; i++) {
+        const testLine = currentLine + (currentLine ? " " : "") + words[i];
+        const metrics = context.measureText(testLine);
+        if (metrics.width > maxWidth && currentLine) {
+          context.fillText(currentLine, x, curY);
+          currentLine = words[i];
+          curY += lineHeight;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      context.fillText(currentLine, x, curY);
+      curY += lineHeight;
+    }
+    return curY;
   }
 
   getCanvas() {

@@ -98,7 +98,7 @@ ScreenCapturer/
 - [x] Record specific area (region selection) instead of full screen/window
 - [x] Schedule recording (record at specific time)
 - [ ] Record system audio (without microphone)
-- [ ] Add annotation/drawing on screen during recording
+- [x] Add annotation/drawing on screen during recording
 - [x] Custom hotkeys for stop recording
 
 ### Video Editing
@@ -132,7 +132,7 @@ ScreenCapturer/
 - [x] Hardware acceleration for encoding (NVENC, QSV, VCE)
 - [x] Background processing (don't block UI during conversion)
 - [x] Memory usage optimization for long recordings
-- [ ] Multi-threaded encoding
+- [x] Multi-threaded encoding
 - [ ] Streaming upload while recording
 
 ### System Integration

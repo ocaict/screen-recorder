@@ -427,6 +427,11 @@ class RecordingManager {
     canvas.width = width;
     canvas.height = height;
 
+    // Ensure local annotation canvases match this resolution for correct compositing
+    if (this.app.annotationManager) {
+      this.app.annotationManager.setDrawingResolution(width, height);
+    }
+
     // We can capture stream directly from the canvas element on the main thread
     const captureStream = canvas.captureStream(frameRate);
     const offscreenCanvas = canvas.transferControlToOffscreen();
@@ -1063,6 +1068,7 @@ class RecordingManager {
   async startChunkedRecording(options = {}) {
     this.maxMemoryBytes = 500 * 1024 * 1024;
     this.warnedAboutMemory = false;
+    this.bitrateReduced = false;
 
     try {
       const res = await window.electronAPI
@@ -1100,6 +1106,31 @@ class RecordingManager {
           "error",
         );
         await this.stopRecording();
+      }
+
+      // Adaptive Bitrate & Auto-Pause feature
+      if (this.monitor && this.monitor.frameCount > 100) {
+        const dropPercent = (this.monitor.metrics.recording.droppedFrames / this.monitor.frameCount) * 100;
+
+        if (dropPercent > 5) {
+          if (!this.bitrateReduced) {
+            this.bitrateReduced = true;
+            this.app.showToast("System struggling: Auto-pausing & reducing compositing rate to stabilize...", "warning");
+
+            // Adaptive logic: throttle compositor rendering down to lighten active CPU/Memory load
+            if (this.compositorWorker) {
+              this.compositorWorker.postMessage({
+                type: "updateSettings",
+                payload: { frameRate: 15 }
+              });
+            }
+            // Auto pause the encoder to give the system breathing room
+            this.pauseRecording();
+          } else if (dropPercent > 15) {
+            this.app.showToast("Critical frame drops detected: Auto-stopping recording to save file.", "error");
+            await this.stopRecording();
+          }
+        }
       }
     }, 5000);
   }

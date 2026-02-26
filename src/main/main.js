@@ -4,7 +4,7 @@ const { setupLogger, log } = require("../utils/logger");
 const { loadSettings } = require("../utils/settings");
 const tray = require("./tray");
 const shortcuts = require("./shortcuts");
-const { setupIpcHandlers, setMainWindowRef } = require("./ipc-handlers");
+const { setupIpcHandlers, setMainWindowRef, setOverlayWindowRef } = require("./ipc-handlers");
 
 app.disableHardwareAcceleration();
 
@@ -12,6 +12,7 @@ app.commandLine.appendSwitch("disable-gpu");
 app.commandLine.appendSwitch("disable-gpu-compositing");
 
 let mainWindow = null;
+let overlayWindow = null;
 
 const isDev = !app.isPackaged;
 const ICON_PATH = isDev
@@ -86,6 +87,8 @@ app.whenReady().then(async () => {
 
   setupIpcHandlers();
   createWindow();
+  createOverlayWindow();
+  setOverlayWindowRef(overlayWindow);
   tray.createTray();
   shortcuts.registerGlobalShortcut();
 
@@ -108,4 +111,38 @@ app.on("will-quit", () => {
   log("info", "Application closing");
 });
 
-module.exports = { getMainWindow: () => mainWindow };
+module.exports = {
+  getMainWindow: () => mainWindow,
+  getOverlayWindow: () => overlayWindow,
+};
+
+function createOverlayWindow() {
+  overlayWindow = new BrowserWindow({
+    width: 1920,
+    height: 1080,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    type: "toolbar",
+    hasShadow: false,
+    resizable: false,
+    focusable: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload", "overlay-preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+
+  overlayWindow.setAlwaysOnTop(true, "status");
+
+  // Load the overlay
+  overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));
+
+  overlayWindow.on("closed", () => {
+    overlayWindow = null;
+  });
+}

@@ -23,6 +23,7 @@ const shortcuts = require("./shortcuts");
 const state = require("./state");
 
 let mainWindow = null;
+let overlayWindow = null;
 let ICON_PATH = null;
 
 // Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
@@ -31,6 +32,10 @@ const chunkSessions = new Map();
 function setMainWindowRef(window, iconPath) {
   mainWindow = window;
   ICON_PATH = iconPath;
+}
+
+function setOverlayWindowRef(win) {
+  overlayWindow = win;
 }
 
 async function getCaptureSources() {
@@ -827,9 +832,168 @@ function setupIpcHandlers() {
       return { nvenc: false, qsv: false, amf: false };
     }
   });
+
+  let overlayMoveTopInterval = null;
+
+  // ── Overlay window IPC handlers ──────────────────────────────────────────
+
+  // Show the overlay spanning the specified display (or primary if not specified)
+  ipcMain.handle("overlay-show", (_, displayId) => {
+    const ov = overlayWindow;
+    if (!ov) return;
+
+    const { screen } = require("electron");
+    let targetDisplay = screen.getPrimaryDisplay();
+
+    if (displayId !== undefined && displayId !== null) {
+      const allDisplays = screen.getAllDisplays();
+      targetDisplay = allDisplays.find(d => d.id === displayId) || screen.getPrimaryDisplay();
+    }
+
+    const bounds = targetDisplay.bounds;
+
+    ov.setPosition(bounds.x, bounds.y);
+    ov.setSize(bounds.width, bounds.height);
+    ov.show();
+    ov.setAlwaysOnTop(true, "screen-saver");
+    ov.moveTop();
+
+    // Send display offset to overlay for coordinate conversion
+    if (ov.webContents) {
+      ov.webContents.send("overlay-display-offset", { x: bounds.x, y: bounds.y });
+    }
+
+    log("info", `Overlay shown on display ${targetDisplay.id} at (${bounds.x}, ${bounds.y})`);
+  });
+
+  // Hide the overlay
+  ipcMain.handle("overlay-hide", () => {
+    const ov = overlayWindow;
+    if (!ov) return;
+    if (overlayMoveTopInterval) {
+      clearInterval(overlayMoveTopInterval);
+      overlayMoveTopInterval = null;
+    }
+    ov.hide();
+    log("info", "Overlay window hidden");
+  });
+
+  // Toggle draw mode: when true the overlay captures mouse events so the user can draw
+  ipcMain.on("overlay-draw-mode", (event, enabled) => {
+    const ov = overlayWindow;
+    if (!ov) return;
+
+    if (enabled) {
+      // Bring overlay to front and ensure it covers the taskbar
+      ov.setIgnoreMouseEvents(false);
+      ov.setAlwaysOnTop(true, "screen-saver");
+      ov.moveTop();
+
+      // Ensure the main window stays above the overlay so tools can be clicked
+      if (mainWindow && mainWindow.isVisible()) {
+        mainWindow.setAlwaysOnTop(true, "screen-saver");
+        mainWindow.focus();
+      }
+
+      ov.setFocusable(false);
+
+      // Periodically re-assert overlay position above the Windows taskbar
+      if (overlayMoveTopInterval) clearInterval(overlayMoveTopInterval);
+      overlayMoveTopInterval = setInterval(() => {
+        if (overlayWindow && !overlayWindow.isDestroyed()) {
+          overlayWindow.moveTop();
+          if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+            mainWindow.moveTop();
+          }
+        } else {
+          clearInterval(overlayMoveTopInterval);
+          overlayMoveTopInterval = null;
+        }
+      }, 500);
+    } else {
+      // Stop the periodic re-assertion
+      if (overlayMoveTopInterval) {
+        clearInterval(overlayMoveTopInterval);
+        overlayMoveTopInterval = null;
+      }
+
+      ov.setIgnoreMouseEvents(true, { forward: true });
+      ov.setAlwaysOnTop(true, "status");
+      ov.setFocusable(false);
+      if (mainWindow) {
+        // Reset main window's alwaysOnTop state
+        mainWindow.setAlwaysOnTop(false);
+        mainWindow.focus();
+      }
+    }
+
+    if (ov.webContents) {
+      ov.webContents.send("overlay-draw-mode", enabled);
+    }
+  });
+
+  // When overlay renderer toggles mouse capture itself (e.g. hold-to-draw key)
+  ipcMain.on("overlay-set-mouse-capture", (_, capture) => {
+    const ov = overlayWindow;
+    if (!ov) return;
+    if (capture) {
+      ov.setIgnoreMouseEvents(false);
+      ov.setAlwaysOnTop(true, "screen-saver");
+      if (mainWindow && mainWindow.isVisible()) {
+        mainWindow.setAlwaysOnTop(true, "screen-saver");
+        mainWindow.focus();
+      }
+      ov.setFocusable(false);
+    } else {
+      ov.setIgnoreMouseEvents(true, { forward: true });
+      ov.setAlwaysOnTop(true, "status");
+      ov.setFocusable(false);
+      if (mainWindow) {
+        mainWindow.setAlwaysOnTop(false);
+        mainWindow.focus();
+      }
+    }
+  });
+
+  // Temporarily toggle overlay OS-level focusability for text inputs
+  ipcMain.on("overlay-set-focusable", (_, focusable) => {
+    const ov = overlayWindow;
+    if (ov) {
+      ov.setFocusable(focusable);
+      if (focusable) {
+        ov.focus();
+      } else {
+        // Re-assert overlay position above taskbar after losing focus
+        ov.setAlwaysOnTop(true, "screen-saver");
+        ov.moveTop();
+        if (mainWindow) {
+          mainWindow.setAlwaysOnTop(true, "screen-saver");
+          mainWindow.moveTop();
+        }
+      }
+    }
+  });
+
+  // Relay tool / color / width from the main UI into overlay
+  ipcMain.on("overlay-settings-from-main", (_, settings) => {
+    const ov = overlayWindow;
+    if (ov) ov.webContents.send("overlay-settings", settings);
+  });
+
+  // Relay undo / clear commands into overlay
+  ipcMain.on("overlay-command-from-main", (_, cmd) => {
+    const ov = overlayWindow;
+    if (ov) ov.webContents.send("overlay-command", cmd);
+  });
+
+  // Relay drawing actions from overlay back to main window (recorder)
+  ipcMain.on("overlay-action", (_, action) => {
+    if (mainWindow) mainWindow.webContents.send("overlay-action", action);
+  });
 }
 
 module.exports = {
   setMainWindowRef,
+  setOverlayWindowRef,
   setupIpcHandlers,
 };

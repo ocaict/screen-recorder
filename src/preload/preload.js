@@ -85,4 +85,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);
   },
+
+  // ── Overlay annotation window control ──────────────────────────────────────
+  showOverlay: (displayId) => ipcRenderer.invoke("overlay-show", displayId),
+  hideOverlay: () => ipcRenderer.invoke("overlay-hide"),
+
+  // Enable / disable draw mode (makes overlay capture mouse events)
+  setOverlayDrawMode: (enabled) => ipcRenderer.send("overlay-draw-mode", enabled),
+
+  // Push tool / color / strokeWidth changes into the overlay
+  sendOverlaySettings: (settings) =>
+    ipcRenderer.send("overlay-settings-from-main", settings),
+
+  // Trigger undo or clear inside the overlay
+  sendOverlayCommand: (cmd) =>
+    ipcRenderer.send("overlay-command-from-main", cmd),
+
+  // Receive relayed mouse actions from the overlay (for the compositor)
+  onOverlayAction: (callback) =>
+    ipcRenderer.on("overlay-action", (_, action) => callback(action)),
 });

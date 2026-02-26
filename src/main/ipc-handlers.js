@@ -17,7 +17,13 @@ const {
   clearRecentRecordings,
   generateFilename,
 } = require("../utils/settings");
-const { convertVideo } = require("../utils/ffmpeg");
+const {
+  convertVideo,
+  trimVideo,
+  generateThumbnail,
+  exportToGif,
+  mergeVideos,
+} = require("../utils/ffmpeg");
 const tray = require("./tray");
 const shortcuts = require("./shortcuts");
 const state = require("./state");
@@ -28,6 +34,21 @@ let ICON_PATH = null;
 
 // Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
 const chunkSessions = new Map();
+
+async function generateThumbnailHelper(videoPath) {
+  try {
+    const thumbDir = path.join(app.getPath("userData"), "thumbnails");
+    if (!fs.existsSync(thumbDir)) {
+      fs.mkdirSync(thumbDir, { recursive: true });
+    }
+    const thumbPath = path.join(thumbDir, `thumb_${Date.now()}.png`);
+    await generateThumbnail(videoPath, thumbPath);
+    return thumbPath;
+  } catch (err) {
+    log("error", `Thumbnail generation failed: ${err.message}`);
+    return null;
+  }
+}
 
 function setMainWindowRef(window, iconPath) {
   mainWindow = window;
@@ -216,24 +237,26 @@ async function saveRecording(streamData, chunkFiles = []) {
       convertVideo(tempFilePath, convertedPath, (progress) => {
         mainWindow?.webContents.send("conversion-progress", progress);
       })
-        .then(() => {
+        .then(async () => {
           if (fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
           }
+          const thumbPath = await generateThumbnailHelper(convertedPath);
+          addRecentRecording(convertedPath, thumbPath);
           log("info", `Recording converted and saved: ${convertedPath}`);
           mainWindow?.webContents.send("conversion-complete", convertedPath);
-          addRecentRecording(convertedPath);
           showRecordingNotification(convertedPath);
         })
-        .catch((convertErr) => {
+        .catch(async (convertErr) => {
           log(
             "error",
             `Conversion failed: ${convertErr.message}, saving as webm`,
           );
           const webmPath = filePath.replace(/\.mp4$/i, ".webm");
           fs.renameSync(tempFilePath, webmPath);
+          const thumbPath = await generateThumbnailHelper(webmPath);
+          addRecentRecording(webmPath, thumbPath);
           mainWindow?.webContents.send("conversion-complete", webmPath);
-          addRecentRecording(webmPath);
           showRecordingNotification(webmPath);
         });
 
@@ -245,7 +268,9 @@ async function saveRecording(streamData, chunkFiles = []) {
     } else {
       fs.renameSync(tempFilePath, filePath);
       log("info", `Recording saved: ${filePath}`);
-      addRecentRecording(filePath);
+
+      const thumbPath = await generateThumbnailHelper(filePath);
+      addRecentRecording(filePath, thumbPath);
 
       return { success: true, filePath };
     }
@@ -287,7 +312,7 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("window-close", () => {
-    mainWindow?.close();
+    app.quit();
   });
 
   ipcMain.handle("window-is-maximized", () => {
@@ -424,19 +449,20 @@ function setupIpcHandlers() {
           convertVideo(tempFilePath, convertedPath, (progress) => {
             mainWindow?.webContents.send("conversion-progress", progress);
           })
-            .then(() => {
+            .then(async () => {
               try {
                 if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
               } catch (e) { }
+              const thumbPath = await generateThumbnailHelper(convertedPath);
+              addRecentRecording(convertedPath, thumbPath);
               log("info", `Recording converted and saved: ${convertedPath}`);
               mainWindow?.webContents.send(
                 "conversion-complete",
                 convertedPath,
               );
-              addRecentRecording(convertedPath);
               showRecordingNotification(convertedPath);
             })
-            .catch((convertErr) => {
+            .catch(async (convertErr) => {
               log(
                 "error",
                 `Conversion failed: ${convertErr.message}, saving as webm`,
@@ -445,8 +471,9 @@ function setupIpcHandlers() {
               try {
                 fs.renameSync(tempFilePath, webmPath);
               } catch (e) { }
+              const thumbPath = await generateThumbnailHelper(webmPath);
+              addRecentRecording(webmPath, thumbPath);
               mainWindow?.webContents.send("conversion-complete", webmPath);
-              addRecentRecording(webmPath);
               showRecordingNotification(webmPath);
             });
 
@@ -458,7 +485,8 @@ function setupIpcHandlers() {
         } else {
           try {
             fs.renameSync(tempFilePath, filePath);
-            addRecentRecording(filePath);
+            const thumbPath = await generateThumbnailHelper(filePath);
+            addRecentRecording(filePath, thumbPath);
             return { success: true, filePath };
           } catch (err) {
             log("error", `Failed to move temp file: ${err.message}`);
@@ -520,6 +548,79 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle("trim-video", async (_, filePath, startTime, endTime) => {
+    try {
+      const result = await trimVideo(filePath, startTime, endTime);
+      if (result.success) {
+        const thumbPath = await generateThumbnailHelper(result.outputPath);
+        addRecentRecording(result.outputPath, thumbPath);
+        return { success: true, outputPath: result.outputPath };
+      }
+      return { success: false, error: "Trimming failed" };
+    } catch (err) {
+      log("error", `Trim IPC error: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("trim-to-gif", async (_, filePath, startTime, endTime) => {
+    try {
+      mainWindow?.webContents.send("conversion-started");
+      const result = await exportToGif(
+        filePath,
+        startTime,
+        endTime,
+        (progress) => {
+          mainWindow?.webContents.send("conversion-progress", {
+            percent: progress,
+            stage: "Generating GIF...",
+          });
+        },
+      );
+      if (result.success) {
+        mainWindow?.webContents.send("conversion-complete", result.outputPath);
+        return { success: true, outputPath: result.outputPath };
+      }
+      return { success: false, error: "GIF export failed" };
+    } catch (err) {
+      log("error", `GIF IPC error: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("merge-videos", async (_, filePaths) => {
+    try {
+      if (!filePaths || filePaths.length < 2) {
+        return { success: false, error: "Need at least 2 videos to merge" };
+      }
+
+      mainWindow?.webContents.send("conversion-started");
+
+      const settings = getSettings();
+      const outputDir = settings.outputDirectory || app.getPath("videos");
+      const fileName = `Merged_${Date.now()}.mp4`;
+      const outputPath = path.join(outputDir, fileName);
+
+      const result = await mergeVideos(filePaths, outputPath, (progress) => {
+        mainWindow?.webContents.send("conversion-progress", {
+          percent: progress,
+          stage: "Merging videos...",
+        });
+      });
+
+      if (result.success) {
+        const thumbPath = await generateThumbnailHelper(result.outputPath);
+        addRecentRecording(result.outputPath, thumbPath);
+        mainWindow?.webContents.send("conversion-complete", result.outputPath);
+        return { success: true, outputPath: result.outputPath };
+      }
+      return { success: false, error: "Merging failed" };
+    } catch (err) {
+      log("error", `Merge IPC error: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("set-recording-state", (_, recording, isPaused = false) => {
     try {
       state.setRecordingState(recording);
@@ -558,8 +659,9 @@ function setupIpcHandlers() {
     return settings.recentRecordings || [];
   });
 
-  ipcMain.handle("add-recent-recording", (_, filePath) => {
-    addRecentRecording(filePath);
+  ipcMain.handle("add-recent-recording", async (_, filePath) => {
+    const thumbPath = await generateThumbnailHelper(filePath);
+    addRecentRecording(filePath, thumbPath);
     return getSettings();
   });
 

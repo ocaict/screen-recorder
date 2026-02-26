@@ -41,6 +41,8 @@ class UIManager {
     this.app.clearRecentBtn = document.getElementById("clearRecentBtn");
     this.app.hotkeyOverlay = document.getElementById("hotkeyOverlay");
     this.app.hotkeyKey = document.getElementById("hotkeyKey");
+    this.app.toggleSelectBtn = document.getElementById("toggleSelectBtn");
+    this.app.mergeRecordingsBtn = document.getElementById("mergeRecordingsBtn");
     this.app.hwInfo = document.getElementById("hardwareInfo");
     this.app.hwAutoBtn = document.getElementById("autoSelectNvenc");
     this.app.nvencPrompt = document.getElementById("nvencPrompt");
@@ -76,6 +78,20 @@ class UIManager {
     this.app.totalRecordingsEl = document.getElementById("totalRecordings");
     this.app.totalDurationEl = document.getElementById("totalDuration");
     this.app.totalStorageEl = document.getElementById("totalStorage");
+
+    // Trim Modal Elements
+    this.app.trimModal = document.getElementById("trimModal");
+    this.app.closeTrimModal = document.getElementById("closeTrimModal");
+    this.app.trimVideoPreview = document.getElementById("trimVideoPreview");
+    this.app.trimStartRange = document.getElementById("trimStartRange");
+    this.app.trimEndRange = document.getElementById("trimEndRange");
+    this.app.trimStartTimeInput = document.getElementById("trimStartTime");
+    this.app.trimEndTimeInput = document.getElementById("trimEndTime");
+    this.app.trimDurationInfo = document.getElementById("trimDurationInfo");
+    this.app.trimRangeFill = document.getElementById("trimRangeFill");
+    this.app.saveTrimBtn = document.getElementById("saveTrimBtn");
+    this.app.saveGifBtn = document.getElementById("saveGifBtn");
+    this.app.cancelTrimBtn = document.getElementById("cancelTrimBtn");
   }
 
   showToast(message, type = "info") {

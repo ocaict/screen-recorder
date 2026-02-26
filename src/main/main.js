@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, protocol } = require("electron");
 const path = require("path");
 const { setupLogger, log } = require("../utils/logger");
 const { loadSettings } = require("../utils/settings");
@@ -51,8 +51,8 @@ function createWindow() {
   });
 
   mainWindow.on("close", (e) => {
-    const { isRecording } = require("./state");
-    if (isRecording) {
+    const state = require("./state");
+    if (state.getRecordingState()) {
       e.preventDefault();
       const { dialog } = require("electron");
       const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -71,6 +71,7 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    app.quit();
   });
 
   if (isDev) {
@@ -84,6 +85,16 @@ app.whenReady().then(async () => {
 
   log("info", "Application starting...");
   log("info", `Running in ${isDev ? "development" : "production"} mode`);
+
+  // Register thumb:// protocol
+  protocol.registerFileProtocol("thumb", (request, callback) => {
+    const url = request.url.replace("thumb://", "");
+    try {
+      return callback(decodeURIComponent(url));
+    } catch (error) {
+      console.error("Failed to register protocol", error);
+    }
+  });
 
   setupIpcHandlers();
   createWindow();

@@ -6,6 +6,8 @@ class ScreenRecorder {
     this.uiManager = null;
     this.annotationManager = null;
     this.overlayAnnotationActive = false; // Tracks whether the fullscreen overlay is shown
+    this.selectionMode = false;
+    this.selectedPaths = new Set();
 
     this.initialize();
   }
@@ -317,6 +319,9 @@ class ScreenRecorder {
     document
       .getElementById("settingsRecordAudio")
       ?.addEventListener("change", () => this.updateFileSizeEstimate());
+    document
+      .getElementById("settingsRecordSystemAudio")
+      ?.addEventListener("change", () => this.updateFileSizeEstimate());
 
     document
       .getElementById("settingsWebcam")
@@ -358,6 +363,18 @@ class ScreenRecorder {
           this.showToast("Failed to clear recent recordings", "error");
         }
       });
+    }
+
+    if (this.toggleSelectBtn) {
+      this.toggleSelectBtn.addEventListener("click", () =>
+        this.toggleSelectionMode(),
+      );
+    }
+
+    if (this.mergeRecordingsBtn) {
+      this.mergeRecordingsBtn.addEventListener("click", () =>
+        this.handleMerge(),
+      );
     }
     if (this.nvencEnableBtn) {
       this.nvencEnableBtn.addEventListener("click", async () => {
@@ -447,6 +464,51 @@ class ScreenRecorder {
           .checked
           ? "block"
           : "none";
+      });
+    }
+
+    // Trim Modal Listeners
+    if (this.trimStartRange) {
+      this.trimStartRange.addEventListener("input", () => this.updateTrimRange());
+    }
+    if (this.trimEndRange) {
+      this.trimEndRange.addEventListener("input", () => this.updateTrimRange());
+    }
+    if (this.cancelTrimBtn) {
+      this.cancelTrimBtn.addEventListener("click", () =>
+        this.closeModal(this.trimModal),
+      );
+    }
+    if (this.closeTrimModal) {
+      this.closeTrimModal.addEventListener("click", () =>
+        this.closeModal(this.trimModal),
+      );
+    }
+    if (this.saveTrimBtn) {
+      this.saveTrimBtn.addEventListener("click", () => this.handleTrimSave());
+    }
+    if (this.saveGifBtn) {
+      this.saveGifBtn.addEventListener("click", () => this.handleGifSave());
+    }
+
+    if (this.trimStartTimeInput) {
+      this.trimStartTimeInput.addEventListener("change", () => {
+        const seconds = this.timeToSeconds(this.trimStartTimeInput.value);
+        if (!isNaN(seconds)) {
+          this.trimStartRange.value =
+            (seconds / this.trimVideoPreview.duration) * 100;
+          this.updateTrimRange();
+        }
+      });
+    }
+    if (this.trimEndTimeInput) {
+      this.trimEndTimeInput.addEventListener("change", () => {
+        const seconds = this.timeToSeconds(this.trimEndTimeInput.value);
+        if (!isNaN(seconds)) {
+          this.trimEndRange.value =
+            (seconds / this.trimVideoPreview.duration) * 100;
+          this.updateTrimRange();
+        }
       });
     }
   }
@@ -567,8 +629,14 @@ class ScreenRecorder {
 
         const fileName = filePath.split(/[\\\/]/).pop();
         const isMp4 = filePath.toLowerCase().endsWith(".mp4");
+        const isGif = filePath.toLowerCase().endsWith(".gif");
+        const isMerged = fileName.startsWith("Merged_");
 
-        if (isMp4) {
+        if (isGif) {
+          this.showToast(`GIF exported successfully: ${fileName}`, "success");
+        } else if (isMerged) {
+          this.showToast("Videos merged successfully", "success");
+        } else if (isMp4) {
           this.showToast(`Conversion complete: ${fileName}`, "success");
         } else {
           this.showToast(`Recording saved: ${fileName}`, "success");
@@ -576,7 +644,7 @@ class ScreenRecorder {
 
         try {
           const settings = await window.electronAPI.getSettings();
-          if (settings && settings.autoOpenAfterRecording) {
+          if (settings && settings.autoOpenAfterRecording && !isMerged) {
             try {
               await window.electronAPI.openFile(filePath);
             } catch (openErr) {
@@ -650,11 +718,15 @@ class ScreenRecorder {
         const sizeStr = this.formatFileSize(recording.size);
 
         return `
-        <div class="recent-recording-item" role="listitem" data-path="${recording.filePath}" title="${recording.filePath}" tabindex="0" aria-label="${recording.fileName}, ${dateStr}, ${sizeStr}">
+        <div class="recent-recording-item ${this.selectedPaths.has(recording.filePath) ? "selected" : ""}" role="listitem" data-path="${recording.filePath}" title="${recording.filePath}" tabindex="0" aria-label="${recording.fileName}, ${dateStr}, ${sizeStr}">
+          <input type="checkbox" class="recording-checkbox" ${this.selectedPaths.has(recording.filePath) ? "checked" : ""} aria-hidden="true" tabindex="-1">
           <div class="recent-recording-thumb">
-            <svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <polygon points="5,3 19,12 5,21"/>
-            </svg>
+            ${recording.thumbnailPath
+            ? `<img src="thumb://${recording.thumbnailPath}" class="recent-recording-img" alt="">`
+            : `<svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>`
+          }
           </div>
           <div class="recent-recording-info">
             <div class="recent-recording-name">${recording.fileName}</div>
@@ -668,6 +740,11 @@ class ScreenRecorder {
             <button class="btn-action btn-play" data-path="${recording.filePath}" title="Play" aria-label="Play ${recording.fileName}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            </button>
+            <button class="btn-action btn-trim" data-path="${recording.filePath}" title="Trim video" aria-label="Trim ${recording.fileName}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><circle cx="6" cy="18" r="3"/><path d="M9.8 14.84 12 12"/><path d="M12 12 20 4"/><path d="M12 12 20 20"/>
               </svg>
             </button>
             <button class="btn-action btn-folder" data-path="${recording.filePath}" title="Open folder" aria-label="Open folder containing ${recording.fileName}">
@@ -690,9 +767,31 @@ class ScreenRecorder {
     this.recentRecordingsList
       .querySelectorAll(".recent-recording-item")
       .forEach((item) => {
-        const openRecording = async (e) => {
-          if (e.target.closest(".btn-action")) return;
+        const handleRecordingClick = async (e) => {
           const filePath = item.dataset.path;
+
+          if (this.selectionMode) {
+            e.preventDefault();
+            const checkbox = item.querySelector(".recording-checkbox");
+            if (this.selectedPaths.has(filePath)) {
+              this.selectedPaths.delete(filePath);
+              item.classList.remove("selected");
+              if (checkbox) checkbox.checked = false;
+            } else {
+              this.selectedPaths.add(filePath);
+              item.classList.add("selected");
+              if (checkbox) checkbox.checked = true;
+            }
+
+            // Update Merge button state/text
+            const count = this.selectedPaths.size;
+            this.mergeRecordingsBtn.textContent =
+              count > 0 ? `Merge (${count})` : "Merge";
+            this.mergeRecordingsBtn.disabled = count < 2;
+            return;
+          }
+
+          if (e.target.closest(".btn-action")) return;
           try {
             await window.electronAPI.openFile(filePath);
           } catch (err) {
@@ -700,11 +799,12 @@ class ScreenRecorder {
             this.showToast("Failed to open recording", "error");
           }
         };
-        item.addEventListener("click", openRecording);
+
+        item.addEventListener("click", handleRecordingClick);
         item.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            openRecording(e);
+            handleRecordingClick(e);
           }
         });
       });
@@ -732,6 +832,14 @@ class ScreenRecorder {
           console.error("Failed to open file location:", err);
           this.showToast("Failed to open file location", "error");
         }
+      });
+    });
+
+    this.recentRecordingsList.querySelectorAll(".btn-trim").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const filePath = btn.dataset.path;
+        this.openTrimModal(filePath);
       });
     });
 
@@ -807,7 +915,9 @@ class ScreenRecorder {
     }
 
     let videoBitrate = (pixelsPerSecond * bitrateMultiplier) / 8;
-    let audioBitrate = recordAudio ? (128 * 1024) / 8 : 0;
+    const recordSystemAudio = document.getElementById("settingsRecordSystemAudio")
+      ?.checked;
+    let audioBitrate = (recordAudio || recordSystemAudio) ? (128 * 1024) / 8 : 0;
 
     const totalBitratePerSecond = videoBitrate + audioBitrate;
     const durationSeconds = 60;
@@ -863,6 +973,8 @@ class ScreenRecorder {
       this.settings.resolution || "1920x1080";
     document.getElementById("settingsRecordAudio").checked =
       this.settings.recordAudio !== false;
+    document.getElementById("settingsRecordSystemAudio").checked =
+      this.settings.recordSystemAudio || false;
     document.getElementById("settingsCountdown").value =
       this.settings.countdown || "3";
     document.getElementById("settingsOutputDir").value =
@@ -1369,6 +1481,8 @@ class ScreenRecorder {
       resolution: document.getElementById("settingsResolution").value,
       outputDirectory: document.getElementById("settingsOutputDir").value,
       recordAudio: document.getElementById("settingsRecordAudio").checked,
+      recordSystemAudio: document.getElementById("settingsRecordSystemAudio")
+        .checked,
       selectedMicrophone: document.getElementById("settingsMicrophone").value,
       hideWindowDuringRecording:
         document.getElementById("settingsHideWindow").checked,
@@ -1526,14 +1640,15 @@ class ScreenRecorder {
       <div class="toast-buttons">
         <button class="toast-btn" id="openLocation">Open Location</button>
         <button class="toast-btn primary" id="playVideo">Play</button>
+        <button class="toast-btn" id="trimVideo">Trim</button>
         <button class="toast-btn" id="closeToast">Close</button>
       </div>
     `;
 
     this.toastContainer.appendChild(toast);
 
-    document
-      .getElementById("openLocation")
+    toast
+      .querySelector("#openLocation")
       ?.addEventListener("click", async () => {
         try {
           await window.electronAPI.openFileLocation(filePath);
@@ -1543,8 +1658,8 @@ class ScreenRecorder {
         }
       });
 
-    document
-      .getElementById("playVideo")
+    toast
+      .querySelector("#playVideo")
       ?.addEventListener("click", async () => {
         try {
           await window.electronAPI.openFile(filePath);
@@ -1554,11 +1669,228 @@ class ScreenRecorder {
         }
       });
 
-    document.getElementById("closeToast")?.addEventListener("click", () => {
+    toast
+      .querySelector("#trimVideo")
+      ?.addEventListener("click", () => {
+        toast.remove();
+        this.openTrimModal(filePath);
+      });
+
+    toast.querySelector("#closeToast")?.addEventListener("click", () => {
       toast.remove();
     });
 
-    setTimeout(() => toast.remove(), 15000);
+    // Increase timeout to 30 seconds for recording completion options
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 30000);
+  }
+
+  async openTrimModal(filePath) {
+    this.currentTrimPath = filePath;
+    this.trimVideoPreview.src = `file://${filePath}`;
+    this.openModal(this.trimModal);
+
+    this.trimVideoPreview.onloadedmetadata = () => {
+      const duration = this.trimVideoPreview.duration;
+      this.trimStartRange.value = 0;
+      this.trimEndRange.value = 100;
+      this.trimStartTimeInput.value = "00:00:00";
+      this.trimEndTimeInput.value = this.formatSeconds(duration);
+      this.updateTrimRange();
+    };
+  }
+
+  updateTrimRange() {
+    const startPercent = parseFloat(this.trimStartRange.value);
+    const endPercent = parseFloat(this.trimEndRange.value);
+    const duration = this.trimVideoPreview.duration;
+
+    if (startPercent > endPercent) {
+      if (document.activeElement === this.trimStartRange) {
+        this.trimEndRange.value = startPercent;
+      } else {
+        this.trimStartRange.value = endPercent;
+      }
+    }
+
+    const startVal = parseFloat(this.trimStartRange.value);
+    const endVal = parseFloat(this.trimEndRange.value);
+
+    this.trimRangeFill.style.left = startVal + "%";
+    this.trimRangeFill.style.width = endVal - startVal + "%";
+
+    const startTime = (startVal / 100) * duration;
+    const endTime = (endVal / 100) * duration;
+
+    this.trimStartTimeInput.value = this.formatSeconds(startTime);
+    this.trimEndTimeInput.value = this.formatSeconds(endTime);
+    this.trimDurationInfo.textContent = `Duration: ${this.formatSeconds(endTime - startTime)}`;
+
+    // Seek preview to the handle being moved
+    if (document.activeElement === this.trimStartRange) {
+      this.trimVideoPreview.currentTime = startTime;
+    } else if (document.activeElement === this.trimEndRange) {
+      this.trimVideoPreview.currentTime = endTime;
+    }
+  }
+
+  async handleTrimSave() {
+    const startSeconds = this.timeToSeconds(this.trimStartTimeInput.value);
+    const endSeconds = this.timeToSeconds(this.trimEndTimeInput.value);
+
+    if (startSeconds >= endSeconds) {
+      this.showToast("Start time must be before end time", "error");
+      return;
+    }
+
+    this.saveTrimBtn.disabled = true;
+    const saveBtnSpan = this.saveTrimBtn.querySelector("span");
+    if (saveBtnSpan) saveBtnSpan.textContent = "Trimming...";
+
+    try {
+      const result = await window.electronAPI.trimVideo(
+        this.currentTrimPath,
+        startSeconds,
+        endSeconds,
+      );
+
+      if (result.success) {
+        this.showToast("Video trimmed successfully", "success");
+        this.closeModal(this.trimModal);
+        await this.loadRecentRecordings();
+      } else {
+        this.showToast(`Trimming failed: ${result.error}`, "error");
+      }
+    } catch (err) {
+      console.error("Trim error:", err);
+      this.showToast("An error occurred during trimming", "error");
+    } finally {
+      this.saveTrimBtn.disabled = false;
+      if (saveBtnSpan) saveBtnSpan.textContent = "Trim & Save";
+    }
+  }
+
+  async handleGifSave() {
+    const startSeconds = this.timeToSeconds(this.trimStartTimeInput.value);
+    const endSeconds = this.timeToSeconds(this.trimEndTimeInput.value);
+
+    if (startSeconds >= endSeconds) {
+      this.showToast("Start time must be before end time", "error");
+      return;
+    }
+
+    const duration = endSeconds - startSeconds;
+    if (duration > 30) {
+      if (
+        !confirm(
+          `This GIF will be ${Math.round(duration)} seconds long. GIFs longer than 30s can be very large. Continue?`,
+        )
+      ) {
+        return;
+      }
+    }
+
+    this.saveGifBtn.disabled = true;
+    const gifBtnSpan = this.saveGifBtn.querySelector("span");
+    if (gifBtnSpan) gifBtnSpan.textContent = "Exporting GIF...";
+
+    try {
+      const result = await window.electronAPI.trimToGif(
+        this.currentTrimPath,
+        startSeconds,
+        endSeconds,
+      );
+
+      if (result.success) {
+        this.showToast("GIF exported successfully", "success");
+        this.closeModal(this.trimModal);
+        // Maybe open the folder?
+        await window.electronAPI.openFileLocation(result.outputPath);
+      } else {
+        this.showToast(`GIF export failed: ${result.error}`, "error");
+      }
+    } catch (err) {
+      console.error("GIF export error:", err);
+      this.showToast("An error occurred during GIF export", "error");
+    } finally {
+      this.saveGifBtn.disabled = false;
+      if (gifBtnSpan) gifBtnSpan.textContent = "Save as GIF";
+    }
+  }
+
+  toggleSelectionMode() {
+    this.selectionMode = !this.selectionMode;
+    this.selectedPaths.clear();
+
+    const sidebar = document.querySelector(".sidebar");
+    if (this.selectionMode) {
+      sidebar.classList.add("selection-mode");
+      this.toggleSelectBtn.textContent = "Cancel";
+      this.mergeRecordingsBtn.classList.remove("hidden");
+      this.mergeRecordingsBtn.textContent = "Merge";
+      this.mergeRecordingsBtn.disabled = true;
+    } else {
+      sidebar.classList.remove("selection-mode");
+      this.toggleSelectBtn.textContent = "Select";
+      this.mergeRecordingsBtn.classList.add("hidden");
+      // Unselect everything when canceling
+      this.recentRecordingsList
+        .querySelectorAll(".recent-recording-item")
+        .forEach((item) => {
+          item.classList.remove("selected");
+          const cb = item.querySelector(".recording-checkbox");
+          if (cb) cb.checked = false;
+        });
+    }
+  }
+
+  async handleMerge() {
+    if (this.selectedPaths.size < 2) {
+      this.showToast("Select at least 2 videos to merge", "warn");
+      return;
+    }
+
+    if (!confirm(`Merge ${this.selectedPaths.size} videos into one?`)) return;
+
+    this.processingTitle.textContent = "Merging Videos";
+    const filePaths = Array.from(this.selectedPaths);
+    this.mergeRecordingsBtn.disabled = true;
+
+    try {
+      const result = await window.electronAPI.mergeVideos(filePaths);
+
+      if (result.success) {
+        this.showToast("Videos merged successfully", "success");
+        this.toggleSelectionMode();
+        await this.loadRecentRecordings();
+      } else {
+        this.showToast(`Merge failed: ${result.error}`, "error");
+      }
+    } catch (err) {
+      console.error("Merge error:", err);
+      this.showToast("An error occurred during merging", "error");
+    } finally {
+      this.mergeRecordingsBtn.disabled = false;
+    }
+  }
+
+  formatSeconds(seconds) {
+    if (isNaN(seconds)) return "00:00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return [h, m, s].map((v) => v.toString().padStart(2, "0")).join(":");
+  }
+
+  timeToSeconds(timeStr) {
+    const parts = timeStr.split(":").map(parseFloat);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return parseFloat(timeStr) || 0;
   }
 }
 

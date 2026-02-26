@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openFileLocation: (filePath) =>
     ipcRenderer.invoke("open-file-location", filePath),
   openFile: (filePath) => ipcRenderer.invoke("open-file", filePath),
+  trimVideo: (filePath, startTime, endTime) =>
+    ipcRenderer.invoke("trim-video", filePath, startTime, endTime),
+  trimToGif: (filePath, startTime, endTime) =>
+    ipcRenderer.invoke("trim-to-gif", filePath, startTime, endTime),
+  mergeVideos: (filePaths) => ipcRenderer.invoke("merge-videos", filePaths),
 
   setRecordingState: (recording, isPaused = false) =>
     ipcRenderer.invoke("set-recording-state", recording, isPaused),

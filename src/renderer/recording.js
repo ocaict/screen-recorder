@@ -94,6 +94,7 @@ class RecordingManager {
 
   async setupVideoStream(source) {
     try {
+      this.selectedSource = source;
       this.stopCurrentStream();
 
       const resolution = this.app.settings.resolution || "1920x1080";
@@ -169,6 +170,8 @@ class RecordingManager {
         this.videoStream = null;
         return;
       }
+
+      this.selectedSource = screenSource;
 
       try {
         this.fullScreenStream = await navigator.mediaDevices.getUserMedia({
@@ -299,6 +302,17 @@ class RecordingManager {
     }
   }
 
+  async getAudioContext() {
+    if (!this.audioContext || this.audioContext.state === "closed") {
+      this.audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+    }
+    if (this.audioContext.state === "suspended") {
+      await this.audioContext.resume();
+    }
+    return this.audioContext;
+  }
+
   async setupAudioStream() {
     try {
       const micDeviceId =
@@ -316,11 +330,67 @@ class RecordingManager {
     } catch (audioErr) {
       console.warn("Could not get audio stream:", audioErr);
       this.app.showToast(
-        "Audio device unavailable, recording video only",
+        "Microphone unavailable, recording system audio or video only",
         "info",
       );
     }
   }
+
+  async setupSystemAudioStream() {
+    if (!this.selectedSource) return null;
+
+    try {
+      // Electron requires both audio and video constraints to be present when capturing desktop audio
+      // to properly authorize the request. We request both and then stop the video track.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: this.selectedSource.id,
+          },
+        },
+        video: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: this.selectedSource.id,
+          },
+        },
+      });
+
+      // Stop the dummy video tracks
+      stream.getVideoTracks().forEach((track) => track.stop());
+
+      // Return the stream which now effectively only has the system audio track
+      return stream;
+    } catch (err) {
+      console.warn("Could not get system audio stream:", err);
+      this.app.showToast("System audio capture failed", "warn");
+      return null;
+    }
+  }
+
+  async mixAudioStreams(stream1, stream2) {
+    if (!stream1 && !stream2) return null;
+    if (!stream1) return stream2;
+    if (!stream2) return stream1;
+
+    try {
+      const context = await this.getAudioContext();
+      const destination = context.createMediaStreamDestination();
+
+      const source1 = context.createMediaStreamSource(stream1);
+      const source2 = context.createMediaStreamSource(stream2);
+
+      source1.connect(destination);
+      source2.connect(destination);
+
+      return destination.stream;
+    } catch (err) {
+      console.error("Audio mixing failed:", err);
+      return stream1; // Fallback to mic
+    }
+  }
+
 
   stopCurrentStream() {
     try {
@@ -619,28 +689,32 @@ class RecordingManager {
       .join(":");
   }
 
-  async startAudioMeter() {
-    if (!this.audioStream) return;
+  async startAudioMeter(audioStream) {
+    const streamToMeter = audioStream || this.audioStream;
+    if (!streamToMeter) return;
 
     this.app.audioMeter?.classList.remove("hidden");
 
     try {
-      this.audioContext = new (
-        window.AudioContext || window.webkitAudioContext
-      )();
+      const context = await this.getAudioContext();
 
       // Load Worklet to process audio securely off the main UI thread
-      await this.audioContext.audioWorklet.addModule('meter-processor.js');
 
-      this.audioMeterNode = new AudioWorkletNode(this.audioContext, 'meter-processor');
-      const source = this.audioContext.createMediaStreamSource(this.audioStream);
+      try {
+        await context.audioWorklet.addModule("meter-processor.js");
+      } catch (e) {
+        // Module might already be added
+      }
+
+      this.audioMeterNode = new AudioWorkletNode(context, "meter-processor");
+      const source = context.createMediaStreamSource(streamToMeter);
       source.connect(this.audioMeterNode);
-      this.audioMeterNode.connect(this.audioContext.destination); // Required for process execution tick
+      this.audioMeterNode.connect(context.destination);
 
       const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
 
       this.audioMeterNode.port.onmessage = (event) => {
-        if (!this.isRecording || !bars) return;
+        if (!bars) return;
 
         let scalarVol = event.data.volume; // Float 0.0 - 1.0
 
@@ -744,19 +818,38 @@ class RecordingManager {
       this.app.stopBtn.disabled = true;
       this.app.startBtn.textContent = "Starting...";
 
-      if (document.getElementById("settingsRecordAudio").checked) {
+      if (this.app.settings.recordAudio) {
         await this.setupAudioStream();
       }
 
-      if (this.app.settings.recordAudio && this.audioStream) {
-        this.startAudioMeter();
+      this.systemAudioStream = null;
+      if (this.app.settings.recordSystemAudio) {
+        this.systemAudioStream = await this.setupSystemAudioStream();
       }
 
       let videoTracks;
-      let audioTracks;
+      let audioTracks = [];
+      let finalAudioStream = null;
+
       try {
         videoTracks = this.videoStream.getTracks();
-        audioTracks = this.audioStream ? this.audioStream.getTracks() : [];
+
+        // Mix audio tracks if we have both mic and system audio
+        if (this.audioStream && this.systemAudioStream) {
+          finalAudioStream = await this.mixAudioStreams(
+            this.audioStream,
+            this.systemAudioStream,
+          );
+        } else if (this.audioStream) {
+          finalAudioStream = this.audioStream;
+        } else if (this.systemAudioStream) {
+          finalAudioStream = this.systemAudioStream;
+        }
+
+        if (finalAudioStream) {
+          audioTracks = finalAudioStream.getAudioTracks();
+          await this.startAudioMeter(finalAudioStream);
+        }
       } catch (trackErr) {
         console.error("Failed to get tracks:", trackErr);
         throw new Error("Failed to access media tracks");
@@ -1266,11 +1359,24 @@ class RecordingManager {
       this.mixedStream = null;
     }
 
+    if (this.systemAudioStream) {
+      this.systemAudioStream.getTracks().forEach((track) => track.stop());
+      this.systemAudioStream = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close().catch((e) => console.warn("AudioContext close error:", e));
+      this.audioContext = null;
+    }
+
+    if (this.audioStream) {
+      this.audioStream.getTracks().forEach((track) => track.stop());
+      this.audioStream = null;
+    }
+
     this.recordedChunks = [];
     this.recordedBytes = 0;
   }
 }
-
-window.RecordingManager = RecordingManager;
 
 window.RecordingManager = RecordingManager;

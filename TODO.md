@@ -83,8 +83,9 @@ ScreenCapturer/
 - Memory protection for long recordings
 - Windows notification on recording complete
 - Conversion progress feedback (toast + overlay)
-- Preview reset after recording (shows "Recording Complete" message)
-- Content Security Policy
+- Preview reset after recording
+- Video trimming (start/end points)
+- Video thumbnails generation
 
 ---
 
@@ -97,13 +98,13 @@ ScreenCapturer/
 - [x] Add webcam overlay/picture-in-picture
 - [x] Record specific area (region selection) instead of full screen/window
 - [x] Schedule recording (record at specific time)
-- [ ] Record system audio (without microphone)
+- [x] Record system audio (without microphone)
 - [x] Add annotation/drawing on screen during recording
 - [x] Custom hotkeys for stop recording
 
 ### Video Editing
 
-- [ ] Trim video (start/end points)
+- [x] Trim video (start/end points)
 - [ ] Merge multiple recordings
 - [ ] Add intro/outro to videos
 - [ ] Basic video effects (crop, rotate, zoom)
@@ -124,7 +125,7 @@ ScreenCapturer/
 - [ ] Multiple language support (i18n)
 - [ ] Keyboard shortcuts for all actions
 - [ ] Drag and drop to reorder recordings
-- [ ] Thumbnail preview for saved recordings
+- [x] Thumbnail preview for saved recordings
 - [x] Recording history with metadata
 
 ### Performance & Optimization

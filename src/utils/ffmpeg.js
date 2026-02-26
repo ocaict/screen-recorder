@@ -426,13 +426,174 @@ function getVideoDuration(filePath) {
   });
 }
 
+async function trimVideo(inputPath, startTime, endTime) {
+  return new Promise((resolve, reject) => {
+    const ext = path.extname(inputPath);
+    const dir = path.dirname(inputPath);
+    const name = path.basename(inputPath, ext);
+    const outputPath = path.join(dir, `${name}_trimmed_${Date.now()}${ext}`);
+
+    ffmpeg(inputPath)
+      .setStartTime(startTime)
+      .outputOptions("-to", endTime.toString())
+      .outputOptions("-c", "copy")
+      .on("start", (cmdLine) => {
+        log("info", `Trimming started: ${cmdLine}`);
+      })
+      .on("end", () => {
+        log("info", `Trimming complete: ${outputPath}`);
+        resolve({ success: true, outputPath });
+      })
+      .on("error", (err) => {
+        log("error", `Trimming error: ${err.message}`);
+        reject(err);
+      })
+      .save(outputPath);
+  });
+}
+
+async function generateThumbnail(inputPath, outputPath, timestamp = 1) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .screenshots({
+        timestamps: [timestamp],
+        filename: path.basename(outputPath),
+        folder: path.dirname(outputPath),
+        size: "320x?",
+      })
+      .on("end", () => {
+        log("info", `Thumbnail generated: ${outputPath}`);
+        resolve(outputPath);
+      })
+      .on("error", (err) => {
+        log("error", `Thumbnail generation error: ${err.message}`);
+        reject(err);
+      });
+  });
+}
+
+async function exportToGif(
+  inputPath,
+  startTime,
+  endTime,
+  onProgress,
+  fps = 15,
+  scale = 720,
+) {
+  return new Promise((resolve, reject) => {
+    const ext = path.extname(inputPath);
+    const dir = path.dirname(inputPath);
+    const name = path.basename(inputPath, ext);
+    const outputPath = path.join(dir, `${name}_${Date.now()}.gif`);
+
+    ffmpeg(inputPath)
+      .setStartTime(startTime)
+      .outputOptions("-to", endTime.toString())
+      .complexFilter([
+        `fps=${fps},scale=${scale}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`,
+      ])
+      .on("start", (cmdLine) => {
+        log("info", `GIF export started: ${cmdLine}`);
+      })
+      .on("progress", (progress) => {
+        if (onProgress) {
+          let percent = progress.percent;
+          const duration = endTime - startTime;
+
+          if (duration > 0 && progress.timemark) {
+            const parts = progress.timemark.split(":");
+            if (parts.length === 3) {
+              const seconds =
+                parseInt(parts[0]) * 3600 +
+                parseInt(parts[1]) * 60 +
+                parseFloat(parts[2]);
+              percent = Math.min((seconds / duration) * 100, 99.9);
+            }
+          }
+          onProgress(percent || 0);
+        }
+      })
+      .on("end", () => {
+        log("info", `GIF export complete: ${outputPath}`);
+        resolve({ success: true, outputPath });
+      })
+      .on("error", (err) => {
+        log("error", `GIF export error: ${err.message}`);
+        reject(err);
+      })
+      .save(outputPath);
+  });
+}
+
+async function mergeVideos(inputPaths, outputPath, onProgress) {
+  // Pre-calculate total duration for accurate progress
+  let totalDuration = 0;
+  try {
+    const durations = await Promise.all(
+      inputPaths.map((p) => getVideoDuration(p)),
+    );
+    totalDuration = durations.reduce((a, b) => a + b, 0);
+  } catch (err) {
+    log("warn", `Could not pre-calculate duration for merge: ${err.message}`);
+  }
+
+  return new Promise((resolve, reject) => {
+    if (!inputPaths || inputPaths.length < 2) {
+      return reject(new Error("Need at least 2 videos to merge"));
+    }
+
+    const command = ffmpeg();
+
+    // Add all inputs
+    inputPaths.forEach((p) => command.input(p));
+
+    command
+      .on("start", (cmdLine) => {
+        log("info", `Merging started: ${cmdLine}`);
+      })
+      .on("progress", (progress) => {
+        if (onProgress) {
+          let percent = progress.percent;
+
+          // If percent is weird or we have total duration, calculate manually
+          if (totalDuration > 0 && progress.timemark) {
+            const parts = progress.timemark.split(":");
+            if (parts.length === 3) {
+              const seconds =
+                parseInt(parts[0]) * 3600 +
+                parseInt(parts[1]) * 60 +
+                parseFloat(parts[2]);
+              percent = Math.min((seconds / totalDuration) * 100, 99.9);
+            }
+          }
+
+          onProgress(percent || 0);
+        }
+      })
+      .on("end", () => {
+        log("info", `Merging complete: ${outputPath}`);
+        resolve({ success: true, outputPath });
+      })
+      .on("error", (err) => {
+        log("error", `Merging error: ${err.message}`);
+        reject(err);
+      })
+      // Use the merge technique that re-encodes (more reliable for different sources)
+      .mergeToFile(outputPath, path.dirname(outputPath));
+  });
+}
+
 setupFfmpeg();
 
 module.exports = {
   convertVideo,
+  trimVideo,
   getVideoDuration,
+  generateThumbnail,
   setupFfmpeg,
   getAvailableEncoders,
   resetEncoderCheck,
   getSystemFfmpegPath,
+  exportToGif,
+  mergeVideos,
 };

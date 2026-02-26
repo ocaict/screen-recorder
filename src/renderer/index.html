@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: thumb:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
   <title>OcaTech MakeVideo</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -322,7 +322,11 @@
       <div class="sidebar-section">
         <div class="section-header">
           <h3>Recent Recordings</h3>
-          <button class="btn" id="clearRecentBtn" aria-label="Clear all recent recordings">Clear All</button>
+          <div class="header-actions">
+            <button class="btn-text" id="toggleSelectBtn">Select</button>
+            <button class="btn-text hidden" id="mergeRecordingsBtn">Merge</button>
+            <button class="btn" id="clearRecentBtn" aria-label="Clear all recent recordings">Clear All</button>
+          </div>
         </div>
         <div class="recent-recordings-list" id="recentRecordingsList" role="list" aria-label="Recent recordings">
           <div class="no-recordings" role="status">
@@ -438,8 +442,15 @@
           <div class="form-group">
             <label>
               <input type="checkbox" id="settingsRecordAudio" checked>
-              Record Audio
+              Record Microphone
             </label>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="settingsRecordSystemAudio">
+              Record System Audio
+            </label>
+            <p class="form-hint">Capture sound playing on your computer</p>
           </div>
           <div class="form-group" id="audioDeviceGroup">
             <label for="settingsMicrophone">Microphone</label>
@@ -738,6 +749,61 @@
         </svg>
         Cancel
       </button>
+    </div>
+  </div>
+
+  <div class="modal" id="trimModal">
+    <div class="modal-content trim-modal">
+      <div class="modal-header">
+        <h2>Trim Video</h2>
+        <button class="modal-close" id="closeTrimModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="trim-preview-container">
+          <video id="trimVideoPreview" controls playsinline></video>
+        </div>
+        <div class="trim-controls">
+          <div class="trim-range-container">
+            <div class="range-slider">
+              <div class="range-fill" id="trimRangeFill"></div>
+              <input type="range" id="trimStartRange" min="0" max="100" value="0" step="0.1">
+              <input type="range" id="trimEndRange" min="0" max="100" value="100" step="0.1">
+            </div>
+          </div>
+          <div class="trim-time-inputs">
+            <div class="time-input-group">
+              <label for="trimStartTime">Start Time</label>
+              <input type="text" id="trimStartTime" value="00:00:00" placeholder="00:00:00">
+            </div>
+            <div class="time-input-info">
+              <span id="trimDurationInfo">Duration: 00:00:00</span>
+            </div>
+            <div class="time-input-group">
+              <label for="trimEndTime">End Time</label>
+              <input type="text" id="trimEndTime" value="00:00:00" placeholder="00:00:00">
+            </div>
+          </div>
+        </div>
+        <div class="trim-actions">
+          <button class="btn" id="cancelTrimBtn">Cancel</button>
+          <button class="btn secondary" id="saveGifBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              aria-hidden="true">
+              <path d="M12 2v8h8" />
+              <path d="M13 18H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8l4 4v10a2 2 0 0 1-2 2h-1" />
+            </svg>
+            <span>Save as GIF</span>
+          </button>
+          <button class="btn primary" id="saveTrimBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              aria-hidden="true">
+              <path d="M11 5L6 9H2V15H6L11 19V5Z" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>
+            <span>Trim & Save</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -121,12 +121,13 @@ function resetSettings() {
   return settings;
 }
 
-function addRecentRecording(filePath) {
+function addRecentRecording(filePath, thumbnailPath = null) {
   const fileName = path.basename(filePath);
   const stats = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
 
   const recording = {
     filePath: filePath,
+    thumbnailPath: thumbnailPath,
     fileName: fileName,
     recordedAt: new Date().toISOString(),
     size: stats ? stats.size : 0,
@@ -138,6 +139,15 @@ function addRecentRecording(filePath) {
   settings.recentRecordings.unshift(recording);
 
   if (settings.recentRecordings.length > settings.maxRecentRecordings) {
+    const removed = settings.recentRecordings.slice(settings.maxRecentRecordings);
+    removed.forEach((r) => {
+      if (r.thumbnailPath && fs.existsSync(r.thumbnailPath)) {
+        try {
+          fs.unlinkSync(r.thumbnailPath);
+        } catch (e) { }
+      }
+    });
+
     settings.recentRecordings = settings.recentRecordings.slice(
       0,
       settings.maxRecentRecordings,
@@ -149,6 +159,13 @@ function addRecentRecording(filePath) {
 }
 
 function removeRecentRecording(filePath) {
+  const recording = settings.recentRecordings.find((r) => r.filePath === filePath);
+  if (recording && recording.thumbnailPath && fs.existsSync(recording.thumbnailPath)) {
+    try {
+      fs.unlinkSync(recording.thumbnailPath);
+    } catch (e) { }
+  }
+
   settings.recentRecordings = settings.recentRecordings.filter(
     (r) => r.filePath !== filePath,
   );
@@ -157,6 +174,14 @@ function removeRecentRecording(filePath) {
 }
 
 function clearRecentRecordings() {
+  settings.recentRecordings.forEach((r) => {
+    if (r.thumbnailPath && fs.existsSync(r.thumbnailPath)) {
+      try {
+        fs.unlinkSync(r.thumbnailPath);
+      } catch (e) { }
+    }
+  });
+
   settings.recentRecordings = [];
   saveSettings(settings);
   return settings;

@@ -1018,7 +1018,8 @@ class RecordingManager {
         }
       };
 
-      this.mediaRecorder.onstop = () => this.handleRecordingComplete();
+      this.mediaRecorder.onstop = () =>
+        this.handleRecordingComplete(false, this.forceAutoSaveOnStop);
 
       this.mediaRecorder.start(100);
       this.isRecording = true;
@@ -1071,8 +1072,10 @@ class RecordingManager {
     }
   }
 
-  async stopRecording() {
+  async stopRecording(forceAutoSave = false) {
     if (!this.isRecording || !this.mediaRecorder) return;
+
+    this.forceAutoSaveOnStop = forceAutoSave;
 
     try {
       if (this.recordingTimeout) {
@@ -1098,6 +1101,8 @@ class RecordingManager {
           ipcErr,
         );
       }
+
+      if (this.app.isQuitting) return;
 
       this.app.processingOverlay.classList.add("active");
       this.app.processingTitle.textContent = "Processing Recording";
@@ -1239,7 +1244,10 @@ class RecordingManager {
     }
   }
 
-  async handleRecordingComplete(isPartial = false) {
+  async handleRecordingComplete(
+    isPartial = false,
+    forceAutoSave = false,
+  ) {
     // Stop performance monitoring
     if (this.monitor) {
       this.monitor.stopRecording();
@@ -1260,7 +1268,7 @@ class RecordingManager {
         try {
           result = await window.electronAPI.finalizeChunkedRecording(
             this.chunkSessionId,
-            { isPartial },
+            { isPartial, forceAutoSave },
           );
         } catch (finalErr) {
           throw new Error(
@@ -1284,6 +1292,7 @@ class RecordingManager {
           result = await window.electronAPI.saveRecording(
             arrayBuffer,
             this.chunkFiles,
+            { forceAutoSave },
           );
         } catch (saveErr) {
           throw new Error(`IPC call failed: ${saveErr.message}`);
@@ -1317,8 +1326,10 @@ class RecordingManager {
         this.app.progressFill.style.width = "0%";
         this.app.progressPercent.textContent = "0%";
         this.app.progressEta.textContent = "Starting...";
-        this.app.processingOverlay.classList.add("active");
-        this.app.showToast("Video is being converted in background", "info");
+        if (!this.app.isQuitting) {
+          this.app.processingOverlay.classList.add("active");
+          this.app.showToast("Video is being converted in background", "info");
+        }
       } else {
         const message = isPartial
           ? "Recording saved (partial - memory limit reached)!"

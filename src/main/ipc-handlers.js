@@ -115,7 +115,7 @@ function showRecordingNotification(filePath) {
   }
 }
 
-async function saveRecording(streamData, chunkFiles = []) {
+async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false) {
   const settings = getSettings();
   const tempDir = app.getPath("temp");
   const outputDir = settings.outputDirectory || app.getPath("videos");
@@ -158,7 +158,7 @@ async function saveRecording(streamData, chunkFiles = []) {
   let filePath;
   let canceled = false;
 
-  if (autoSave) {
+  if (autoSave || forceAutoSave) {
     filePath = path.join(outputDir, defaultName);
     let counter = 1;
     const basePath = filePath;
@@ -323,8 +323,8 @@ function setupIpcHandlers() {
     return await getCaptureSources();
   });
 
-  ipcMain.handle("save-recording", async (_, streamData, chunkFiles) => {
-    return await saveRecording(streamData, chunkFiles);
+  ipcMain.handle("save-recording", async (_, streamData, chunkFiles, options = {}) => {
+    return await saveRecording(streamData, chunkFiles, options.forceAutoSave);
   });
 
   // Chunked recording: create session, append chunks (via ipc send), finalize/abort
@@ -402,7 +402,7 @@ function setupIpcHandlers() {
         let filePath;
         let canceled = false;
 
-        if (settings.autoSave) {
+        if (settings.autoSave || options.forceAutoSave) {
           const pattern = settings.filenamePattern || "Recording_{date}_{time}";
           const defaultName = generateFilename(pattern, format);
           filePath = path.join(outputDir, defaultName);

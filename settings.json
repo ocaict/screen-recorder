@@ -9,11 +9,25 @@
   "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
-  "showNotifications": false,
+  "showNotifications": true,
   "autoOpenAfterRecording": false,
   "defaultFormat": "mp4",
-  "countdown": 5,
+  "countdown": 0,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_12-02-15.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772103740172.png",
+      "fileName": "Recording_2026-02-26_12-02-15.mp4",
+      "recordedAt": "2026-02-26T11:02:20.512Z",
+      "size": 528377
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-26_11-55-16.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772103329222.png",
+      "fileName": "Recording_2026-02-26_11-55-16.mp4",
+      "recordedAt": "2026-02-26T10:55:29.553Z",
+      "size": 951289
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Merged_1772101733200.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772101777432.png",
@@ -66,7 +80,7 @@
   ],
   "maxRecentRecordings": 10,
   "filenamePattern": "Recording_{date}_{time}",
-  "autoSave": false,
+  "autoSave": true,
   "compression": "balanced",
   "hardwareAcceleration": "none",
   "webcamEnabled": false,

@@ -8,6 +8,7 @@ class ScreenRecorder {
     this.overlayAnnotationActive = false; // Tracks whether the fullscreen overlay is shown
     this.selectionMode = false;
     this.selectedPaths = new Set();
+    this.isQuitting = false;
 
     this.initialize();
   }
@@ -563,8 +564,9 @@ class ScreenRecorder {
 
     window.electronAPI.onStopRecordingFromQuit(async () => {
       if (this.recordingManager.isRecording) {
-        await this.recordingManager.stopRecording();
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        this.isQuitting = true;
+        await this.recordingManager.stopRecording(true);
+        await new Promise((resolve) => setTimeout(resolve, 100));
         try {
           await window.electronAPI.windowClose();
         } catch (err) {
@@ -577,6 +579,7 @@ class ScreenRecorder {
     });
 
     window.electronAPI.onConversionStarted(() => {
+      if (this.isQuitting) return;
       this.processingOverlay.classList.add("active");
       this.processingTitle.textContent = "Processing Video";
       this.processingStatus.textContent = "Converting video...";
@@ -588,6 +591,7 @@ class ScreenRecorder {
     });
 
     window.electronAPI.onConversionProgress((progress) => {
+      if (this.isQuitting) return;
       if (progress && progress.warning) {
         this.showToast(progress.warning, "warning");
         this.processingStatus.textContent = "Converting (software fallback)";
@@ -624,6 +628,7 @@ class ScreenRecorder {
     });
 
     window.electronAPI.onConversionComplete(async (filePath) => {
+      if (this.isQuitting) return;
       try {
         this.processingOverlay.classList.remove("active");
 

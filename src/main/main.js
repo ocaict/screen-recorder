@@ -64,6 +64,7 @@ function createWindow() {
       });
 
       if (choice === 0) {
+        mainWindow.hide();
         mainWindow.webContents.send("stop-recording-from-quit");
       }
     }

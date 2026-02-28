@@ -33,6 +33,7 @@ let settings = {
   crfValue: 23,
   videoBitrate: 5,
   colorFormat: "yuv420p",
+  showMiniControls: true,
 };
 
 let settingsFile = null;
@@ -128,6 +129,7 @@ function resetSettings() {
     crfValue: 23,
     videoBitrate: 5,
     colorFormat: "yuv420p",
+    showMiniControls: true,
   };
   saveSettings(settings);
   return settings;

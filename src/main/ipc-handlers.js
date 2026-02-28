@@ -1052,6 +1052,7 @@ function setupIpcHandlers() {
       colorFormat: ["yuv420p", "yuv444p"].includes(newSettings.colorFormat)
         ? newSettings.colorFormat
         : "yuv420p",
+      showMiniControls: Boolean(newSettings.showMiniControls),
     };
 
     saveSettings(validatedSettings);
@@ -1426,7 +1427,8 @@ function setupIpcHandlers() {
 
       // Show/Hide Mini Controls
       if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
-        if (recording) {
+        const settings = getSettings();
+        if (recording && settings.showMiniControls) {
           miniControlsWindow.show();
           miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
 

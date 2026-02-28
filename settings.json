@@ -8,13 +8,20 @@
   "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
   "shortcutEnabled": false,
   "shortcutKey": "F9",
-  "hideWindowDuringRecording": false,
+  "hideWindowDuringRecording": true,
   "showNotifications": false,
   "autoOpenAfterRecording": false,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
   "countdown": 3,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_12-59-05.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772280033803.png",
+      "fileName": "Recording_2026-02-28_12-59-05.mp4",
+      "recordedAt": "2026-02-28T12:00:34.284Z",
+      "size": 9482332
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_12-46-10.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772279182393.png",
@@ -79,5 +86,6 @@
   "crfValue": 23,
   "videoBitrate": 5,
   "colorFormat": "yuv420p",
+  "showMiniControls": true,
   "nvencPromptDismissed": false
 }

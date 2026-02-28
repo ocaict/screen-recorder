@@ -291,6 +291,9 @@ class ScreenRecorder {
         document.getElementById("settingsCompression").value = "balanced";
         document.getElementById("settingsHardwareAcceleration").value = "none";
         document.getElementById("settingsFormat").value = "mp4";
+        if (document.getElementById("settingsRecordDirectToMp4")) {
+          document.getElementById("settingsRecordDirectToMp4").checked = true;
+        }
         document.getElementById("settingsAutoSave").checked = true;
         document.getElementById("settingsAutoOpen").checked = true;
         document.getElementById("settingsHideWindow").checked = true;
@@ -609,9 +612,10 @@ class ScreenRecorder {
           encoding: "Encoding...",
           saving: "Saving file...",
           finalizing: "Finalizing...",
+          recovering: "Recovering recording as WebM...",
         };
         this.processingStatus.textContent =
-          stageMessages[progress.stage] || "Processing...";
+          progress.status || stageMessages[progress.stage] || "Processing...";
       }
 
       if (this.processingStartTime && percent > 0) {
@@ -1000,6 +1004,10 @@ class ScreenRecorder {
       this.settings.shortcutEnabled === false;
     document.getElementById("settingsFormat").value =
       this.settings.defaultFormat || "mp4";
+    if (document.getElementById("settingsRecordDirectToMp4")) {
+      document.getElementById("settingsRecordDirectToMp4").checked =
+        this.settings.recordDirectToMp4 !== false;
+    }
 
     if (document.getElementById("settingsWebcam")) {
       document.getElementById("settingsWebcam").checked =
@@ -1252,6 +1260,10 @@ class ScreenRecorder {
       this.settings.autoSave || false;
     document.getElementById("settingsAutoOpen").checked =
       this.settings.autoOpenAfterRecording !== false;
+    if (document.getElementById("settingsRecordDirectToMp4")) {
+      document.getElementById("settingsRecordDirectToMp4").checked =
+        this.settings.recordDirectToMp4 !== false;
+    }
     document.getElementById("settingsHideWindow").checked =
       this.settings.hideWindowDuringRecording || false;
     document.getElementById("settingsShortcut").checked =
@@ -1503,6 +1515,7 @@ class ScreenRecorder {
       hardwareAcceleration: document.getElementById(
         "settingsHardwareAcceleration",
       ).value,
+      recordDirectToMp4: document.getElementById("settingsRecordDirectToMp4")?.checked,
       defaultFormat: document.getElementById("settingsFormat").value,
       autoSave: document.getElementById("settingsAutoSave").checked,
       autoOpenAfterRecording:

@@ -312,7 +312,13 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("window-close", () => {
-    app.quit();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Hide immediately for instant perceived closure
+      mainWindow.hide();
+      mainWindow.close();
+    } else {
+      app.quit();
+    }
   });
 
   ipcMain.handle("window-is-maximized", () => {
@@ -328,18 +334,195 @@ function setupIpcHandlers() {
   });
 
   // Chunked recording: create session, append chunks (via ipc send), finalize/abort
+  // Supports 3 tiers: (1) live FFmpeg MP4 pipe, (2) sw-encoder fallback, (3) WebM file fallback
   ipcMain.handle("start-chunked-recording", async (_, options = {}) => {
     try {
+      const settings = getSettings();
+      const useLivePipe =
+        options.useLivePipe &&
+        settings.recordDirectToMp4 !== false &&
+        settings.defaultFormat === "mp4";
+
       const tempDir = app.getPath("temp");
+      const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+      if (useLivePipe) {
+        const { spawn } = require("child_process");
+        const ffmpegModule = require("../utils/ffmpeg");
+        const ffmpegPath = ffmpegModule.getSystemFfmpegPath() || "ffmpeg";
+
+        // Quality settings
+        let crf = 23;
+        if (settings.videoQuality === "medium") crf = 26;
+        if (settings.videoQuality === "low") crf = 30;
+
+        const hwAccel = settings.hardwareAcceleration || "none";
+        let v_codec = "libx264";
+        let v_options = [];
+
+        // Dynamic Hardware Encoder Selection
+        try {
+          const encoders = await ffmpegModule.getAvailableEncoders();
+          if (hwAccel !== "none") {
+            if ((hwAccel === "nvenc" || hwAccel === "auto") && encoders.nvenc && encoders.nvenc.h264) {
+              v_codec = "h264_nvenc";
+              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", crf.toString()];
+            } else if ((hwAccel === "qsv" || hwAccel === "auto") && encoders.qsv && encoders.qsv.h264) {
+              v_codec = "h264_qsv";
+              v_options = ["-preset", "balanced", "-global_quality", crf.toString()];
+            } else if ((hwAccel === "amf" || hwAccel === "auto") && encoders.amf && encoders.amf.h264) {
+              v_codec = "h264_amf";
+              v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
+            }
+          }
+        } catch (encErr) {
+          log("warn", `Could not query encoders: ${encErr.message}`);
+        }
+
+        if (v_codec === "libx264") {
+          v_options = ["-preset", "ultrafast", "-tune", "zerolatency", "-crf", crf.toString(), "-maxrate", "5M", "-bufsize", "10M"];
+        }
+
+        // Resolve output path
+        const outputDir = settings.outputDirectory || app.getPath("videos");
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+        const pattern = settings.filenamePattern || "Recording_{date}_{time}";
+        let finalPath = path.join(outputDir, generateFilename(pattern, "mp4"));
+        let counter = 1;
+        while (fs.existsSync(finalPath)) {
+          const ext = path.extname(finalPath);
+          const name = path.basename(finalPath, ext);
+          finalPath = path.join(outputDir, `${name}_${counter}${ext}`);
+          counter++;
+        }
+
+        log("info", `Starting live FFmpeg pipe (${v_codec}) -> ${finalPath}`);
+
+        const args = [
+          "-loglevel", "error",
+          "-thread_queue_size", "4096",
+          "-probesize", "2M",
+          "-analyzeduration", "2000000",
+          "-fflags", "+genpts+igndts",
+          "-threads", "0",
+          "-f", "webm",
+          "-i", "pipe:0",
+          "-c:v", v_codec,
+          ...v_options,
+          "-r", String(settings.frameRate || 24),
+          "-c:a", "aac",
+          "-b:a", "128k",
+          "-pix_fmt", "yuv420p",
+          "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+          "-y",
+          finalPath
+        ];
+
+        let ffmpegProcess = spawn(ffmpegPath, args);
+        let hasFailedPrematurely = false;
+
+        const setupHandlers = (proc, isFallback = false) => {
+          proc.stdin.on("error", (err) => {
+            if (!hasFailedPrematurely) log("warn", `FFmpeg stdin error: ${err.message}`);
+          });
+
+          proc.stderr.on("data", (data) => {
+            const msg = data.toString();
+            if (hasFailedPrematurely && !isFallback) return;
+            log("warn", `FFmpeg stderr: ${msg}`);
+
+            // Hardware encoder or EBML parse failure → retry with software
+            if (
+              !hasFailedPrematurely &&
+              v_codec !== "libx264" &&
+              (msg.includes("Driver does not support") ||
+                msg.includes("Error while opening encoder") ||
+                msg.includes("EBML header parsing failed"))
+            ) {
+              hasFailedPrematurely = true;
+              log("info", "HW encoder failed, retrying with libx264...");
+              try { proc.kill(); } catch (e) { }
+
+              const swArgs = [...args];
+              const vIdx = swArgs.indexOf("-c:v");
+              if (vIdx !== -1) {
+                swArgs[vIdx + 1] = "libx264";
+                swArgs.splice(vIdx + 2, v_options.length, "-preset", "ultrafast", "-tune", "zerolatency", "-crf", crf.toString());
+              }
+              ffmpegProcess = spawn(ffmpegPath, swArgs);
+              setupHandlers(ffmpegProcess, true);
+
+              const sess = chunkSessions.get(sessionId);
+              if (sess) {
+                sess.ffmpegProcess = ffmpegProcess;
+                if (sess.initialBuffer) {
+                  for (const chunk of sess.initialBuffer) {
+                    if (ffmpegProcess.stdin.writable) ffmpegProcess.stdin.write(chunk);
+                  }
+                }
+              }
+            }
+          });
+
+          proc.on("close", (code) => {
+            if (hasFailedPrematurely) return;
+            const sess = chunkSessions.get(sessionId);
+            if (sess && !sess.isFinalizing && code !== 0) {
+              // Tier 3: FFmpeg crashed entirely – dump remaining data to WebM
+              log("error", `FFmpeg crashed (code ${code}). Falling back to WebM file.`);
+              sess.isLive = false;
+              sess.ffmpegProcess = null;
+              sess.tempFilePath = path.join(tempDir, `chunked_${Date.now()}_fallback.webm`);
+              sess.ws = fs.createWriteStream(sess.tempFilePath, { flags: "w" });
+              if (sess.initialBuffer) {
+                sess.initialBuffer.forEach(c => sess.ws.write(c));
+                sess.initialBuffer = null;
+              }
+              if (sess.writeQueue) {
+                sess.writeQueue.forEach(c => sess.ws.write(c));
+                sess.writeQueue = [];
+              }
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("conversion-started");
+                mainWindow.webContents.send("conversion-progress", {
+                  percent: 10,
+                  stage: "recovering",
+                  status: "MP4 encoder failed. Saving as WebM instead..."
+                });
+              }
+            } else {
+              log("info", `FFmpeg pipe closed with code ${code}`);
+            }
+          });
+        };
+
+        setupHandlers(ffmpegProcess);
+
+        chunkSessions.set(sessionId, {
+          ffmpegProcess,
+          finalPath,
+          isLive: true,
+          size: 0,
+          isFinalizing: false,
+          initialBuffer: [],
+          isStable: false,
+          writeQueue: [],
+          isWaitingForDrain: false,
+          mimeType: options.mimeType || "",
+        });
+
+        return { sessionId, isLive: true, filePath: finalPath };
+      }
+
+      // Default: simple WebM temp file
       const tempFilePath = path.join(
         tempDir,
-        `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`,
+        `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`
       );
       const ws = fs.createWriteStream(tempFilePath, { flags: "w" });
-      const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0 });
-      log("info", `Started chunked session ${sessionId} -> ${tempFilePath}`);
-      return { sessionId, tempFilePath };
+      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false });
+      log("info", `Started WebM chunked session ${sessionId} -> ${tempFilePath}`);
+      return { sessionId, tempFilePath, isLive: false };
     } catch (err) {
       log("error", `start-chunked-recording failed: ${err.message}`);
       return { success: false, error: err.message };
@@ -348,17 +531,46 @@ function setupIpcHandlers() {
 
   ipcMain.on("append-recording-chunk", (_, sessionId, uint8Array) => {
     try {
-      if (!sessionId || !uint8Array) {
-        log("warn", "append-recording-chunk received invalid message payload");
-        return;
-      }
+      if (!sessionId || !uint8Array) return;
       const sess = chunkSessions.get(sessionId);
-      if (!sess) {
-        log("warn", `append-recording-chunk: session not found ${sessionId}`);
-        return;
+      if (!sess) return;
+
+      const buf = Buffer.from(uint8Array);
+
+      if (sess.isLive && sess.ffmpegProcess) {
+        if (sess.isFinalizing) return;
+
+        // Keep initial chunks for HW-encoder recovery
+        if (sess.initialBuffer && sess.initialBuffer.length < 40) {
+          sess.initialBuffer.push(buf);
+          if (sess.initialBuffer.length === 40) {
+            sess.isStable = true;
+            setTimeout(() => { if (sess.initialBuffer) sess.initialBuffer = null; }, 2000);
+          }
+        }
+
+        // Backpressure-aware queue
+        sess.writeQueue.push(buf);
+        const processQueue = () => {
+          if (!sess.ffmpegProcess?.stdin?.writable) return;
+          while (sess.writeQueue.length > 0 && !sess.isWaitingForDrain) {
+            const data = sess.writeQueue.shift();
+            const canWrite = sess.ffmpegProcess.stdin.write(data);
+            if (!canWrite) {
+              sess.isWaitingForDrain = true;
+              sess.ffmpegProcess.stdin.once("drain", () => {
+                sess.isWaitingForDrain = false;
+                processQueue();
+              });
+              break;
+            }
+          }
+        };
+        processQueue();
+      } else if (sess.ws) {
+        sess.ws.write(buf);
       }
-      const buf = Buffer.from(uint8Array); // Zero-copy Uint8Array to Node.js Buffer
-      sess.ws.write(buf);
+
       sess.size = (sess.size || 0) + buf.length;
     } catch (err) {
       log("error", `append-recording-chunk failed: ${err.message}`);
@@ -370,10 +582,94 @@ function setupIpcHandlers() {
     async (_, sessionId, options = {}) => {
       try {
         const sess = chunkSessions.get(sessionId);
-        if (!sess) {
-          return { success: false, error: "Session not found" };
+        if (!sess) return { success: false, error: "Session not found" };
+
+        // ── Live FFmpeg path ──────────────────────────────────────────────
+        if (sess.isLive) {
+          log("info", `Finalizing live FFmpeg session ${sessionId}`);
+          sess.isFinalizing = true;
+
+          (async () => {
+            // Drain remaining queue
+            const initialQueueSize = sess.writeQueue ? sess.writeQueue.length : 0;
+            let lastQueueSize = initialQueueSize;
+            let stalledCycles = 0;
+
+            while (
+              sess.writeQueue &&
+              (sess.writeQueue.length > 0 || sess.isWaitingForDrain) &&
+              stalledCycles < 500
+            ) {
+              if (initialQueueSize > 5) {
+                const percent = Math.min(
+                  99,
+                  Math.round(((initialQueueSize - sess.writeQueue.length) / initialQueueSize) * 100)
+                );
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send("conversion-progress", {
+                    percent,
+                    stage: "finalizing",
+                    status: `Flushing ${sess.writeQueue.length} remaining chunks...`
+                  });
+                }
+              }
+              await new Promise(r => setTimeout(r, 50));
+              if (sess.writeQueue.length === lastQueueSize && !sess.isWaitingForDrain) {
+                stalledCycles++;
+              } else {
+                stalledCycles = 0;
+                lastQueueSize = sess.writeQueue.length;
+              }
+              if (sess.ffmpegProcess && sess.ffmpegProcess.exitCode !== null) break;
+            }
+
+            // Close FFmpeg stdin
+            await new Promise(resolve => {
+              if (sess.ffmpegProcess?.stdin?.writable) {
+                sess.ffmpegProcess.stdin.end(() => resolve());
+              } else {
+                resolve();
+              }
+            });
+
+            // Wait for FFmpeg to fully exit
+            await new Promise(resolve => {
+              if (!sess.ffmpegProcess || sess.ffmpegProcess.exitCode !== null) return resolve();
+              sess.ffmpegProcess.on("close", resolve);
+              setTimeout(resolve, 10000);
+            });
+
+            const finalPath = sess.finalPath;
+            chunkSessions.delete(sessionId);
+
+            const thumbPath = await generateThumbnailHelper(finalPath);
+            addRecentRecording(finalPath, thumbPath);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("settings-updated", getSettings());
+              mainWindow.webContents.send("conversion-complete", finalPath);
+            }
+            showRecordingNotification(finalPath);
+          })();
+
+          // Immediately add a placeholder to history
+          addRecentRecording(sess.finalPath, null);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("settings-updated", getSettings());
+          }
+
+          const hasBacklog = (sess.writeQueue && sess.writeQueue.length > 3) || sess.isWaitingForDrain;
+          if (hasBacklog && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("conversion-started");
+          }
+
+          return {
+            success: true,
+            filePath: sess.finalPath,
+            backgroundProcessing: hasBacklog
+          };
         }
 
+        // ── WebM file path ─────────────────────────────────────────────────
         await new Promise((resolve, reject) => {
           sess.ws.end(() => resolve());
           sess.ws.on("error", reject);
@@ -382,20 +678,11 @@ function setupIpcHandlers() {
         const tempFilePath = sess.tempFilePath;
         chunkSessions.delete(sessionId);
 
-        // Reuse save flow: prompt for save/convert depending on settings
         const settings = getSettings();
         const outputDir = settings.outputDirectory || app.getPath("videos");
-
         if (!fs.existsSync(outputDir)) {
-          try {
-            fs.mkdirSync(outputDir, { recursive: true });
-          } catch (mkdirErr) {
-            log(
-              "error",
-              `Failed to create output directory: ${mkdirErr.message}`,
-            );
-            return { success: false, error: "Cannot access output directory" };
-          }
+          try { fs.mkdirSync(outputDir, { recursive: true }); }
+          catch (e) { return { success: false, error: "Cannot access output directory" }; }
         }
 
         const format = settings.defaultFormat || "mp4";
@@ -403,22 +690,16 @@ function setupIpcHandlers() {
         let canceled = false;
 
         if (settings.autoSave || options.forceAutoSave) {
-          const pattern = settings.filenamePattern || "Recording_{date}_{time}";
-          const defaultName = generateFilename(pattern, format);
+          const defaultName = generateFilename(settings.filenamePattern || "Recording_{date}_{time}", format);
           filePath = path.join(outputDir, defaultName);
           let counter = 1;
-          const basePath = filePath;
+          const base = filePath;
           while (fs.existsSync(filePath)) {
-            const ext = path.extname(basePath);
-            const name = path.basename(basePath, ext);
-            filePath = path.join(outputDir, `${name}_${counter}${ext}`);
+            filePath = path.join(outputDir, `${path.basename(base, path.extname(base))}_${counter}${path.extname(base)}`);
             counter++;
           }
         } else {
-          const defaultName = generateFilename(
-            settings.filenamePattern || "Recording_{date}_{time}",
-            format,
-          );
+          const defaultName = generateFilename(settings.filenamePattern || "Recording_{date}_{time}", format);
           const result = await dialog.showSaveDialog(mainWindow, {
             title: "Save Recording",
             defaultPath: path.join(outputDir, defaultName),
@@ -433,55 +714,34 @@ function setupIpcHandlers() {
         }
 
         if (canceled || !filePath) {
-          // Remove temp file
-          try {
-            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-          } catch (e) { }
+          try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (e) { }
           return { success: false, canceled: true };
         }
 
         const ext = path.extname(filePath).toLowerCase();
-
         if (ext === ".mp4") {
           const convertedPath = filePath;
           mainWindow?.webContents.send("conversion-started");
-
           convertVideo(tempFilePath, convertedPath, (progress) => {
             mainWindow?.webContents.send("conversion-progress", progress);
           })
             .then(async () => {
-              try {
-                if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-              } catch (e) { }
+              try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (e) { }
               const thumbPath = await generateThumbnailHelper(convertedPath);
               addRecentRecording(convertedPath, thumbPath);
-              log("info", `Recording converted and saved: ${convertedPath}`);
-              mainWindow?.webContents.send(
-                "conversion-complete",
-                convertedPath,
-              );
+              mainWindow?.webContents.send("conversion-complete", convertedPath);
               showRecordingNotification(convertedPath);
             })
             .catch(async (convertErr) => {
-              log(
-                "error",
-                `Conversion failed: ${convertErr.message}, saving as webm`,
-              );
+              log("error", `Conversion failed: ${convertErr.message}, saving as webm`);
               const webmPath = filePath.replace(/\.mp4$/i, ".webm");
-              try {
-                fs.renameSync(tempFilePath, webmPath);
-              } catch (e) { }
+              try { fs.renameSync(tempFilePath, webmPath); } catch (e) { }
               const thumbPath = await generateThumbnailHelper(webmPath);
               addRecentRecording(webmPath, thumbPath);
               mainWindow?.webContents.send("conversion-complete", webmPath);
               showRecordingNotification(webmPath);
             });
-
-          return {
-            success: true,
-            filePath: convertedPath,
-            backgroundProcessing: true,
-          };
+          return { success: true, filePath: convertedPath, backgroundProcessing: true };
         } else {
           try {
             fs.renameSync(tempFilePath, filePath);
@@ -504,13 +764,13 @@ function setupIpcHandlers() {
     try {
       const sess = chunkSessions.get(sessionId);
       if (sess) {
-        try {
-          sess.ws.destroy();
-        } catch (e) { }
-        try {
-          if (fs.existsSync(sess.tempFilePath))
-            fs.unlinkSync(sess.tempFilePath);
-        } catch (e) { }
+        if (sess.isLive && sess.ffmpegProcess) {
+          try { sess.ffmpegProcess.kill("SIGKILL"); } catch (e) { }
+          try { if (sess.finalPath && fs.existsSync(sess.finalPath)) fs.unlinkSync(sess.finalPath); } catch (e) { }
+        } else {
+          try { sess.ws.destroy(); } catch (e) { }
+          try { if (fs.existsSync(sess.tempFilePath)) fs.unlinkSync(sess.tempFilePath); } catch (e) { }
+        }
         chunkSessions.delete(sessionId);
       }
       return { success: true };
@@ -733,6 +993,7 @@ function setupIpcHandlers() {
       hideWindowDuringRecording: Boolean(newSettings.hideWindowDuringRecording),
       showNotifications: Boolean(newSettings.showNotifications),
       autoOpenAfterRecording: Boolean(newSettings.autoOpenAfterRecording),
+      recordDirectToMp4: newSettings.recordDirectToMp4 !== false,
       defaultFormat: ["mp4", "webm"].includes(newSettings.defaultFormat)
         ? newSettings.defaultFormat
         : "mp4",

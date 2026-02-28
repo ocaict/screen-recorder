@@ -6,3 +6,5 @@ temp_video.webm
 logs
 settings.json
 dist
+*.docx
+*.doc

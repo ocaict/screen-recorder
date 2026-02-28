@@ -109,4 +109,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Receive relayed mouse actions from the overlay (for the compositor)
   onOverlayAction: (callback) =>
     ipcRenderer.on("overlay-action", (_, action) => callback(action)),
+
+  onSettingsUpdated: (callback) =>
+    ipcRenderer.on("settings-updated", (_, settings) => callback(settings)),
 });

@@ -1169,6 +1169,11 @@ class RecordingManager {
     this.bitrateReduced = false;
 
     try {
+      const settings = this.app.settings || {};
+      // Use live pipe only if user has opted in AND format is mp4
+      const isMP4 = settings.recordDirectToMp4 !== false && settings.defaultFormat === 'mp4';
+      options.useLivePipe = isMP4;
+
       const res = await window.electronAPI
         .startChunkedRecording(options)
         .catch((e) => {
@@ -1177,7 +1182,11 @@ class RecordingManager {
         });
       if (res && res.sessionId) {
         this.chunkSessionId = res.sessionId;
-        this.tempChunkPath = res.tempFilePath;
+        this.tempChunkPath = res.tempFilePath || null;
+        this.isLiveRecording = res.isLive || false;
+        if (this.isLiveRecording) {
+          console.log("Live direct-to-MP4 recording initialized at:", res.filePath);
+        }
       } else {
         console.warn("Chunked recording session not created");
       }

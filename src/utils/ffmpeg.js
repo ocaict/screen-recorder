@@ -23,21 +23,36 @@ function checkHardwareEncoders() {
           { encoding: "utf8", timeout: 10000 },
         );
 
-        // Check NVIDIA NVENC
-        encoders.nvenc.h264 = output.includes("h264_nvenc");
-        encoders.nvenc.hevc = output.includes("hevc_nvenc");
+        // Basic presence check
+        const hasNvenc = output.includes("h264_nvenc");
+        const hasQsv = output.includes("h264_qsv");
+        const hasAmf = output.includes("h264_amf");
 
-        // Check Intel QSV
-        encoders.qsv.h264 = output.includes("h264_qsv");
-        encoders.qsv.hevc = output.includes("hevc_qsv");
+        // --- DEEP CHECK: Try to actually open the encoder (Detects driver issues) ---
+        if (hasNvenc) {
+          try {
+            execSync(`"${systemFfmpeg}" -hide_banner -f lavfi -i color=c=black:s=64x64:d=0.1 -c:v h264_nvenc -f null - 2>&1`, { timeout: 3000 });
+            encoders.nvenc.h264 = true;
+          } catch (e) { log("warn", "NVENC listed but failed initialization test (Driver issue?). Disabling."); }
+        }
 
-        // Check AMD AMF
-        encoders.amf.h264 = output.includes("h264_amf");
-        encoders.amf.hevc = output.includes("hevc_amf");
+        if (hasQsv) {
+          try {
+            execSync(`"${systemFfmpeg}" -hide_banner -f lavfi -i color=c=black:s=64x64:d=0.1 -c:v h264_qsv -f null - 2>&1`, { timeout: 3000 });
+            encoders.qsv.h264 = true;
+          } catch (e) { log("warn", "QSV listed but failed initialization test. Disabling."); }
+        }
 
-        const nvencAvailable = encoders.nvenc.h264 || encoders.nvenc.hevc;
-        const qsvAvailable = encoders.qsv.h264 || encoders.qsv.hevc;
-        const amfAvailable = encoders.amf.h264 || encoders.amf.hevc;
+        if (hasAmf) {
+          try {
+            execSync(`"${systemFfmpeg}" -hide_banner -f lavfi -i color=c=black:s=64x64:d=0.1 -c:v h264_amf -f null - 2>&1`, { timeout: 3000 });
+            encoders.amf.h264 = true;
+          } catch (e) { log("warn", "AMF listed but failed initialization test. Disabling."); }
+        }
+
+        const nvencAvailable = encoders.nvenc.h264;
+        const qsvAvailable = encoders.qsv.h264;
+        const amfAvailable = encoders.amf.h264;
 
         log(
           "info",
@@ -452,15 +467,15 @@ async function trimVideo(inputPath, startTime, endTime) {
   });
 }
 
-async function generateThumbnail(inputPath, outputPath, timestamp = 1) {
+async function generateThumbnail(inputPath, outputPath, timestamp = "00:00:01") {
   return new Promise((resolve, reject) => {
+    // Using inputOptions before input for fast seek
     ffmpeg(inputPath)
-      .screenshots({
-        timestamps: [timestamp],
-        filename: path.basename(outputPath),
-        folder: path.dirname(outputPath),
-        size: "320x?",
-      })
+      .inputOptions("-ss", timestamp)
+      .outputOptions("-frames:v", "1")
+      .outputOptions("-q:v", "2") // High quality
+      .size("320x?")
+      .save(outputPath)
       .on("end", () => {
         log("info", `Thumbnail generated: ${outputPath}`);
         resolve(outputPath);

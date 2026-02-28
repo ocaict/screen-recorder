@@ -21,6 +21,9 @@ let history = [];
 let historyIndex = -1;
 let drawModeActive = false;
 let textInput = null;
+// clickHighlightsEnabled moved to highlight logic section below
+
+console.log('[Overlay] Script initialized');
 
 // ── Canvas sizing ─────────────────────────────────────────────────────────────
 function resize() {
@@ -50,7 +53,154 @@ window.electronAPI.onOverlayDrawMode((enabled) => {
     }
 });
 
+let activeRipples = [];
+let lastButton = 0;
+let clickCount = 0;
+let clickHighlightsEnabled = false;
+let hoverTimer = null;
+let isCtrlPressed = false;
+let mouseX = 0;
+let mouseY = 0;
+
+function createRipple(x, y, button, manual = false) {
+    if (!clickHighlightsEnabled) return;
+
+    activeRipples.push({
+        x, y,
+        button: manual ? 0 : button,
+        radius: 10,
+        maxRadius: manual ? 70 : 50, // Reduced from 140/100
+        opacity: manual ? 1 : 0.7,
+        startTime: Date.now(),
+        duration: 400 // ms
+    });
+
+    if (activeRipples.length === 1) {
+        requestAnimationFrame(animateRipples);
+    }
+}
+
+// Global Key tracking for "Force Highlights" mode
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Control') isCtrlPressed = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'Control') isCtrlPressed = false;
+});
+
+function animateRipples() {
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    const now = Date.now();
+
+    // 1. Draw Cursor Glow (Professional Aura)
+    if (clickHighlightsEnabled) {
+        tempCtx.save();
+        const size = isCtrlPressed ? 35 : 25;
+        const color = isCtrlPressed ? '255, 235, 59' : '255, 235, 59';
+
+        const gradient = tempCtx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, size);
+        gradient.addColorStop(0, `rgba(${color}, 0.3)`);
+        gradient.addColorStop(1, `rgba(${color}, 0)`);
+
+        tempCtx.beginPath();
+        tempCtx.arc(mouseX, mouseY, size, 0, Math.PI * 2);
+        tempCtx.fillStyle = gradient;
+        tempCtx.fill();
+
+        // Stylized precision ring
+        tempCtx.beginPath();
+        tempCtx.arc(mouseX, mouseY, 15, 0, Math.PI * 2);
+        tempCtx.strokeStyle = `rgba(${color}, 0.15)`;
+        tempCtx.lineWidth = 1;
+        tempCtx.stroke();
+
+        tempCtx.restore();
+    }
+
+    // 2. Animate and Draw Ripples
+    activeRipples = activeRipples.filter(ripple => {
+        const elapsed = now - ripple.startTime;
+        const progress = Math.min(elapsed / ripple.duration, 1);
+
+        // Calculate radius based on its unique maxRadius
+        ripple.radius = 10 + (progress * (ripple.maxRadius - 10));
+        ripple.opacity = 0.9 * (1 - progress);
+
+        // Draw the ripple
+        tempCtx.beginPath();
+        tempCtx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+
+        if (ripple.button === 2) { // Right Click
+            tempCtx.strokeStyle = `rgba(33, 150, 243, ${ripple.opacity})`;
+            tempCtx.lineWidth = 3;
+        } else { // Left Click
+            tempCtx.strokeStyle = `rgba(255, 235, 59, ${ripple.opacity})`;
+            tempCtx.lineWidth = 3;
+        }
+
+        tempCtx.stroke();
+
+        return progress < 1;
+    });
+
+    if (activeRipples.length > 0 || clickHighlightsEnabled) {
+        requestAnimationFrame(animateRipples);
+    } else {
+        // Final clear when done
+        tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    }
+}
+
+const handleStealthClick = (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+
+    // Pointing Detection: if user stops moving, trigger a pulse
+    if (clickHighlightsEnabled) {
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => {
+            if (activeRipples.length < 3) { // Prevent spamming
+                createRipple(mouseX, mouseY, 0); // Trigger "Pointing highlight"
+            }
+        }, 400); // 400ms pause = "pointing"
+
+        // Manual Trigger: If moving while Ctrl is pressed
+        if (isCtrlPressed) {
+            createRipple(mouseX, mouseY, 0, true);
+        }
+    }
+
+    // If highlights are active, we keep the animation loop running
+    if (clickHighlightsEnabled && activeRipples.length === 0) {
+        requestAnimationFrame(animateRipples);
+    }
+};
+
+// Global mouse tracker for highlights
+document.addEventListener("mousemove", handleStealthClick, true);
+document.addEventListener("pointermove", handleStealthClick, true);
+
 // Force capture all mouse events when is-drawing
+// Using multiple event types to ensure Windows forwards at least one
+const handleGlobalEvent = (e) => {
+    // Re-check enabled state in case sync was missed
+    if (!clickHighlightsEnabled) return;
+
+    if (e.type === 'mousedown' || e.type === 'pointerdown' || e.type === 'auxclick') {
+        isMouseDown = true;
+        lastButton = e.button;
+        createRipple(e.clientX, e.clientY, e.button);
+    } else if (e.type === 'mouseup' || e.type === 'pointerup') {
+        isMouseDown = false;
+    }
+};
+
+window.addEventListener("mousedown", handleGlobalEvent, true);
+window.addEventListener("pointerdown", handleGlobalEvent, true);
+window.addEventListener("mouseup", handleGlobalEvent, true);
+window.addEventListener("pointerup", handleGlobalEvent, true);
+window.addEventListener("auxclick", handleGlobalEvent, true);
+
 document.addEventListener("mousedown", (e) => {
     if (document.body.classList.contains("is-drawing")) {
         e.preventDefault();
@@ -158,6 +308,22 @@ window.electronAPI.onOverlaySettings((settings) => {
     if (settings.tool) currentTool = settings.tool;
     if (settings.color) currentColor = settings.color;
     if (settings.width) strokeWidth = settings.width;
+    if (settings.showClickHighlights !== undefined) {
+        clickHighlightsEnabled = !!settings.showClickHighlights;
+        console.log('[Overlay] Click highlights enabled:', clickHighlightsEnabled);
+        if (clickHighlightsEnabled) {
+            document.body.classList.add('highlights-active');
+            updateDebugInfo();
+            // Show a temporary indicator for debug
+            const indicator = document.createElement('div');
+            indicator.style.cssText = 'position:fixed; top:10px; left:50%; transform:translateX(-50%); background:rgba(255,235,59,0.8); color:black; padding:5px 15px; border-radius:20px; font-weight:bold; z-index:10000; pointer-events:none;';
+            indicator.innerText = 'CLICK HIGHLIGHTS ACTIVE';
+            document.body.appendChild(indicator);
+            setTimeout(() => indicator.remove(), 2000);
+        } else {
+            document.body.classList.remove('highlights-active');
+        }
+    }
 });
 
 // ── Clear / undo from main window ─────────────────────────────────────────────

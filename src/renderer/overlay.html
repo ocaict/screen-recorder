@@ -10,8 +10,32 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            background: transparent;
+            background: rgba(0, 0, 0, 0.001);
+            /* Microscopic surface for Windows hit-testing */
+            pointer-events: auto;
+            /* Allow events to be caught then forwarded by Electron */
+            transition: background 0.3s ease;
+        }
+
+        /* Test if active */
+        body.highlights-active {
+            background: rgba(0, 120, 255, 0.01);
+        }
+
+        #debugInfo {
+            position: fixed;
+            top: 50px;
+            left: 20px;
+            color: yellow;
+            font-family: monospace;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 4px;
             pointer-events: none;
+            z-index: 10001;
+            display: none;
+            /* Invisible by default, shown by JS */
         }
 
         #annotationCanvas,
@@ -35,6 +59,44 @@
         body.is-drawing #tempCanvas {
             pointer-events: auto !important;
         }
+
+        /* Click Highlights */
+        .click-ripple {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            /* mix-blend-mode: screen; Removed to ensure visibility */
+            will-change: transform, opacity;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .ripple-left {
+            background: rgba(255, 235, 59, 0.6);
+            border: 3px solid rgba(255, 235, 59, 1);
+            animation: ripple-out 0.4s ease-out forwards;
+        }
+
+        .ripple-right {
+            background: rgba(33, 150, 243, 0.6);
+            border: 3px solid rgba(33, 150, 243, 1);
+            animation: ripple-out 0.4s ease-out forwards;
+        }
+
+        @keyframes ripple-out {
+            0% {
+                width: 10px;
+                height: 10px;
+                opacity: 1;
+            }
+
+            100% {
+                width: 120px;
+                height: 120px;
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 
@@ -43,6 +105,7 @@
     <canvas id="annotationCanvas"></canvas>
     <!-- Active stroke drawing -->
     <canvas id="tempCanvas"></canvas>
+    <div id="debugInfo"></div>
 
     <script src="overlay.js"></script>
 </body>

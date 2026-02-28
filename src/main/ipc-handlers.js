@@ -120,6 +120,9 @@ function showRecordingNotification(filePath) {
   }
 }
 
+// Keep track of the forwarding pulse
+let forwardingPulseInterval = null;
+
 async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false) {
   const settings = getSettings();
   const tempDir = app.getPath("temp");
@@ -1053,6 +1056,7 @@ function setupIpcHandlers() {
         ? newSettings.colorFormat
         : "yuv420p",
       showMiniControls: Boolean(newSettings.showMiniControls),
+      showClickHighlights: Boolean(newSettings.showClickHighlights),
     };
 
     saveSettings(validatedSettings);
@@ -1452,6 +1456,63 @@ function setupIpcHandlers() {
           recordAudio: getSettings().recordAudio,
           isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
         });
+      }
+
+      // Show/Hide Overlay for highlights
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        const settings = getSettings();
+        if (recording && settings.showClickHighlights) {
+          const { screen } = require("electron");
+          const primaryDisplay = screen.getPrimaryDisplay();
+          const bounds = primaryDisplay.bounds;
+
+          overlayWindow.setPosition(bounds.x, bounds.y);
+          overlayWindow.setSize(bounds.width, bounds.height);
+
+          // Ensure it's fully transparent and ignoring click blocking
+          overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+          overlayWindow.showInactive();
+          overlayWindow.setAlwaysOnTop(true, "screen-saver");
+
+          // Start a pulse to keep Windows from "forgetting" our forwarding flag
+          if (forwardingPulseInterval) clearInterval(forwardingPulseInterval);
+          forwardingPulseInterval = setInterval(() => {
+            if (overlayWindow && !overlayWindow.isDestroyed()) {
+              overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+              // Re-assert top level in case other windows try to overlap
+              overlayWindow.setAlwaysOnTop(true, "screen-saver");
+            }
+          }, 1000);
+
+          // Sync highlight setting to overlay with a small delay to ensure it's ready
+          setTimeout(() => {
+            if (overlayWindow && !overlayWindow.isDestroyed()) {
+              console.log('[Main] Final highlights sync to overlay:', settings.showClickHighlights);
+              overlayWindow.webContents.send("overlay-settings", {
+                showClickHighlights: settings.showClickHighlights
+              });
+            }
+          }, 200);
+        } else if (!recording) {
+          // If stopped recording, hide the overlay
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.hide();
+            // Also sync state to off
+            overlayWindow.webContents.send("overlay-settings", {
+              showClickHighlights: false
+            });
+          }
+
+          if (overlayMoveTopInterval) {
+            clearInterval(overlayMoveTopInterval);
+            overlayMoveTopInterval = null;
+          }
+          if (forwardingPulseInterval) {
+            clearInterval(forwardingPulseInterval);
+            forwardingPulseInterval = null;
+          }
+        }
       }
 
       return { success: true };

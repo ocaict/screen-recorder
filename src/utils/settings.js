@@ -34,6 +34,7 @@ let settings = {
   videoBitrate: 5,
   colorFormat: "yuv420p",
   showMiniControls: true,
+  showClickHighlights: true,
 };
 
 let settingsFile = null;
@@ -130,6 +131,8 @@ function resetSettings() {
     videoBitrate: 5,
     colorFormat: "yuv420p",
     showMiniControls: true,
+    showClickHighlights: false,
+    nvencPromptDismissed: false,
   };
   saveSettings(settings);
   return settings;

@@ -180,16 +180,15 @@ module.exports = {
 
 function createOverlayWindow() {
   overlayWindow = new BrowserWindow({
-    width: 1920,
     height: 1080,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    type: "toolbar",
+    backgroundColor: "#00000000",
     hasShadow: false,
     resizable: false,
-    focusable: true,
+    focusable: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "overlay-preload.js"),
@@ -200,6 +199,8 @@ function createOverlayWindow() {
   });
 
   overlayWindow.setAlwaysOnTop(true, "status");
+  overlayWindow.setFocusable(false);
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   // Load the overlay
   overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));

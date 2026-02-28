@@ -1322,6 +1322,10 @@ class ScreenRecorder {
       document.getElementById("settingsShowMiniControls").checked =
         this.settings.showMiniControls !== false;
     }
+    if (document.getElementById("settingsShowClickHighlights")) {
+      document.getElementById("settingsShowClickHighlights").checked =
+        this.settings.showClickHighlights !== false;
+    }
 
     // Advanced Settings
     if (document.getElementById("settingsVideoCodec")) {
@@ -1621,7 +1625,12 @@ class ScreenRecorder {
       crfValue: parseInt(document.getElementById("settingsCrfValue")?.value) || 23,
       videoBitrate: parseInt(document.getElementById("settingsVideoBitrate")?.value) || 5,
       colorFormat: document.getElementById("settingsColorFormat")?.value || "yuv420p",
-      showMiniControls: document.getElementById("settingsShowMiniControls")?.checked !== false,
+      showMiniControls: document.getElementById("settingsShowMiniControls")
+        ? document.getElementById("settingsShowMiniControls").checked
+        : (this.settings.showMiniControls !== false),
+      showClickHighlights: document.getElementById("settingsShowClickHighlights")
+        ? document.getElementById("settingsShowClickHighlights").checked
+        : (this.settings.showClickHighlights !== false),
     };
 
     try {

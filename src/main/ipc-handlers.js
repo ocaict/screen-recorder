@@ -30,6 +30,7 @@ const state = require("./state");
 
 let mainWindow = null;
 let overlayWindow = null;
+let miniControlsWindow = null;
 let ICON_PATH = null;
 
 // Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
@@ -57,6 +58,10 @@ function setMainWindowRef(window, iconPath) {
 
 function setOverlayWindowRef(win) {
   overlayWindow = win;
+}
+
+function setMiniControlsWindowRef(win) {
+  miniControlsWindow = win;
 }
 
 async function getCaptureSources() {
@@ -914,34 +919,7 @@ function setupIpcHandlers() {
     }
   });
 
-  ipcMain.handle("set-recording-state", (_, recording, isPaused = false) => {
-    try {
-      state.setRecordingState(recording);
 
-      if (recording && !isPaused) {
-        tray.createRecordingTray();
-        const settings = getSettings();
-        if (settings.hideWindowDuringRecording && mainWindow) {
-          mainWindow.hide();
-        }
-      } else if (recording && isPaused) {
-        tray.createPausedTray();
-      } else {
-        tray.restoreNormalTray();
-        if (mainWindow && !mainWindow.isVisible()) {
-          mainWindow.show();
-          if (mainWindow.isMinimized()) {
-            mainWindow.restore();
-          }
-          mainWindow.focus();
-        }
-      }
-      return { success: true };
-    } catch (err) {
-      log("error", `set-recording-state failed: ${err.message}`);
-      return { success: false, error: err.message };
-    }
-  });
 
   ipcMain.handle("get-settings", () => {
     return getSettings();
@@ -1401,10 +1379,90 @@ function setupIpcHandlers() {
   ipcMain.on("overlay-action", (_, action) => {
     if (mainWindow) mainWindow.webContents.send("overlay-action", action);
   });
+  // ── Mini Controls Relay ───────────────────────────────────────────────────
+  // Relay recording timer to mini window
+  ipcMain.on("recording-timer-update", (_, timeStr) => {
+    if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+      miniControlsWindow.webContents.send("mini-timer-update", timeStr);
+    }
+  });
+
+  // Relay command from mini window to main window
+  ipcMain.on("mini-command", (_, data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Execute command in main window context
+      if (data.action === "close-mini") {
+        if (miniControlsWindow) miniControlsWindow.hide();
+      } else {
+        mainWindow.webContents.send("mini-command", data);
+      }
+    }
+  });
+
+  // We add to set-recording-state to keep mini window in sync
+  ipcMain.handle("set-recording-state", async (_, recording, isPaused = false) => {
+    try {
+      state.setRecordingState(recording);
+      state.setPaused(isPaused);
+
+      if (recording && !isPaused) {
+        tray.createRecordingTray();
+        const settings = getSettings();
+        if (settings.hideWindowDuringRecording && mainWindow) {
+          mainWindow.hide();
+        }
+      } else if (recording && isPaused) {
+        tray.createPausedTray();
+      } else {
+        tray.restoreNormalTray();
+        if (mainWindow && !mainWindow.isVisible()) {
+          mainWindow.show();
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+          }
+          mainWindow.focus();
+        }
+      }
+
+      // Show/Hide Mini Controls
+      if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+        if (recording) {
+          miniControlsWindow.show();
+          miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
+
+          // Re-assert protection upon show for extra reliability
+          if (process.platform === "win32") {
+            if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
+              miniControlsWindow.setExcludeFromCapture(true);
+            }
+            if (typeof miniControlsWindow.setContentProtection === "function") {
+              miniControlsWindow.setContentProtection(true);
+            }
+          }
+        } else {
+          miniControlsWindow.hide();
+        }
+
+        // Sync settings/state to mini window
+        miniControlsWindow.webContents.send("mini-state-update", {
+          isPaused,
+          isRecording: recording,
+          recordAudio: getSettings().recordAudio,
+          isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
+        });
+      }
+
+      return { success: true };
+    } catch (err) {
+      log("error", `set-recording-state failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 module.exports = {
   setMainWindowRef,
   setOverlayWindowRef,
+  setMiniControlsWindowRef,
   setupIpcHandlers,
 };

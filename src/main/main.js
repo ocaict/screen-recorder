@@ -5,15 +5,17 @@ const { setupLogger, log } = require("../utils/logger");
 const { loadSettings } = require("../utils/settings");
 const tray = require("./tray");
 const shortcuts = require("./shortcuts");
-const { setupIpcHandlers, setMainWindowRef, setOverlayWindowRef } = require("./ipc-handlers");
+const { setupIpcHandlers, setMainWindowRef, setOverlayWindowRef, setMiniControlsWindowRef } = require("./ipc-handlers");
 
-app.disableHardwareAcceleration();
-
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("disable-gpu-compositing");
+// We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE) 
+// often requires the GPU compositor (DWM) to be active to reliably hide windows from capture.
+// app.disableHardwareAcceleration();
+// app.commandLine.appendSwitch("disable-gpu");
+// app.commandLine.appendSwitch("disable-gpu-compositing");
 
 let mainWindow = null;
 let overlayWindow = null;
+let miniControlsWindow = null;
 
 // Register thumb:// as a privileged scheme for Electron 40+ compatibility
 protocol.registerSchemesAsPrivileged([
@@ -102,6 +104,7 @@ app.whenReady().then(async () => {
 
   log("info", "Application starting...");
   log("info", `Running in ${isDev ? "development" : "production"} mode`);
+  log("info", `Electron version: ${process.versions.electron}`);
 
   // Register thumb:// protocol using the modern Electron handle API
   protocol.handle("thumb", (request) => {
@@ -144,7 +147,9 @@ app.whenReady().then(async () => {
   setupIpcHandlers();
   createWindow();
   createOverlayWindow();
+  createMiniControlsWindow();
   setOverlayWindowRef(overlayWindow);
+  setMiniControlsWindowRef(miniControlsWindow);
   tray.createTray();
   shortcuts.registerGlobalShortcut();
 
@@ -170,6 +175,7 @@ app.on("will-quit", () => {
 module.exports = {
   getMainWindow: () => mainWindow,
   getOverlayWindow: () => overlayWindow,
+  getMiniControlsWindow: () => miniControlsWindow,
 };
 
 function createOverlayWindow() {
@@ -200,5 +206,43 @@ function createOverlayWindow() {
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;
+  });
+}
+
+function createMiniControlsWindow() {
+  miniControlsWindow = new BrowserWindow({
+    width: 480,
+    height: 100,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    focusable: true,
+    show: false,
+    icon: ICON_PATH,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload", "mini-preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+
+  // CRITICAL: Hide this window from screen capture/recordings
+  if (process.platform === "win32") {
+    if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
+      miniControlsWindow.setExcludeFromCapture(true);
+    }
+    if (typeof miniControlsWindow.setContentProtection === "function") {
+      miniControlsWindow.setContentProtection(true);
+    }
+  }
+
+  miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
+  miniControlsWindow.loadFile(path.join(__dirname, "..", "renderer", "mini-controls.html"));
+
+  miniControlsWindow.on("closed", () => {
+    miniControlsWindow = null;
   });
 }

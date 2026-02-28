@@ -21,9 +21,15 @@ class RecordingManager {
     this.chunkInterval = null;
     this.tempDir = null;
 
-    this.compositor = null;
     this.canvasStream = null;
     this.compositorInterval = null;
+
+    // Listen for mini-control commands
+    if (window.electronAPI) {
+      window.electronAPI.onMiniCommand?.((data) => {
+        this.handleMiniCommand(data);
+      });
+    }
   }
 
   async init() {
@@ -649,7 +655,14 @@ class RecordingManager {
   startRecordingTimer() {
     this.recordingTimer = setInterval(() => {
       const elapsed = Date.now() - this.recordingStartTime;
-      this.app.recordingTime.textContent = this.formatTime(elapsed);
+      const timeStr = this.formatTime(elapsed);
+      this.app.recordingTime.textContent = timeStr;
+
+      // Update Mini Controls Timer
+      if (window.electronAPI.sendRecordingTimerUpdate) {
+        window.electronAPI.sendRecordingTimerUpdate(timeStr);
+      }
+
       if (this.app.pillTime) {
         const totalSeconds = Math.floor(elapsed / 1000);
         const minutes = Math.floor(totalSeconds / 60);
@@ -1403,6 +1416,31 @@ class RecordingManager {
 
     this.recordedChunks = [];
     this.recordedBytes = 0;
+  }
+
+  handleMiniCommand(data) {
+    if (!this.isRecording) return;
+
+    switch (data.action) {
+      case "toggle-pause":
+        if (this.isPaused) this.resumeRecording();
+        else this.pauseRecording();
+        break;
+      case "stop-recording":
+        this.stopRecording();
+        break;
+      case "toggle-mic":
+        // Toggle Mic setting
+        this.app.settings.recordAudio = !this.app.settings.recordAudio;
+        this.app.saveSettings();
+        this.app.showToast(`Microphone ${this.app.settings.recordAudio ? "Enabled" : "Disabled"}`, "info");
+        // Update mini control state to reflect mic toggle
+        window.electronAPI.setRecordingState(true, this.isPaused);
+        break;
+      case "toggle-draw":
+        this.app.toggleAnnotation();
+        break;
+    }
   }
 }
 

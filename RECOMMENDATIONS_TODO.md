@@ -12,7 +12,7 @@
 ## 🎨 UI Optimizations (Medium Priority)
 - [ ] **Collapsible Sidebar**: Add a toggle to expand/collapse the right sidebar to maximize the preview area.
 - [ ] **Dark/Light Mode Toggle**: Offer a light theme option alongside the polished dark theme.
-- [ ] **Floating Mini-Controls**: Show minimal floating controls instead of the full UI during recording.
+- [x] **Floating Mini-Controls**: Show minimal floating controls instead of the full UI during recording.
 - [ ] **Drag-and-Drop Reorder**: Allow reordering clips in the recent recordings list via drag-and-drop.
 - [ ] **Improved Source Selection Modal**: Add search/filter functionality for sources and allow multi-select.
 - [ ] **Better Mobile Responsiveness**: Improve scaling on different window sizes for the desktop app.

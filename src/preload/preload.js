@@ -112,4 +112,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   onSettingsUpdated: (callback) =>
     ipcRenderer.on("settings-updated", (_, settings) => callback(settings)),
+
+  // Mini Controls Sync
+  sendRecordingTimerUpdate: (timeStr) =>
+    ipcRenderer.send("recording-timer-update", timeStr),
+
+  onMiniCommand: (callback) =>
+    ipcRenderer.on("mini-command", (_, data) => callback(data)),
 });

@@ -27,4 +27,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
     // Relay mouse actions back to main process (so it can relay to recorder)
     sendOverlayAction: (action) => ipcRenderer.send("overlay-action", action),
+
+    // Listen for global mouse clicks from uiohook
+    onGlobalClick: (callback) =>
+        ipcRenderer.on("global-click", (_, data) => callback(data)),
 });

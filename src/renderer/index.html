@@ -703,7 +703,45 @@
               <label>
                 <input type="checkbox" id="settingsShowClickHighlights">
                 Enable Mouse Click Highlights
+                <button type="button" class="btn-icon" id="clickHighlightsSettingsBtn" title="Customize click highlights">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                </button>
               </label>
+            </div>
+            <div class="click-highlights-popover" id="clickHighlightsPopover">
+              <div class="popover-header">
+                <span>Click Highlights Settings</span>
+                <button type="button" class="btn-close" id="closeClickHighlightsPopover">&times;</button>
+              </div>
+              <div class="popover-content">
+                <div class="form-group">
+                  <label>Left Click Color</label>
+                  <input type="color" id="highlightLeftColor" value="#FFEB3B">
+                </div>
+                <div class="form-group">
+                  <label>Right Click Color</label>
+                  <input type="color" id="highlightRightColor" value="#2196F3">
+                </div>
+                <div class="form-group">
+                  <label>Ripple Size: <span id="rippleSizeValue">50</span>px</label>
+                  <input type="range" id="highlightRippleSize" min="20" max="100" value="50">
+                </div>
+                <div class="form-group">
+                  <label>Ripple Speed: <span id="rippleSpeedValue">400</span>ms</label>
+                  <input type="range" id="highlightRippleSpeed" min="200" max="800" value="400" step="50">
+                </div>
+                <div class="form-group">
+                  <label>Cursor Glow Size: <span id="glowSizeValue">25</span>px</label>
+                  <input type="range" id="highlightGlowSize" min="15" max="50" value="25">
+                </div>
+                <div class="form-group">
+                  <label>Cursor Glow Intensity: <span id="glowIntensityValue">30</span>%</label>
+                  <input type="range" id="highlightGlowIntensity" min="10" max="80" value="30">
+                </div>
+              </div>
             </div>
           </div>
 

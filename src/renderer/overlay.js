@@ -58,9 +58,32 @@ let lastButton = 0;
 let clickCount = 0;
 let clickHighlightsEnabled = false;
 let hoverTimer = null;
-let isCtrlPressed = false;
 let mouseX = 0;
 let mouseY = 0;
+
+// Highlight customization settings
+let highlightSettings = {
+    leftColor: "#FFEB3B",
+    rightColor: "#2196F3",
+    rippleSize: 50,
+    rippleSpeed: 400,
+    glowSize: 25,
+    glowIntensity: 30
+};
+
+// Listen for global mouse clicks from uiohook (main process)
+window.electronAPI.onGlobalClick((data) => {
+    if (clickHighlightsEnabled && data) {
+        createRipple(data.x, data.y, data.button);
+    }
+});
+
+// Also listen for direct DOM mouse events (when overlay captures them)
+document.addEventListener("mousedown", (e) => {
+    if (clickHighlightsEnabled) {
+        createRipple(e.clientX, e.clientY, e.button);
+    }
+}, true);
 
 function createRipple(x, y, button, manual = false) {
     if (!clickHighlightsEnabled) return;
@@ -69,10 +92,10 @@ function createRipple(x, y, button, manual = false) {
         x, y,
         button: manual ? 0 : button,
         radius: 10,
-        maxRadius: manual ? 70 : 50, // Reduced from 140/100
+        maxRadius: manual ? highlightSettings.rippleSize * 1.4 : highlightSettings.rippleSize,
         opacity: manual ? 1 : 0.7,
         startTime: Date.now(),
-        duration: 400 // ms
+        duration: manual ? highlightSettings.rippleSpeed : highlightSettings.rippleSpeed
     });
 
     if (activeRipples.length === 1) {
@@ -80,27 +103,22 @@ function createRipple(x, y, button, manual = false) {
     }
 }
 
-// Global Key tracking for "Force Highlights" mode
-window.addEventListener('keydown', (e) => {
-    if (e.key === 'Control') isCtrlPressed = true;
-});
-window.addEventListener('keyup', (e) => {
-    if (e.key === 'Control') isCtrlPressed = false;
-});
-
 function animateRipples() {
     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
     const now = Date.now();
 
-    // 1. Draw Cursor Glow (Professional Aura)
+    // 1. Draw Cursor Glow (always on when highlights enabled)
     if (clickHighlightsEnabled) {
         tempCtx.save();
-        const size = isCtrlPressed ? 35 : 25;
-        const color = isCtrlPressed ? '255, 235, 59' : '255, 235, 59';
-
+        const size = highlightSettings.glowSize;
+        const intensity = highlightSettings.glowIntensity / 100;
+        
+        // Convert hex to RGB
+        const leftColor = hexToRgb(highlightSettings.leftColor);
+        
         const gradient = tempCtx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, size);
-        gradient.addColorStop(0, `rgba(${color}, 0.3)`);
-        gradient.addColorStop(1, `rgba(${color}, 0)`);
+        gradient.addColorStop(0, `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${intensity})`);
+        gradient.addColorStop(1, `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, 0)`);
 
         tempCtx.beginPath();
         tempCtx.arc(mouseX, mouseY, size, 0, Math.PI * 2);
@@ -109,8 +127,8 @@ function animateRipples() {
 
         // Stylized precision ring
         tempCtx.beginPath();
-        tempCtx.arc(mouseX, mouseY, 15, 0, Math.PI * 2);
-        tempCtx.strokeStyle = `rgba(${color}, 0.15)`;
+        tempCtx.arc(mouseX, mouseY, size * 0.6, 0, Math.PI * 2);
+        tempCtx.strokeStyle = `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${intensity * 0.5})`;
         tempCtx.lineWidth = 1;
         tempCtx.stroke();
 
@@ -130,13 +148,18 @@ function animateRipples() {
         tempCtx.beginPath();
         tempCtx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
 
+        // Use appropriate color based on click type
+        let color;
         if (ripple.button === 2) { // Right Click
-            tempCtx.strokeStyle = `rgba(33, 150, 243, ${ripple.opacity})`;
-            tempCtx.lineWidth = 3;
+            const rightColor = hexToRgb(highlightSettings.rightColor);
+            color = `rgba(${rightColor.r}, ${rightColor.g}, ${rightColor.b}, ${ripple.opacity})`;
         } else { // Left Click
-            tempCtx.strokeStyle = `rgba(255, 235, 59, ${ripple.opacity})`;
-            tempCtx.lineWidth = 3;
+            const leftColor = hexToRgb(highlightSettings.leftColor);
+            color = `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${ripple.opacity})`;
         }
+        
+        tempCtx.strokeStyle = color;
+        tempCtx.lineWidth = 3;
 
         tempCtx.stroke();
 
@@ -151,26 +174,24 @@ function animateRipples() {
     }
 }
 
+// Helper function to convert hex to RGB
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 255, g: 235, b: 59 };
+}
+
 const handleStealthClick = (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
 
-    // Pointing Detection: if user stops moving, trigger a pulse
-    if (clickHighlightsEnabled) {
-        clearTimeout(hoverTimer);
-        hoverTimer = setTimeout(() => {
-            if (activeRipples.length < 3) { // Prevent spamming
-                createRipple(mouseX, mouseY, 0); // Trigger "Pointing highlight"
-            }
-        }, 400); // 400ms pause = "pointing"
-
-        // Manual Trigger: If moving while Ctrl is pressed
-        if (isCtrlPressed) {
-            createRipple(mouseX, mouseY, 0, true);
-        }
-    }
-
-    // If highlights are active, we keep the animation loop running
+    // Auto-ripple disabled for testing - click ripples now come from uiohook
+    // Kept only for cursor glow animation
+    
+    // If highlights are active, keep the animation loop running for cursor glow
     if (clickHighlightsEnabled && activeRipples.length === 0) {
         requestAnimationFrame(animateRipples);
     }
@@ -182,24 +203,7 @@ document.addEventListener("pointermove", handleStealthClick, true);
 
 // Force capture all mouse events when is-drawing
 // Using multiple event types to ensure Windows forwards at least one
-const handleGlobalEvent = (e) => {
-    // Re-check enabled state in case sync was missed
-    if (!clickHighlightsEnabled) return;
-
-    if (e.type === 'mousedown' || e.type === 'pointerdown' || e.type === 'auxclick') {
-        isMouseDown = true;
-        lastButton = e.button;
-        createRipple(e.clientX, e.clientY, e.button);
-    } else if (e.type === 'mouseup' || e.type === 'pointerup') {
-        isMouseDown = false;
-    }
-};
-
-window.addEventListener("mousedown", handleGlobalEvent, true);
-window.addEventListener("pointerdown", handleGlobalEvent, true);
-window.addEventListener("mouseup", handleGlobalEvent, true);
-window.addEventListener("pointerup", handleGlobalEvent, true);
-window.addEventListener("auxclick", handleGlobalEvent, true);
+// Note: click highlights now use global uiohook instead of DOM events
 
 document.addEventListener("mousedown", (e) => {
     if (document.body.classList.contains("is-drawing")) {
@@ -310,20 +314,19 @@ window.electronAPI.onOverlaySettings((settings) => {
     if (settings.width) strokeWidth = settings.width;
     if (settings.showClickHighlights !== undefined) {
         clickHighlightsEnabled = !!settings.showClickHighlights;
-        console.log('[Overlay] Click highlights enabled:', clickHighlightsEnabled);
         if (clickHighlightsEnabled) {
             document.body.classList.add('highlights-active');
-            updateDebugInfo();
-            // Show a temporary indicator for debug
-            const indicator = document.createElement('div');
-            indicator.style.cssText = 'position:fixed; top:10px; left:50%; transform:translateX(-50%); background:rgba(255,235,59,0.8); color:black; padding:5px 15px; border-radius:20px; font-weight:bold; z-index:10000; pointer-events:none;';
-            indicator.innerText = 'CLICK HIGHLIGHTS ACTIVE';
-            document.body.appendChild(indicator);
-            setTimeout(() => indicator.remove(), 2000);
         } else {
             document.body.classList.remove('highlights-active');
         }
     }
+    // Update highlight customization settings
+    if (settings.highlightLeftColor) highlightSettings.leftColor = settings.highlightLeftColor;
+    if (settings.highlightRightColor) highlightSettings.rightColor = settings.highlightRightColor;
+    if (settings.highlightRippleSize) highlightSettings.rippleSize = settings.highlightRippleSize;
+    if (settings.highlightRippleSpeed) highlightSettings.rippleSpeed = settings.highlightRippleSpeed;
+    if (settings.highlightGlowSize) highlightSettings.glowSize = settings.highlightGlowSize;
+    if (settings.highlightGlowIntensity) highlightSettings.glowIntensity = settings.highlightGlowIntensity;
 });
 
 // ── Clear / undo from main window ─────────────────────────────────────────────

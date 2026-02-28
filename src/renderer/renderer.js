@@ -514,6 +514,58 @@ class ScreenRecorder {
       });
     }
 
+    // Click Highlights Popover
+    const clickHighlightsBtn = document.getElementById("clickHighlightsSettingsBtn");
+    const clickHighlightsPopover = document.getElementById("clickHighlightsPopover");
+    const closeClickHighlightsPopover = document.getElementById("closeClickHighlightsPopover");
+
+    if (clickHighlightsBtn && clickHighlightsPopover) {
+      clickHighlightsBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        clickHighlightsPopover.classList.toggle("show");
+      });
+    }
+    if (closeClickHighlightsPopover && clickHighlightsPopover) {
+      closeClickHighlightsPopover.addEventListener("click", () => {
+        clickHighlightsPopover.classList.remove("show");
+      });
+    }
+    document.addEventListener("click", (e) => {
+      if (clickHighlightsPopover && !clickHighlightsPopover.contains(e.target) && !clickHighlightsBtn?.contains(e.target)) {
+        clickHighlightsPopover.classList.remove("show");
+      }
+    });
+
+    // Range slider value displays
+    const highlightRippleSize = document.getElementById("highlightRippleSize");
+    const rippleSizeValue = document.getElementById("rippleSizeValue");
+    if (highlightRippleSize && rippleSizeValue) {
+      highlightRippleSize.addEventListener("input", () => {
+        rippleSizeValue.textContent = highlightRippleSize.value;
+      });
+    }
+    const highlightRippleSpeed = document.getElementById("highlightRippleSpeed");
+    const rippleSpeedValue = document.getElementById("rippleSpeedValue");
+    if (highlightRippleSpeed && rippleSpeedValue) {
+      highlightRippleSpeed.addEventListener("input", () => {
+        rippleSpeedValue.textContent = highlightRippleSpeed.value;
+      });
+    }
+    const highlightGlowSize = document.getElementById("highlightGlowSize");
+    const glowSizeValue = document.getElementById("glowSizeValue");
+    if (highlightGlowSize && glowSizeValue) {
+      highlightGlowSize.addEventListener("input", () => {
+        glowSizeValue.textContent = highlightGlowSize.value;
+      });
+    }
+    const highlightGlowIntensity = document.getElementById("highlightGlowIntensity");
+    const glowIntensityValue = document.getElementById("glowIntensityValue");
+    if (highlightGlowIntensity && glowIntensityValue) {
+      highlightGlowIntensity.addEventListener("input", () => {
+        glowIntensityValue.textContent = highlightGlowIntensity.value;
+      });
+    }
+
     // Trim Modal Listeners
     if (this.trimStartRange) {
       this.trimStartRange.addEventListener("input", () => this.updateTrimRange());
@@ -1326,6 +1378,28 @@ class ScreenRecorder {
       document.getElementById("settingsShowClickHighlights").checked =
         this.settings.showClickHighlights !== false;
     }
+    if (document.getElementById("highlightLeftColor")) {
+      document.getElementById("highlightLeftColor").value = this.settings.highlightLeftColor || "#FFEB3B";
+    }
+    if (document.getElementById("highlightRightColor")) {
+      document.getElementById("highlightRightColor").value = this.settings.highlightRightColor || "#2196F3";
+    }
+    if (document.getElementById("highlightRippleSize")) {
+      document.getElementById("highlightRippleSize").value = this.settings.highlightRippleSize || 50;
+      document.getElementById("rippleSizeValue").textContent = this.settings.highlightRippleSize || 50;
+    }
+    if (document.getElementById("highlightRippleSpeed")) {
+      document.getElementById("highlightRippleSpeed").value = this.settings.highlightRippleSpeed || 400;
+      document.getElementById("rippleSpeedValue").textContent = this.settings.highlightRippleSpeed || 400;
+    }
+    if (document.getElementById("highlightGlowSize")) {
+      document.getElementById("highlightGlowSize").value = this.settings.highlightGlowSize || 25;
+      document.getElementById("glowSizeValue").textContent = this.settings.highlightGlowSize || 25;
+    }
+    if (document.getElementById("highlightGlowIntensity")) {
+      document.getElementById("highlightGlowIntensity").value = this.settings.highlightGlowIntensity || 30;
+      document.getElementById("glowIntensityValue").textContent = this.settings.highlightGlowIntensity || 30;
+    }
 
     // Advanced Settings
     if (document.getElementById("settingsVideoCodec")) {
@@ -1631,6 +1705,12 @@ class ScreenRecorder {
       showClickHighlights: document.getElementById("settingsShowClickHighlights")
         ? document.getElementById("settingsShowClickHighlights").checked
         : (this.settings.showClickHighlights !== false),
+      highlightLeftColor: document.getElementById("highlightLeftColor")?.value || "#FFEB3B",
+      highlightRightColor: document.getElementById("highlightRightColor")?.value || "#2196F3",
+      highlightRippleSize: parseInt(document.getElementById("highlightRippleSize")?.value) || 50,
+      highlightRippleSpeed: parseInt(document.getElementById("highlightRippleSpeed")?.value) || 400,
+      highlightGlowSize: parseInt(document.getElementById("highlightGlowSize")?.value) || 25,
+      highlightGlowIntensity: parseInt(document.getElementById("highlightGlowIntensity")?.value) || 30,
     };
 
     try {

@@ -4,7 +4,7 @@
 - [ ] **Video Editor**: Add basic editing capabilities like merging clips, adding intro/outro, and inserting transitions.
 - [ ] **Auto-crop**: Implement AI-powered automatic removal of black bars from recordings.
 - [ ] **GIF Preview**: Allow previewing GIFs before saving, with size and length options.
-- [] **Hotspots/Click Highlights**: Add visual highlights on mouse clicks during recording.
+- [x] **Hotspots/Click Highlights**: Add visual highlights on mouse clicks during recording.
 - [] **Cursor Customization**: Provide options to show/hide the cursor and apply custom cursor effects.
 - [ ] **Scheduled Recurring Recording**: Support daily/weekly automated recordings.
 - [ ] **Cloud Upload**: Integrate direct upload functionality to YouTube, Google Drive, etc.

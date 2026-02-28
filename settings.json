@@ -6,15 +6,71 @@
   "recordSystemAudio": true,
   "selectedMicrophone": "default",
   "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
-  "shortcutEnabled": true,
+  "shortcutEnabled": false,
   "shortcutKey": "F9",
-  "hideWindowDuringRecording": true,
-  "showNotifications": true,
-  "autoOpenAfterRecording": true,
+  "hideWindowDuringRecording": false,
+  "showNotifications": false,
+  "autoOpenAfterRecording": false,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
-  "countdown": 3,
+  "countdown": 0,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_21-06-00.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772309578189.png",
+      "fileName": "Recording_2026-02-28_21-06-00.mp4",
+      "recordedAt": "2026-02-28T20:12:58.678Z",
+      "size": 33394492
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_21-00-32.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772308851045.png",
+      "fileName": "Recording_2026-02-28_21-00-32.mp4",
+      "recordedAt": "2026-02-28T20:00:51.442Z",
+      "size": 2557507
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_20-51-16.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772308305987.png",
+      "fileName": "Recording_2026-02-28_20-51-16.mp4",
+      "recordedAt": "2026-02-28T19:51:47.063Z",
+      "size": 4165958
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_20-27-57.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772307058073.png",
+      "fileName": "Recording_2026-02-28_20-27-57.mp4",
+      "recordedAt": "2026-02-28T19:30:58.770Z",
+      "size": 9579991
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_20-08-43.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772305760707.png",
+      "fileName": "Recording_2026-02-28_20-08-43.mp4",
+      "recordedAt": "2026-02-28T19:09:21.314Z",
+      "size": 4929786
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_20-06-10.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772305645250.png",
+      "fileName": "Recording_2026-02-28_20-06-10.mp4",
+      "recordedAt": "2026-02-28T19:07:26.626Z",
+      "size": 8794967
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_20-02-06.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772305525476.png",
+      "fileName": "Recording_2026-02-28_20-02-06.mp4",
+      "recordedAt": "2026-02-28T19:05:26.102Z",
+      "size": 19019734
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_19-33-52.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772303650700.png",
+      "fileName": "Recording_2026-02-28_19-33-52.mp4",
+      "recordedAt": "2026-02-28T18:34:11.242Z",
+      "size": 2427709
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_19-24-02.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772303071131.png",
@@ -28,18 +84,11 @@
       "fileName": "Recording_2026-02-28_19-15-45.mp4",
       "recordedAt": "2026-02-28T18:21:52.029Z",
       "size": 71194336
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_19-07-27.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772302412377.png",
-      "fileName": "Recording_2026-02-28_19-07-27.mp4",
-      "recordedAt": "2026-02-28T18:13:33.226Z",
-      "size": 41570336
     }
   ],
   "maxRecentRecordings": 10,
   "filenamePattern": "Recording_{date}_{time}",
-  "autoSave": true,
+  "autoSave": false,
   "compression": "balanced",
   "hardwareAcceleration": "none",
   "webcamEnabled": false,
@@ -53,5 +102,11 @@
   "colorFormat": "yuv420p",
   "showMiniControls": true,
   "showClickHighlights": true,
+  "highlightLeftColor": "#FFEB3B",
+  "highlightRightColor": "#2196F3",
+  "highlightRippleSize": 50,
+  "highlightRippleSpeed": 400,
+  "highlightGlowSize": 25,
+  "highlightGlowIntensity": 30,
   "nvencPromptDismissed": false
 }

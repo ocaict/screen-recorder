@@ -34,7 +34,13 @@ let settings = {
   videoBitrate: 5,
   colorFormat: "yuv420p",
   showMiniControls: true,
-  showClickHighlights: true,
+  showClickHighlights: false,
+  highlightLeftColor: "#FFEB3B",
+  highlightRightColor: "#2196F3",
+  highlightRippleSize: 50,
+  highlightRippleSpeed: 400,
+  highlightGlowSize: 25,
+  highlightGlowIntensity: 30,
 };
 
 let settingsFile = null;

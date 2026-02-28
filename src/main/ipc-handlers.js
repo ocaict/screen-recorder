@@ -28,10 +28,60 @@ const tray = require("./tray");
 const shortcuts = require("./shortcuts");
 const state = require("./state");
 
+let uiohook = null;
+let uIOhook = null;
+let uiohookListenerRegistered = false;
+
+try {
+  const uiohookModule = require("uiohook-napi");
+  uIOhook = uiohookModule.uIOhook;
+  // Keep reference to prevent garbage collection
+  uiohook = uIOhook;
+  log("info", "uiohook-napi loaded successfully");
+} catch (e) {
+  log("warn", "uiohook-napi not available, click highlights disabled: " + e.message);
+}
+
 let mainWindow = null;
 let overlayWindow = null;
 let miniControlsWindow = null;
 let ICON_PATH = null;
+let clickHighlightHookRunning = false;
+
+function setupClickHighlightHook(enabled) {
+  if (!uIOhook) {
+    log("warn", "setupClickHighlightHook: uIOhook not available");
+    return;
+  }
+  
+  if (enabled && !clickHighlightHookRunning) {
+    try {
+      if (!uiohookListenerRegistered) {
+        uIOhook.on("mousedown", (e) => {
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.webContents.send("global-click", {
+              x: e.x,
+              y: e.y,
+              button: e.button
+            });
+          }
+        });
+        uiohookListenerRegistered = true;
+      }
+      uIOhook.start();
+      clickHighlightHookRunning = true;
+    } catch (err) {
+      log("error", `Failed to start click highlight hook: ${err.message}`);
+    }
+  } else if (!enabled && clickHighlightHookRunning) {
+    try {
+      uIOhook.stop();
+      clickHighlightHookRunning = false;
+    } catch (err) {
+      log("error", `Failed to stop click highlight hook: ${err.message}`);
+    }
+  }
+}
 
 // Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
 const chunkSessions = new Map();
@@ -1462,6 +1512,9 @@ function setupIpcHandlers() {
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         const settings = getSettings();
         if (recording && settings.showClickHighlights) {
+          // Start global click hook for capturing mouse clicks
+          setupClickHighlightHook(true);
+          
           const { screen } = require("electron");
           const primaryDisplay = screen.getPrimaryDisplay();
           const bounds = primaryDisplay.bounds;
@@ -1469,7 +1522,9 @@ function setupIpcHandlers() {
           overlayWindow.setPosition(bounds.x, bounds.y);
           overlayWindow.setSize(bounds.width, bounds.height);
 
-          // Ensure it's fully transparent and ignoring click blocking
+          // Forward clicks to windows below so they're captured in recording
+          // Note: This means we can't capture clicks via DOM events
+          // We'll rely on uiohook for global click detection
           overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
           overlayWindow.showInactive();
@@ -1488,13 +1543,21 @@ function setupIpcHandlers() {
           // Sync highlight setting to overlay with a small delay to ensure it's ready
           setTimeout(() => {
             if (overlayWindow && !overlayWindow.isDestroyed()) {
-              console.log('[Main] Final highlights sync to overlay:', settings.showClickHighlights);
               overlayWindow.webContents.send("overlay-settings", {
-                showClickHighlights: settings.showClickHighlights
+                showClickHighlights: settings.showClickHighlights,
+                highlightLeftColor: settings.highlightLeftColor || "#FFEB3B",
+                highlightRightColor: settings.highlightRightColor || "#2196F3",
+                highlightRippleSize: settings.highlightRippleSize || 50,
+                highlightRippleSpeed: settings.highlightRippleSpeed || 400,
+                highlightGlowSize: settings.highlightGlowSize || 25,
+                highlightGlowIntensity: settings.highlightGlowIntensity || 30
               });
             }
           }, 200);
         } else if (!recording) {
+          // Stop global click hook
+          setupClickHighlightHook(false);
+          
           // If stopped recording, hide the overlay
           if (overlayWindow && !overlayWindow.isDestroyed()) {
             overlayWindow.hide();

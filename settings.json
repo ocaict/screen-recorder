@@ -5,36 +5,29 @@
   "recordAudio": false,
   "recordSystemAudio": false,
   "selectedMicrophone": "default",
-  "outputDirectory": "",
+  "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
   "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
   "showNotifications": false,
   "autoOpenAfterRecording": false,
-  "recordDirectToMp4": true,
+  "recordDirectToMp4": false,
   "defaultFormat": "mp4",
   "countdown": 5,
   "recentRecordings": [
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_11-16-22.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772274119359.png",
-      "fileName": "Recording_2026-02-28_11-16-22.mp4",
-      "recordedAt": "2026-02-28T10:21:59.818Z",
-      "size": 33551086
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_11-42-36.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772275362543.png",
+      "fileName": "Recording_2026-02-28_11-42-36.mp4",
+      "recordedAt": "2026-02-28T10:42:42.803Z",
+      "size": 296529
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_10-17-01.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772270646025.png",
-      "fileName": "Recording_2026-02-28_10-17-01.mp4",
-      "recordedAt": "2026-02-28T09:24:06.302Z",
-      "size": 50435923
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_10-15-54.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772270165780.png",
-      "fileName": "Recording_2026-02-28_10-15-54.mp4",
-      "recordedAt": "2026-02-28T09:16:06.204Z",
-      "size": 2443115
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_11-40-00.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772275207806.png",
+      "fileName": "Recording_2026-02-28_11-40-00.mp4",
+      "recordedAt": "2026-02-28T10:40:08.091Z",
+      "size": 401087
     }
   ],
   "maxRecentRecordings": 10,
@@ -51,5 +44,5 @@
   "crfValue": 23,
   "videoBitrate": 5,
   "colorFormat": "yuv420p",
-  "nvencPromptDismissed": true
+  "nvencPromptDismissed": false
 }

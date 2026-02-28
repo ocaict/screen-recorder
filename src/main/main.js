@@ -1,5 +1,6 @@
-const { app, BrowserWindow, protocol } = require("electron");
+const { app, BrowserWindow, protocol, net } = require("electron");
 const path = require("path");
+const { pathToFileURL } = require("url");
 const { setupLogger, log } = require("../utils/logger");
 const { loadSettings } = require("../utils/settings");
 const tray = require("./tray");
@@ -13,6 +14,21 @@ app.commandLine.appendSwitch("disable-gpu-compositing");
 
 let mainWindow = null;
 let overlayWindow = null;
+
+// Register thumb:// as a privileged scheme for Electron 40+ compatibility
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "thumb",
+    privileges: {
+      standard: true, // Crucial for proper path/origin handling
+      bypassCSP: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
 
 const isDev = !app.isPackaged;
 const ICON_PATH = isDev
@@ -87,13 +103,41 @@ app.whenReady().then(async () => {
   log("info", "Application starting...");
   log("info", `Running in ${isDev ? "development" : "production"} mode`);
 
-  // Register thumb:// protocol
-  protocol.registerFileProtocol("thumb", (request, callback) => {
-    const url = request.url.replace("thumb://", "");
+  // Register thumb:// protocol using the modern Electron handle API
+  protocol.handle("thumb", (request) => {
     try {
-      return callback(decodeURIComponent(url));
+      const url = new URL(request.url);
+
+      // 1. Combine host and pathname to get the full Windows path
+      // Standard URLs split C:/Users into host='c:' and pathname='/Users'
+      let p = decodeURIComponent(url.host + url.pathname);
+
+      if (process.platform === "win32") {
+        // Remove leading slash if Chromium added one before the drive letter
+        if (p.startsWith("/")) p = p.slice(1);
+
+        // Fix drive letter colon if it was mangled: "c/Users" -> "c:/Users"
+        if (/^[a-zA-Z]\//.test(p)) {
+          p = p[0] + ":" + p.slice(1);
+        }
+      }
+
+      // 2. Normalize for the OS
+      const finalPath = path.normalize(p);
+
+      // 3. Read the file directly
+      const fs = require("fs");
+      if (fs.existsSync(finalPath)) {
+        return new Response(fs.readFileSync(finalPath), {
+          headers: { "Content-Type": "image/png" }
+        });
+      }
+
+      console.warn("Thumbnail file not found:", finalPath);
+      return new Response(null, { status: 404 });
     } catch (error) {
-      console.error("Failed to register protocol", error);
+      console.error("Failed to handle thumb protocol:", error);
+      return new Response(null, { status: 500 });
     }
   });
 

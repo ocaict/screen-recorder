@@ -370,133 +370,170 @@
         <button class="modal-close" id="closeSettingsModal">&times;</button>
       </div>
       <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-        <button class="settings-tab active" data-tab="recording" role="tab" aria-selected="true"
-          aria-controls="tab-recording" id="tab-recording-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
+        <button class="settings-tab active" data-tab="encoder" role="tab" aria-selected="true"
+          aria-controls="tab-encoder" id="tab-encoder-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          Encoder
+        </button>
+        <button class="settings-tab" data-tab="timer" role="tab" aria-selected="false" aria-controls="tab-timer"
+          id="tab-timer-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="3" fill="currentColor" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
-          Recording
+          Timer
         </button>
-        <button class="settings-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="tab-advanced"
-          id="tab-advanced-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        <button class="settings-tab" data-tab="experience" role="tab" aria-selected="false"
+          aria-controls="tab-experience" id="tab-experience-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <path d="M8 21h8" />
+            <path d="M12 17v4" />
           </svg>
-          Advanced
+          Experience
         </button>
-        <button class="settings-tab" data-tab="save" role="tab" aria-selected="false" aria-controls="tab-save"
-          id="tab-save-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
+        <button class="settings-tab" data-tab="shortcuts" role="tab" aria-selected="false" aria-controls="tab-shortcuts"
+          id="tab-shortcuts-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" />
           </svg>
-          Save
+          Shortcuts
         </button>
-        <button class="settings-tab" data-tab="general" role="tab" aria-selected="false" aria-controls="tab-general"
-          id="tab-general-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        <button class="settings-tab" data-tab="history" role="tab" aria-selected="false" aria-controls="tab-history"
+          id="tab-history-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
-          General
+          History
         </button>
       </div>
       <div class="modal-body">
-        <div class="settings-form tab-content active" id="tab-recording" role="tabpanel"
-          aria-labelledby="tab-recording-btn">
-          <div class="form-group">
-            <label for="settingsQuality">Video Quality</label>
-            <select id="settingsQuality" class="form-select">
-              <option value="low">Low (Smaller file)</option>
-              <option value="medium">Medium</option>
-              <option value="high">High (Recommended)</option>
-              <option value="ultra">Ultra (Best quality)</option>
-            </select>
+        <!-- ENCODER TAB -->
+        <div class="settings-form tab-content active" id="tab-encoder" role="tabpanel"
+          aria-labelledby="tab-encoder-btn">
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 7l-7 5 7 5V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              Standard Output
+            </h4>
+            <div class="form-group">
+              <label for="settingsResolution">Resolution</label>
+              <select id="settingsResolution" class="form-select">
+                <option value="native">Native (Raw Capture)</option>
+                <option value="1280x720">720p (1280x720)</option>
+                <option value="1920x1080">1080p (1920x1080)</option>
+                <option value="2560x1440">1440p (2560x1440)</option>
+                <option value="3840x2160">4K (3840x2160)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsFrameRate">Frame Rate</label>
+              <select id="settingsFrameRate" class="form-select">
+                <option value="24">24 fps</option>
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsFormat">Video Format</label>
+              <select id="settingsFormat" class="form-select">
+                <option value="mp4">MP4 (Recommended)</option>
+                <option value="webm">WebM (Raw chunks)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsQuality">Quick Quality Preset</label>
+              <select id="settingsQuality" class="form-select">
+                <option value="low">Low (Smaller file)</option>
+                <option value="medium">Medium</option>
+                <option value="high">High (Recommended)</option>
+                <option value="ultra">Ultra (Best quality)</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="settingsFrameRate">Frame Rate</label>
-            <select id="settingsFrameRate" class="form-select">
-              <option value="24">24 fps</option>
-              <option value="30">30 fps</option>
-              <option value="60">60 fps</option>
-            </select>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              </svg>
+              Advanced Encoder
+            </h4>
+            <div class="form-group">
+              <label for="settingsVideoCodec">Video Codec</label>
+              <select id="settingsVideoCodec" class="form-select">
+                <option value="libx264">H.264 (Maximum Compatibility)</option>
+                <option value="libx265">H.265 / HEVC (Efficiency)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsQualityControl">Quality Control Method</label>
+              <select id="settingsQualityControl" class="form-select">
+                <option value="crf">CRF (Constant Quality)</option>
+                <option value="vbr">VBR (Variable Bitrate)</option>
+              </select>
+            </div>
+            <div class="form-group" id="crfControlGroup">
+              <label for="settingsCrfValue">CRF Level (0 - 51) <span id="crfValueDisplay">23</span></label>
+              <input type="range" id="settingsCrfValue" class="form-range" min="0" max="51" value="23" step="1">
+            </div>
+            <div class="form-group" id="vbrControlGroup" style="display:none;">
+              <label for="settingsVideoBitrate">Video Bitrate (Mbps) <span id="vbrValueDisplay">5</span></label>
+              <input type="range" id="settingsVideoBitrate" class="form-range" min="1" max="50" value="5" step="1">
+            </div>
+            <div class="form-group">
+              <label for="settingsCompression">FFmpeg Preset</label>
+              <select id="settingsCompression" class="form-select">
+                <option value="maximum">Ultrafast (Lower CPU)</option>
+                <option value="balanced">Medium (Balanced)</option>
+                <option value="quality">Veryslow (Better compression)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="settingsColorFormat">Color Format</label>
+              <select id="settingsColorFormat" class="form-select">
+                <option value="yuv420p">4:2:0 (Compatible - Default)</option>
+                <option value="yuv444p">4:4:4 (Crisp Text)</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="settingsResolution">Resolution</label>
-            <select id="settingsResolution" class="form-select">
-              <option value="native">Native (Raw Capture)</option>
-              <option value="1280x720">720p (1280x720)</option>
-              <option value="1920x1080">1080p (1920x1080)</option>
-              <option value="2560x1440">1440p (2560x1440)</option>
-              <option value="3840x2160">4K (3840x2160)</option>
-            </select>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              Hardware & Performance
+            </h4>
+            <div class="form-group">
+              <label for="settingsHardwareAcceleration">Hardware Encoder</label>
+              <select id="settingsHardwareAcceleration" class="form-select">
+                <option value="none">None (Software)</option>
+                <option value="nvenc">NVIDIA NVENC</option>
+                <option value="qsv">Intel QSV</option>
+                <option value="amf">AMD AMF</option>
+              </select>
+              <div class="form-note" id="hardwareInfo"></div>
+              <button type="button" class="btn" id="autoSelectNvenc" style="margin-top:8px;display:none">Auto-select
+                NVENC</button>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsRecordDirectToMp4" checked>
+                Real-time MP4 Encoding
+              </label>
+            </div>
           </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsRecordAudio" checked>
-              Record Microphone
-            </label>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsRecordSystemAudio">
-              Record System Audio
-            </label>
-            <p class="form-hint">Capture sound playing on your computer</p>
-          </div>
-          <div class="form-group" id="audioDeviceGroup">
-            <label for="settingsMicrophone">Microphone</label>
-            <select id="settingsMicrophone" class="form-select">
-              <option value="default">Default Microphone</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsWebcam">
-              Enable Webcam Overlay
-            </label>
-          </div>
-          <div class="form-group" id="webcamSettingsGroup" style="display: none; margin-left: 20px;">
-            <label for="settingsCamera">Camera</label>
-            <select id="settingsCamera" class="form-select">
-              <option value="default">Default Camera</option>
-            </select>
-          </div>
-          <div class="form-group" id="webcamPositionGroup" style="display: none; margin-left: 20px;">
-            <label for="settingsWebcamPosition">Webcam Position</label>
-            <select id="settingsWebcamPosition" class="form-select">
-              <option value="bottom-right">Bottom Right</option>
-              <option value="bottom-left">Bottom Left</option>
-              <option value="top-right">Top Right</option>
-              <option value="top-left">Top Left</option>
-            </select>
-          </div>
-          <div class="form-group" id="webcamSizeGroup" style="display: none; margin-left: 20px;">
-            <label for="settingsWebcamSize">Webcam Size</label>
-            <select id="settingsWebcamSize" class="form-select">
-              <option value="small">Small (120px)</option>
-              <option value="medium">Medium (180px)</option>
-              <option value="large">Large (240px)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="settingsCountdown">Countdown</label>
-            <select id="settingsCountdown" class="form-select">
-              <option value="0">No countdown</option>
-              <option value="3">3 seconds</option>
-              <option value="5">5 seconds</option>
-              <option value="10">10 seconds</option>
-            </select>
-          </div>
+
           <div class="form-group">
             <label>Estimated File Size</label>
             <div class="file-size-preview" id="fileSizePreview">
@@ -506,59 +543,18 @@
           </div>
         </div>
 
-        <div class="settings-form tab-content" id="tab-advanced" role="tabpanel" aria-labelledby="tab-advanced-btn">
-          <div class="settings-section">
-            <h4 class="settings-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 7l-7 5 7 5V7z" />
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-              </svg>
-              Encoder Settings
-            </h4>
-            <div class="form-group">
-              <label for="settingsVideoCodec">Video Codec</label>
-              <select id="settingsVideoCodec" class="form-select">
-                <option value="libx264">H.264 (Maximum Compatibility)</option>
-                <option value="libx265">H.265 / HEVC (Best Quality/Size Ratio)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="settingsQualityControl">Quality Control Method</label>
-              <select id="settingsQualityControl" class="form-select">
-                <option value="crf">CRF (Constant Quality - Recommended)</option>
-                <option value="vbr">VBR (Variable Bitrate)</option>
-              </select>
-            </div>
-            <div class="form-group" id="crfControlGroup">
-              <label for="settingsCrfValue">CRF Level (0 - 51) <span id="crfValueDisplay">23</span></label>
-              <input type="range" id="settingsCrfValue" class="form-range" min="0" max="51" value="23" step="1">
-              <p class="form-hint" style="margin-top:4px;">Lower is better quality. 18 is visually lossless. 23 is
-                default.</p>
-            </div>
-            <div class="form-group" id="vbrControlGroup" style="display:none;">
-              <label for="settingsVideoBitrate">Video Bitrate (Mbps) <span id="vbrValueDisplay">5</span></label>
-              <input type="range" id="settingsVideoBitrate" class="form-range" min="1" max="50" value="5" step="1">
-              <p class="form-hint" style="margin-top:4px;">Higher is better quality but larger file size.</p>
-            </div>
-            <div class="form-group">
-              <label for="settingsColorFormat">Color Format (Chroma Subsampling)</label>
-              <select id="settingsColorFormat" class="form-select">
-                <option value="yuv420p">4:2:0 (Compatible - Default)</option>
-                <option value="yuv444p">4:4:4 (Crisp Text / Coding - Larger File)</option>
-              </select>
-            </div>
-          </div>
-
+        <!-- TIMER TAB -->
+        <div class="settings-form tab-content" id="tab-timer" role="tabpanel" aria-labelledby="tab-timer-btn">
           <div class="settings-section">
             <h4 class="settings-section-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-              Timer & Schedule
+              Duration & Limits
             </h4>
             <div class="form-group">
-              <label for="settingsTimerPreset">Recording Duration</label>
+              <label for="settingsTimerPreset">Auto-stop Duration</label>
               <select id="settingsTimerPreset" class="form-select">
                 <option value="0">No limit (∞)</option>
                 <option value="5">5 minutes</option>
@@ -574,38 +570,84 @@
               <label for="settingsCustomTimer">Custom Duration (minutes)</label>
               <input type="number" id="settingsCustomTimer" class="form-input" min="1" max="480" value="45">
             </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              Scheduled Recording
+            </h4>
             <div class="form-group">
               <label>
                 <input type="checkbox" id="settingsScheduledRecording">
-                Scheduled Recording
+                Enable Scheduled Recording
               </label>
-              <p class="form-hint">Automatically start recording at a specific time</p>
             </div>
             <div class="form-group" id="scheduleTimeGroup" style="display: none;">
               <label for="settingsScheduleTime">Start Time</label>
               <input type="time" id="settingsScheduleTime" class="form-input" value="09:00">
             </div>
           </div>
+        </div>
 
+        <!-- EXPERIENCE TAB -->
+        <div class="settings-form tab-content" id="tab-experience" role="tabpanel" aria-labelledby="tab-experience-btn">
           <div class="settings-section">
             <h4 class="settings-section-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3" />
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
-              Recording Experience
+              Audio & Devices
             </h4>
             <div class="form-group">
               <label>
-                <input type="checkbox" id="settingsCountdownSound" checked>
-                Countdown Sound
+                <input type="checkbox" id="settingsRecordAudio" checked>
+                Record Microphone
+              </label>
+            </div>
+            <div class="form-group" id="audioDeviceGroup">
+              <label for="settingsMicrophone">Microphone Source</label>
+              <select id="settingsMicrophone" class="form-select">
+                <option value="default">Default Microphone</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsRecordSystemAudio">
+                Record System Audio
               </label>
             </div>
             <div class="form-group">
               <label>
-                <input type="checkbox" id="settingsAutoHideUI" checked>
-                Auto-hide UI During Recording
+                <input type="checkbox" id="settingsWebcam">
+                Enable Webcam Overlay
               </label>
-              <p class="form-hint">Hide controls and sidebar for cleaner recording</p>
+            </div>
+            <div class="form-group" id="webcamSettingsGroup" style="display: none; margin-left: 20px;">
+              <select id="settingsCamera" class="form-select">
+                <option value="default">Default Camera</option>
+              </select>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <select id="settingsWebcamPosition" class="form-select" style="margin-top:0">
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="top-left">Top Left</option>
+                </select>
+                <select id="settingsWebcamSize" class="form-select" style="margin-top:0">
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -613,31 +655,137 @@
             <h4 class="settings-section-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
+                <path d="M8 21h8" />
+                <path d="M12 17v4" />
               </svg>
-              Keyboard Shortcuts
+              UI Behavior
             </h4>
-            <button type="button" class="btn" id="showShortcutsBtn" style="width: 100%;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="margin-right: 8px;">
-                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
-                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" />
-              </svg>
-              View All Shortcuts
-            </button>
+            <div class="form-group">
+              <label for="settingsCountdown">Countdown Duration</label>
+              <select id="settingsCountdown" class="form-select">
+                <option value="0">Instant Start</option>
+                <option value="3">3 seconds</option>
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsCountdownSound" checked>
+                Countdown Sound Beep
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsAutoHideUI" checked>
+                Auto-hide UI During Recording
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsHideWindow" checked>
+                Minimize Window on Start
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsShowNotifications" checked>
+                Show Push Notifications
+              </label>
+            </div>
           </div>
 
           <div class="settings-section">
             <h4 class="settings-section-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
               </svg>
-              Recording History Stats
+              Storage & Saving
             </h4>
-            <div class="stats-grid" id="recordingStats">
+            <div class="form-group">
+              <label for="settingsOutputDir">Output Directory</label>
+              <div class="input-with-button">
+                <input type="text" id="settingsOutputDir" class="form-input" readonly>
+                <button type="button" class="btn" id="browseOutputDir">Browse</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="settingsFilenamePattern">Filename Pattern</label>
+              <select id="settingsFilenamePattern" class="form-select">
+                <option value="Recording_{date}_{time}">Recording_{date}_{time}</option>
+                <option value="Video_{date}_{time}">Video_{date}_{time}</option>
+                <option value="{date}_{time}">{date}_{time}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsAutoSave">
+                Auto-save (Skip naming step)
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsAutoOpen" checked>
+                Auto-open Video after Save
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- SHORTCUTS TAB -->
+        <div class="settings-form tab-content" id="tab-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" />
+              </svg>
+              Global Shortcut
+            </h4>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsShortcut" checked>
+                Enable Start/Stop Hotkey
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="settingsShortcutKey">Hotkey Combination</label>
+              <select id="settingsShortcutKey" class="form-select">
+                <option value="F9">F9 (Recommended)</option>
+                <option value="F10">F10</option>
+                <option value="F11">F11</option>
+                <option value="F12">F12</option>
+                <option value="CommandOrControl+Shift+R">Ctrl+Shift+R</option>
+              </select>
+              <p class="form-hint">Works even when the app is in the background</p>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+              Shortcut Reference
+            </h4>
+            <button type="button" class="btn" id="showShortcutsBtn" style="width: 100%;">
+              View All Application Shortcuts
+            </button>
+          </div>
+        </div>
+
+        <!-- HISTORY TAB -->
+        <div class="settings-form tab-content" id="tab-history" role="tabpanel" aria-labelledby="tab-history-btn">
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              </svg>
+              Usage Statistics
+            </h4>
+            <div class="stats-grid">
               <div class="stat-card">
                 <span class="stat-number" id="totalRecordings">0</span>
                 <span class="stat-label">Total Recordings</span>
@@ -652,112 +800,15 @@
               </div>
             </div>
           </div>
-        </div>
+        </div> <!-- End of History Tab -->
+      </div> <!-- End of Modal Body (Scrollable) -->
 
-        <div class="settings-form tab-content" id="tab-save" role="tabpanel" aria-labelledby="tab-save-btn">
-          <div class="form-group">
-            <label for="settingsOutputDir">Output Directory</label>
-            <div class="input-with-button">
-              <input type="text" id="settingsOutputDir" class="form-input" placeholder="Default: Videos folder">
-              <button type="button" class="btn" id="browseOutputDir"
-                aria-label="Browse for output directory">Browse</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="settingsFormat">Video Format</label>
-            <select id="settingsFormat" class="form-select">
-              <option value="mp4">MP4 (Recommended - better compatibility)</option>
-              <option value="webm">WebM (Smaller file, no conversion needed)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsRecordDirectToMp4" checked>
-              Real-time MP4 Encoding (bypasses conversion, uses more CPU)
-            </label>
-          </div>
-          <div class="form-group">
-            <label for="settingsFilenamePattern">Filename Pattern</label>
-            <select id="settingsFilenamePattern" class="form-select">
-              <option value="Recording_{date}_{time}">Recording_{date}_{time}</option>
-              <option value="Video_{date}_{time}">Video_{date}_{time}</option>
-              <option value="Tutorial_{date}_{time}">Tutorial_{date}_{time}</option>
-              <option value="{date}_{time}">{date}_{time}</option>
-              <option value="Recording_{timestamp}">Recording_{timestamp}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="settingsCompression">Compression</label>
-            <select id="settingsCompression" class="form-select">
-              <option value="maximum">Maximum Compression (Smallest file)</option>
-              <option value="balanced">Balanced (Recommended)</option>
-              <option value="quality">Quality (Best quality, larger file)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="settingsHardwareAcceleration">Hardware Acceleration</label>
-            <select id="settingsHardwareAcceleration" class="form-select">
-              <option value="none">None (Software Encoding)</option>
-              <option value="nvenc">NVIDIA NVENC</option>
-              <option value="qsv">Intel Quick Sync Video (QSV)</option>
-              <option value="amf">AMD AMF</option>
-            </select>
-            <div class="form-note" id="hardwareInfo"></div>
-            <button type="button" class="btn" id="autoSelectNvenc" style="margin-top:8px;display:none">Auto-select
-              NVENC</button>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsAutoSave">
-              Auto-save (skip save dialog)
-            </label>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsAutoOpen" checked>
-              Auto-open after recording
-            </label>
-          </div>
-        </div>
-
-        <div class="settings-form tab-content" id="tab-general" role="tabpanel" aria-labelledby="tab-general-btn">
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsHideWindow" checked>
-              Hide Window During Recording
-            </label>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsShortcut" checked>
-              Enable Global Shortcut
-            </label>
-          </div>
-          <div class="form-group">
-            <label for="settingsShortcutKey">Shortcut Key</label>
-            <select id="settingsShortcutKey" class="form-select">
-              <option value="F9">F9</option>
-              <option value="F10">F10</option>
-              <option value="F11">F11</option>
-              <option value="F12">F12</option>
-              <option value="CommandOrControl+Shift+R">Ctrl+Shift+R</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="settingsShowNotifications" checked>
-              Show Notifications
-            </label>
-          </div>
-        </div>
-
-        <div class="settings-actions">
-          <button type="button" class="btn" id="resetSettingsBtn">Reset to Defaults</button>
-          <button class="save-settings-btn" id="saveSettingsBtn">Save Settings</button>
-        </div>
+      <div class="settings-actions">
+        <button type="button" class="btn" id="resetSettingsBtn">Reset to Defaults</button>
+        <button class="save-settings-btn" id="saveSettingsBtn">Save Settings</button>
       </div>
-    </div>
-  </div>
+    </div> <!-- End of Modal Content -->
+  </div> <!-- End of Settings Modal -->
 
   <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="nvencPrompt" class="nvenc-prompt" role="alert" aria-live="polite">

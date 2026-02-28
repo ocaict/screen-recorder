@@ -2,19 +2,26 @@
   "videoQuality": "high",
   "frameRate": 24,
   "resolution": "native",
-  "recordAudio": true,
-  "recordSystemAudio": true,
+  "recordAudio": false,
+  "recordSystemAudio": false,
   "selectedMicrophone": "default",
-  "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
-  "shortcutEnabled": true,
+  "outputDirectory": "",
+  "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
-  "showNotifications": true,
+  "showNotifications": false,
   "autoOpenAfterRecording": false,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
   "countdown": 5,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_11-16-22.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772274119359.png",
+      "fileName": "Recording_2026-02-28_11-16-22.mp4",
+      "recordedAt": "2026-02-28T10:21:59.818Z",
+      "size": 33551086
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_10-17-01.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772270646025.png",
@@ -32,7 +39,7 @@
   ],
   "maxRecentRecordings": 10,
   "filenamePattern": "Recording_{date}_{time}",
-  "autoSave": true,
+  "autoSave": false,
   "compression": "balanced",
   "hardwareAcceleration": "none",
   "webcamEnabled": false,
@@ -41,8 +48,8 @@
   "webcamSize": "medium",
   "videoCodec": "libx264",
   "qualityControl": "crf",
-  "crfValue": 20,
+  "crfValue": 23,
   "videoBitrate": 5,
   "colorFormat": "yuv420p",
-  "nvencPromptDismissed": false
+  "nvencPromptDismissed": true
 }

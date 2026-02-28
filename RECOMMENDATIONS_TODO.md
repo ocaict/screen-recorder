@@ -41,3 +41,8 @@
     - ✅ Audio-video sync (captured together)
     - ✅ Lower CPU usage
     - ✅ More reliable recording
+- [x] **Advanced Encoder Settings**: Added granular control for video quality and performance.
+    - ✅ H.264 & H.265 (HEVC) Support
+    - ✅ CRF (Constant Quality) & VBR (Variable Bitrate) modes
+    - ✅ Chroma Subsampling options (4:2:0 vs 4:4:4)
+- [x] **Native Resolution Capture**: Ability to record at the display's original resolution without downscaling.

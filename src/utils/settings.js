@@ -5,7 +5,7 @@ const { app } = require("electron");
 let settings = {
   videoQuality: "high",
   frameRate: 24,
-  resolution: "1920x1080",
+  resolution: "native",
   recordAudio: true,
   recordSystemAudio: false,
   selectedMicrophone: "default",
@@ -28,6 +28,11 @@ let settings = {
   selectedCamera: "default",
   webcamPosition: "bottom-right",
   webcamSize: "medium",
+  videoCodec: "libx264",
+  qualityControl: "crf",
+  crfValue: 23,
+  videoBitrate: 5,
+  colorFormat: "yuv420p",
 };
 
 let settingsFile = null;
@@ -99,7 +104,7 @@ function resetSettings() {
   settings = {
     videoQuality: "high",
     frameRate: 24,
-    resolution: "1920x1080",
+    resolution: "native",
     recordAudio: true,
     recordSystemAudio: false,
     selectedMicrophone: "default",
@@ -118,6 +123,11 @@ function resetSettings() {
     autoSave: true,
     compression: "balanced",
     hardwareAcceleration: "none",
+    videoCodec: "libx264",
+    qualityControl: "crf",
+    crfValue: 23,
+    videoBitrate: 5,
+    colorFormat: "yuv420p",
   };
   saveSettings(settings);
   return settings;

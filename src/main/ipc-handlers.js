@@ -351,36 +351,69 @@ function setupIpcHandlers() {
         const ffmpegModule = require("../utils/ffmpeg");
         const ffmpegPath = ffmpegModule.getSystemFfmpegPath() || "ffmpeg";
 
-        // Quality settings
-        let crf = 23;
-        if (settings.videoQuality === "medium") crf = 26;
-        if (settings.videoQuality === "low") crf = 30;
-
+        // Advanced Encoder Settings integration
         const hwAccel = settings.hardwareAcceleration || "none";
-        let v_codec = "libx264";
+        const preferredCodec = settings.videoCodec || "libx264";
+        const qualityMode = settings.qualityControl || "crf";
+        const selectedCrf = settings.crfValue !== undefined ? settings.crfValue : 23;
+        const selectedBitrate = (settings.videoBitrate || 5) + "M";
+        const colorFmt = settings.colorFormat || "yuv420p";
+
+        let v_codec = preferredCodec;
         let v_options = [];
 
         // Dynamic Hardware Encoder Selection
         try {
           const encoders = await ffmpegModule.getAvailableEncoders();
           if (hwAccel !== "none") {
-            if ((hwAccel === "nvenc" || hwAccel === "auto") && encoders.nvenc && encoders.nvenc.h264) {
-              v_codec = "h264_nvenc";
-              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", crf.toString()];
-            } else if ((hwAccel === "qsv" || hwAccel === "auto") && encoders.qsv && encoders.qsv.h264) {
-              v_codec = "h264_qsv";
-              v_options = ["-preset", "balanced", "-global_quality", crf.toString()];
-            } else if ((hwAccel === "amf" || hwAccel === "auto") && encoders.amf && encoders.amf.h264) {
-              v_codec = "h264_amf";
-              v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
+            const isHevc = preferredCodec === "libx265";
+            if ((hwAccel === "nvenc" || hwAccel === "auto")) {
+              if (isHevc && encoders.nvenc && encoders.nvenc.hevc) {
+                v_codec = "hevc_nvenc";
+              } else if (encoders.nvenc && encoders.nvenc.h264) {
+                v_codec = "h264_nvenc";
+              }
+              if (v_codec.includes("nvenc")) {
+                v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString()];
+              }
+            } else if ((hwAccel === "qsv" || hwAccel === "auto")) {
+              if (isHevc && encoders.qsv && encoders.qsv.hevc) {
+                v_codec = "hevc_qsv";
+              } else if (encoders.qsv && encoders.qsv.h264) {
+                v_codec = "h264_qsv";
+              }
+              if (v_codec.includes("qsv")) {
+                v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString()];
+              }
+            } else if ((hwAccel === "amf" || hwAccel === "auto")) {
+              if (isHevc && encoders.amf && encoders.amf.hevc) {
+                v_codec = "hevc_amf";
+              } else if (encoders.amf && encoders.amf.h264) {
+                v_codec = "h264_amf";
+              }
+              if (v_codec.includes("amf")) {
+                v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
+              }
             }
           }
         } catch (encErr) {
           log("warn", `Could not query encoders: ${encErr.message}`);
         }
 
-        if (v_codec === "libx264") {
-          v_options = ["-preset", "ultrafast", "-tune", "zerolatency", "-crf", crf.toString(), "-maxrate", "5M", "-bufsize", "10M"];
+        // Apply visual settings based on selected codec and quality mode
+        if (v_codec === "libx264" || v_codec === "libx265") {
+          v_options = ["-preset", "ultrafast", "-tune", "zerolatency"];
+          if (qualityMode === "crf") {
+            v_options.push("-crf", selectedCrf.toString());
+          } else {
+            v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
+          }
+          if (v_codec === "libx265") v_options.push("-vtag", "hvc1");
+        } else {
+          // Hardware encoders specific adjustments for bitrate mode
+          if (qualityMode === "vbr") {
+            v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
+          }
         }
 
         // Resolve output path
@@ -412,7 +445,7 @@ function setupIpcHandlers() {
           "-r", String(settings.frameRate || 24),
           "-c:a", "aac",
           "-b:a", "128k",
-          "-pix_fmt", "yuv420p",
+          "-pix_fmt", colorFmt,
           "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
           "-y",
           finalPath
@@ -434,7 +467,7 @@ function setupIpcHandlers() {
             // Hardware encoder or EBML parse failure → retry with software
             if (
               !hasFailedPrematurely &&
-              v_codec !== "libx264" &&
+              !v_codec.startsWith("libx") &&
               (msg.includes("Driver does not support") ||
                 msg.includes("Error while opening encoder") ||
                 msg.includes("EBML header parsing failed"))
@@ -447,7 +480,7 @@ function setupIpcHandlers() {
               const vIdx = swArgs.indexOf("-c:v");
               if (vIdx !== -1) {
                 swArgs[vIdx + 1] = "libx264";
-                swArgs.splice(vIdx + 2, v_options.length, "-preset", "ultrafast", "-tune", "zerolatency", "-crf", crf.toString());
+                swArgs.splice(vIdx + 2, v_options.length, "-preset", "ultrafast", "-tune", "zerolatency", "-crf", selectedCrf.toString());
               }
               ffmpegProcess = spawn(ffmpegPath, swArgs);
               setupHandlers(ffmpegProcess, true);
@@ -971,11 +1004,11 @@ function setupIpcHandlers() {
       frameRate: [24, 30, 60].includes(newSettings.frameRate)
         ? newSettings.frameRate
         : 24,
-      resolution: ["1280x720", "1920x1080", "2560x1440", "3840x2160"].includes(
+      resolution: ["native", "1280x720", "1920x1080", "2560x1440", "3840x2160"].includes(
         newSettings.resolution,
       )
         ? newSettings.resolution
-        : "1920x1080",
+        : "native",
       recordAudio: Boolean(newSettings.recordAudio),
       recordSystemAudio: Boolean(newSettings.recordSystemAudio),
       selectedMicrophone: newSettings.selectedMicrophone || "default",
@@ -1026,6 +1059,21 @@ function setupIpcHandlers() {
       webcamSize: ["small", "medium", "large"].includes(newSettings.webcamSize)
         ? newSettings.webcamSize
         : "medium",
+      videoCodec: ["libx264", "libx265"].includes(newSettings.videoCodec)
+        ? newSettings.videoCodec
+        : "libx264",
+      qualityControl: ["crf", "vbr"].includes(newSettings.qualityControl)
+        ? newSettings.qualityControl
+        : "crf",
+      crfValue: Number.isInteger(newSettings.crfValue) && newSettings.crfValue >= 0 && newSettings.crfValue <= 51
+        ? newSettings.crfValue
+        : 23,
+      videoBitrate: Number.isInteger(newSettings.videoBitrate) && newSettings.videoBitrate >= 1 && newSettings.videoBitrate <= 50
+        ? newSettings.videoBitrate
+        : 5,
+      colorFormat: ["yuv420p", "yuv444p"].includes(newSettings.colorFormat)
+        ? newSettings.colorFormat
+        : "yuv420p",
     };
 
     saveSettings(validatedSettings);

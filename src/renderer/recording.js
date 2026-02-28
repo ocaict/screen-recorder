@@ -97,24 +97,29 @@ class RecordingManager {
       this.selectedSource = source;
       this.stopCurrentStream();
 
-      const resolution = this.app.settings.resolution || "1920x1080";
-      const [width, height] = resolution.split("x").map(Number);
+      const resolution = this.app.settings.resolution || "native";
       const frameRate = this.app.settings.frameRate || 30;
+
+      const videoConstraints = {
+        mandatory: {
+          chromeMediaSource: "desktop",
+          chromeMediaSourceId: source.id,
+          minFrameRate: frameRate,
+          maxFrameRate: frameRate,
+        }
+      };
+
+      if (resolution !== "native") {
+        const [width, height] = resolution.split("x").map(Number);
+        videoConstraints.mandatory.minWidth = width;
+        videoConstraints.mandatory.maxWidth = width;
+        videoConstraints.mandatory.minHeight = height;
+        videoConstraints.mandatory.maxHeight = height;
+      }
 
       try {
         this.videoStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            mandatory: {
-              chromeMediaSource: "desktop",
-              chromeMediaSourceId: source.id,
-              minWidth: width,
-              maxWidth: width,
-              minHeight: height,
-              maxHeight: height,
-              minFrameRate: frameRate,
-              maxFrameRate: frameRate,
-            },
-          },
+          video: videoConstraints,
           audio: false,
         });
       } catch (streamErr) {
@@ -669,7 +674,9 @@ class RecordingManager {
             ? "1440p"
             : resolution === "3840x2160"
               ? "4K"
-              : resolution;
+              : resolution === "native"
+                ? "Native"
+                : resolution;
 
     const estimatedFps = frameRate;
     const sizeStr = this.app.formatFileSize(this.recordedBytes);

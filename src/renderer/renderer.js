@@ -301,6 +301,20 @@ class ScreenRecorder {
         document.getElementById("settingsShortcutKey").value = "F9";
         document.getElementById("settingsShortcutKey").disabled = false;
         document.getElementById("settingsShowNotifications").checked = true;
+
+        if (document.getElementById("settingsVideoCodec")) {
+          document.getElementById("settingsVideoCodec").value = "libx264";
+          document.getElementById("settingsQualityControl").value = "crf";
+          document.getElementById("settingsCrfValue").value = 23;
+          if (document.getElementById("crfValueDisplay")) document.getElementById("crfValueDisplay").textContent = "23";
+          document.getElementById("settingsVideoBitrate").value = 5;
+          if (document.getElementById("vbrValueDisplay")) document.getElementById("vbrValueDisplay").textContent = "5";
+          document.getElementById("settingsColorFormat").value = "yuv420p";
+
+          if (document.getElementById("crfControlGroup")) document.getElementById("crfControlGroup").style.display = "block";
+          if (document.getElementById("vbrControlGroup")) document.getElementById("vbrControlGroup").style.display = "none";
+        }
+
         this.updateFileSizeEstimate();
 
         try {
@@ -337,6 +351,35 @@ class ScreenRecorder {
           el.style.display = e.target.checked ? "block" : "none";
         });
       });
+
+    const qualityControlSelect = document.getElementById("settingsQualityControl");
+    const crfGroup = document.getElementById("crfControlGroup");
+    const vbrGroup = document.getElementById("vbrControlGroup");
+    const crfInput = document.getElementById("settingsCrfValue");
+    const vbrInput = document.getElementById("settingsVideoBitrate");
+    const crfDisplay = document.getElementById("crfValueDisplay");
+    const vbrDisplay = document.getElementById("vbrValueDisplay");
+
+    if (qualityControlSelect) {
+      qualityControlSelect.addEventListener("change", (e) => {
+        if (crfGroup && vbrGroup) {
+          crfGroup.style.display = e.target.value === "crf" ? "block" : "none";
+          vbrGroup.style.display = e.target.value === "vbr" ? "block" : "none";
+        }
+      });
+    }
+
+    if (crfInput && crfDisplay) {
+      crfInput.addEventListener("input", (e) => {
+        crfDisplay.textContent = e.target.value;
+      });
+    }
+
+    if (vbrInput && vbrDisplay) {
+      vbrInput.addEventListener("input", (e) => {
+        vbrDisplay.textContent = e.target.value;
+      });
+    }
 
     if (this.hwAutoBtn) {
       this.hwAutoBtn.addEventListener("click", async () => {
@@ -901,7 +944,8 @@ class ScreenRecorder {
     const recordAudio =
       document.getElementById("settingsRecordAudio")?.checked !== false;
 
-    const [width, height] = resolution.split("x").map(Number);
+    const parseRes = resolution === "native" ? "1920x1080" : resolution;
+    const [width, height] = parseRes.split("x").map(Number);
     const pixels = width * height;
     const pixelsPerSecond = pixels * frameRate;
 
@@ -952,7 +996,9 @@ class ScreenRecorder {
             ? "1440p"
             : resolution === "3840x2160"
               ? "4K"
-              : resolution;
+              : resolution === "native"
+                ? "Native"
+                : resolution;
 
     const qualityLabel = quality.charAt(0).toUpperCase() + quality.slice(1);
 
@@ -1273,6 +1319,36 @@ class ScreenRecorder {
     document.getElementById("settingsShowNotifications").checked =
       this.settings.showNotifications !== false;
 
+    // Advanced Settings
+    if (document.getElementById("settingsVideoCodec")) {
+      document.getElementById("settingsVideoCodec").value = this.settings.videoCodec || "libx264";
+    }
+    if (document.getElementById("settingsQualityControl")) {
+      document.getElementById("settingsQualityControl").value = this.settings.qualityControl || "crf";
+
+      const crfGroup = document.getElementById("crfControlGroup");
+      const vbrGroup = document.getElementById("vbrControlGroup");
+      if (crfGroup && vbrGroup) {
+        crfGroup.style.display = (this.settings.qualityControl || "crf") === "crf" ? "block" : "none";
+        vbrGroup.style.display = (this.settings.qualityControl || "crf") === "vbr" ? "block" : "none";
+      }
+    }
+    if (document.getElementById("settingsCrfValue")) {
+      document.getElementById("settingsCrfValue").value = this.settings.crfValue || 23;
+      if (document.getElementById("crfValueDisplay")) {
+        document.getElementById("crfValueDisplay").textContent = this.settings.crfValue || 23;
+      }
+    }
+    if (document.getElementById("settingsVideoBitrate")) {
+      document.getElementById("settingsVideoBitrate").value = this.settings.videoBitrate || 5;
+      if (document.getElementById("vbrValueDisplay")) {
+        document.getElementById("vbrValueDisplay").textContent = this.settings.videoBitrate || 5;
+      }
+    }
+    if (document.getElementById("settingsColorFormat")) {
+      document.getElementById("settingsColorFormat").value = this.settings.colorFormat || "yuv420p";
+    }
+
     this.loadAudioDevicesForSettings();
     this.updateHardwareAccelerationOptions();
     this.updateFileSizeEstimate();
@@ -1531,6 +1607,11 @@ class ScreenRecorder {
         document.getElementById("settingsCamera")?.value || "default",
       webcamPosition: document.getElementById("settingsWebcamPosition").value,
       webcamSize: document.getElementById("settingsWebcamSize").value,
+      videoCodec: document.getElementById("settingsVideoCodec")?.value || "libx264",
+      qualityControl: document.getElementById("settingsQualityControl")?.value || "crf",
+      crfValue: parseInt(document.getElementById("settingsCrfValue")?.value) || 23,
+      videoBitrate: parseInt(document.getElementById("settingsVideoBitrate")?.value) || 5,
+      colorFormat: document.getElementById("settingsColorFormat")?.value || "yuv420p",
     };
 
     try {

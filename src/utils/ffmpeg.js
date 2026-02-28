@@ -203,6 +203,12 @@ async function convertVideo(inputPath, outputPath, onProgress) {
     }
 
     const hwAccel = settings.hardwareAcceleration || "none";
+    const preferredCodec = settings.videoCodec || "libx264";
+    const qualityMode = settings.qualityControl || "crf";
+    const selectedCrf = settings.crfValue !== undefined ? settings.crfValue : crf;
+    const selectedBitrate = (settings.videoBitrate || 5) + "M";
+    const colorFmt = settings.colorFormat || "yuv420p";
+
     let useHwEncoder = false;
     let selectedEncoder = null;
     let cmd = ffmpeg(inputPath);
@@ -210,22 +216,12 @@ async function convertVideo(inputPath, outputPath, onProgress) {
     if (hwAccel !== "none") {
       const encoders = await getAvailableEncoders();
       const systemFfmpeg = getSystemFfmpegPath();
+      const isHevcRequested = preferredCodec === "libx265";
 
-      log(
-        "info",
-        `HW check: requested=${hwAccel}, available=${JSON.stringify(encoders)}`,
-      );
-
-      if (
-        encoders &&
-        encoders[hwAccel] &&
-        systemFfmpeg &&
-        fs.existsSync(systemFfmpeg)
-      ) {
+      if (encoders && encoders[hwAccel] && systemFfmpeg && fs.existsSync(systemFfmpeg)) {
         const hwEncoders = encoders[hwAccel];
 
-        // Prefer HEVC for better compression if available, otherwise use H.264
-        if (hwEncoders.hevc) {
+        if (isHevcRequested && hwEncoders.hevc) {
           selectedEncoder = `hevc_${hwAccel}`;
         } else if (hwEncoders.h264) {
           selectedEncoder = `h264_${hwAccel}`;
@@ -239,53 +235,40 @@ async function convertVideo(inputPath, outputPath, onProgress) {
           } catch (err) {
             log("warn", `Failed to set system FFmpeg path: ${err.message}`);
           }
-
-          log(
-            "info",
-            `Using hardware encoder: ${selectedEncoder} (${hwAccel.toUpperCase()})`,
-          );
         }
-      } else {
-        log(
-          "warn",
-          `Hardware encoder ${hwAccel} not available or system FFmpeg not found. Using software encoding.`,
-        );
       }
     }
 
     if (useHwEncoder && selectedEncoder) {
+      cmd = cmd.outputOptions("-c:v", selectedEncoder);
       if (hwAccel === "nvenc") {
-        const isHevc = selectedEncoder.includes("hevc");
-        cmd = cmd
-          .outputOptions("-c:v", selectedEncoder)
-          .outputOptions("-preset", "default")
-          .outputOptions("-rc", "vbr")
-          .outputOptions("-cq", "19");
-        if (!isHevc) {
-          cmd.outputOptions("-tune", "hq");
-        }
+        cmd.outputOptions("-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString());
+        if (!selectedEncoder.includes("hevc")) cmd.outputOptions("-tune", "hq");
       } else if (hwAccel === "qsv") {
-        const bitrate = settings.compression === "maximum" ? "2000k" : "4000k";
-        cmd = cmd
-          .outputOptions("-c:v", selectedEncoder)
-          .outputOptions("-preset", "balanced")
-          .outputOptions("-b:v", bitrate);
+        cmd.outputOptions("-preset", "balanced", "-global_quality", selectedCrf.toString());
       } else if (hwAccel === "amf") {
-        cmd = cmd
-          .outputOptions("-c:v", selectedEncoder)
-          .outputOptions("-quality", "quality")
-          .outputOptions("-rc", "vbr");
+        cmd.outputOptions("-quality", "balanced", "-rc", "vbr_latency");
+      }
+
+      if (qualityMode === "vbr") {
+        cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
       }
     } else {
-      cmd = cmd
-        .outputOptions("-c:v", "libx264")
-        .outputOptions("-crf", crf.toString())
-        .outputOptions("-preset", preset);
+      const swCodec = preferredCodec.startsWith("lib") ? preferredCodec : "libx264";
+      cmd = cmd.outputOptions("-c:v", swCodec).outputOptions("-preset", preset);
+
+      if (qualityMode === "crf") {
+        cmd.outputOptions("-crf", selectedCrf.toString());
+      } else {
+        cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
+      }
+
+      if (swCodec === "libx265") cmd.outputOptions("-vtag", "hvc1");
     }
 
     cmd = cmd
       .outputOptions("-movflags", "+faststart")
-      .outputOptions("-pix_fmt", "yuv420p")
+      .outputOptions("-pix_fmt", colorFmt)
       .outputOptions("-r", (settings.frameRate || 24).toString())
       .outputOptions("-c:a", "aac")
       .outputOptions("-b:a", audioBitrate)
@@ -375,10 +358,10 @@ async function convertVideo(inputPath, outputPath, onProgress) {
             // Run software encode
             const swCmd = ffmpeg(inputPath)
               .outputOptions("-c:v", "libx264")
-              .outputOptions("-crf", crf.toString())
-              .outputOptions("-preset", preset)
+              .outputOptions("-crf", selectedCrf.toString())
+              .outputOptions("-preset", "ultrafast")
               .outputOptions("-movflags", "+faststart")
-              .outputOptions("-pix_fmt", "yuv420p")
+              .outputOptions("-pix_fmt", colorFmt)
               .outputOptions("-r", (settings.frameRate || 24).toString())
               .outputOptions("-c:a", "aac")
               .outputOptions("-b:a", audioBitrate)

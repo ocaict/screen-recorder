@@ -13,8 +13,15 @@
   "autoOpenAfterRecording": true,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
-  "countdown": 5,
+  "countdown": 0,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_08-36-29.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772351243241.png",
+      "fileName": "Recording_2026-03-01_08-36-29.mp4",
+      "recordedAt": "2026-03-01T07:47:23.672Z",
+      "size": 64001450
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_07-52-23.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772347994557.png",
@@ -45,7 +52,7 @@
   "videoBitrate": 5,
   "colorFormat": "yuv420p",
   "showMiniControls": false,
-  "showClickHighlights": true,
+  "showClickHighlights": false,
   "highlightLeftColor": "#cc0000",
   "highlightRightColor": "#00ff4c",
   "highlightRippleSize": 50,

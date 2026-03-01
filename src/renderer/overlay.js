@@ -1,29 +1,3 @@
-/**
- * Overlay Annotation Renderer
- * Runs inside the transparent fullscreen BrowserWindow.
- * Draws directly on top of whatever is on the user's screen.
- */
-
-// Initialize canvases
-const canvas = document.getElementById("annotationCanvas");
-const tempCanvas = document.getElementById("tempCanvas");
-const ctx = canvas.getContext("2d");
-const tempCtx = tempCanvas.getContext("2d");
-
-// ── State ────────────────────────────────────────────────────────────────────
-let currentTool = "pen";
-let currentColor = "#ff0000";
-let strokeWidth = 3;
-let isDrawing = false;
-let startX = 0, startY = 0;
-let currentPath = [];
-let history = [];
-let historyIndex = -1;
-/**
- * Overlay Annotation Renderer
- * Runs inside the transparent fullscreen BrowserWindow.
- * Draws directly on top of whatever is on the user's screen.
- */
 
 // Initialize canvases
 const canvas = document.getElementById("annotationCanvas");
@@ -391,6 +365,7 @@ window.electronAPI.onOverlayCommand((cmd) => {
     if (cmd === "clear") clearAll();
 });
 
+
 // ── Canvas setup (for drawing) ─────────────────────────────────────────────────
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -400,8 +375,7 @@ ctx.lineCap = "round";
 ctx.lineJoin = "round";
 tempCtx.lineCap = "round";
 tempCtx.lineJoin = "round";
-
-window.addEventListener("resize", debouncedResize);
+// Note: resize listener already registered above via debouncedResize
 
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 function applyStyle(c) {

@@ -255,7 +255,9 @@ async function convertVideo(inputPath, outputPath, onProgress) {
       }
     } else {
       const swCodec = preferredCodec.startsWith("lib") ? preferredCodec : "libx264";
-      cmd = cmd.outputOptions("-c:v", swCodec).outputOptions("-preset", preset);
+      cmd = cmd.outputOptions("-threads", "0")  // Use all CPU cores
+        .outputOptions("-c:v", swCodec)
+        .outputOptions("-preset", preset);
 
       if (qualityMode === "crf") {
         cmd.outputOptions("-crf", selectedCrf.toString());
@@ -355,8 +357,9 @@ async function convertVideo(inputPath, outputPath, onProgress) {
           }
 
           try {
-            // Run software encode
+            // Run software encode (SW fallback after HW failure)
             const swCmd = ffmpeg(inputPath)
+              .outputOptions("-threads", "0")  // Use all CPU cores
               .outputOptions("-c:v", "libx264")
               .outputOptions("-crf", selectedCrf.toString())
               .outputOptions("-preset", "ultrafast")

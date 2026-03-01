@@ -561,6 +561,7 @@ body {
   background-color: var(--success-color);
   border-radius: 2px;
   transition: height 0.1s ease;
+  will-change: height;
 }
 
 .audio-bar:nth-child(1) {

@@ -86,6 +86,33 @@ function setupClickHighlightHook(enabled) {
 // Active chunked recording sessions: sessionId -> { ws, tempFilePath, size }
 const chunkSessions = new Map();
 
+// ── Ghost session cleanup sweep ─────────────────────────────────────────────
+// Runs every 5 minutes. Kills FFmpeg processes and removes temp files for
+// sessions that have been idle for more than 10 minutes (likely zombie sessions
+// caused by renderer crashes or unexpected IPC disconnects).
+const GHOST_SESSION_TTL_MS = 10 * 60 * 1000;   // 10 minutes
+const GHOST_SESSION_SWEEP_MS = 5 * 60 * 1000;   // 5 minutes
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [sid, sess] of chunkSessions) {
+    const age = now - (sess.createdAt || now);
+    const isFinalizing = sess.isFinalizing;
+    if (!isFinalizing && age > GHOST_SESSION_TTL_MS) {
+      log("warn", `Ghost session detected: ${sid} (age ${Math.round(age / 60000)}min). Cleaning up.`);
+      try { if (sess.ffmpegProcess) sess.ffmpegProcess.kill("SIGKILL"); } catch (e) { }
+      try { if (sess.ws) sess.ws.destroy(); } catch (e) { }
+      try {
+        if (sess.tempFilePath && fs.existsSync(sess.tempFilePath)) {
+          fs.unlinkSync(sess.tempFilePath);
+        }
+      } catch (e) { }
+      chunkSessions.delete(sid);
+    }
+  }
+}, GHOST_SESSION_SWEEP_MS).unref(); // .unref() so this timer won't block app shutdown
+
+
 async function generateThumbnailHelper(videoPath) {
   try {
     const thumbDir = path.join(app.getPath("userData"), "thumbnails");
@@ -615,6 +642,7 @@ function setupIpcHandlers() {
           finalPath,
           isLive: true,
           size: 0,
+          createdAt: Date.now(),
           isFinalizing: false,
           initialBuffer: [],
           isStable: false,
@@ -632,7 +660,7 @@ function setupIpcHandlers() {
         `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`
       );
       const ws = fs.createWriteStream(tempFilePath, { flags: "w" });
-      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false });
+      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false, createdAt: Date.now() });
       log("info", `Started WebM chunked session ${sessionId} -> ${tempFilePath}`);
       return { sessionId, tempFilePath, isLive: false };
     } catch (err) {

@@ -379,6 +379,7 @@ body {
   border: 1px solid var(--border-color);
   z-index: 50;
   transition: all 0.3s ease;
+  will-change: transform, opacity;
 }
 
 .recording-pill.hidden {
@@ -392,6 +393,7 @@ body {
   border-radius: 50%;
   animation: pulse 1s infinite;
   box-shadow: 0 0 8px var(--danger-color);
+  will-change: transform, opacity;
 }
 
 .pill-time {
@@ -666,6 +668,7 @@ body {
   color: var(--primary-color);
   text-shadow: 0 0 20px var(--primary-color);
   animation: countdownPulse 1s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 .countdown-text {
@@ -695,6 +698,7 @@ body {
   border-radius: 50%;
   animation: pulse 1s infinite;
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+  will-change: transform, opacity;
 }
 
 @keyframes pulse {

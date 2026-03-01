@@ -653,14 +653,16 @@ class RecordingManager {
   }
 
   startRecordingTimer() {
+    let lastTimeStr = "";
     this.recordingTimer = setInterval(() => {
       const elapsed = Date.now() - this.recordingStartTime;
       const timeStr = this.formatTime(elapsed);
       this.app.recordingTime.textContent = timeStr;
 
-      // Update Mini Controls Timer
-      if (window.electronAPI.sendRecordingTimerUpdate) {
+      // Update Mini Controls Timer only if the string changed (reduces IPC load)
+      if (timeStr !== lastTimeStr && window.electronAPI.sendRecordingTimerUpdate) {
         window.electronAPI.sendRecordingTimerUpdate(timeStr);
+        lastTimeStr = timeStr;
       }
 
       if (this.app.pillTime) {
@@ -1025,7 +1027,7 @@ class RecordingManager {
                       this.monitor.recordIPCLatency(latency);
                     }
                   } else {
-                     this.recordedChunks.push(ab);
+                    this.recordedChunks.push(ab);
                   }
                 } catch (ipcErr) {
                   console.error("appendRecordingChunk failed:", ipcErr);
@@ -1269,17 +1271,17 @@ class RecordingManager {
     // We don't want to use recordedBytes since those bytes are streamed out to the native OS
     // via IPC and are thus released from the renderer's V8 heap.
     // If we count total file size here, we will prematurely stop long recordings.
-    
+
     // Instead check actual JS heap memory if available
     if (window.performance && window.performance.memory) {
-       return window.performance.memory.usedJSHeapSize;
+      return window.performance.memory.usedJSHeapSize;
     }
-    
+
     // If we're fallback storing entirely in the renderer array, then count it:
     if (!this.chunkSessionId) {
-       return this.recordedBytes || 0;
+      return this.recordedBytes || 0;
     }
-    
+
     return 0; // The streaming pipe manages its own memory limits.
   }
 

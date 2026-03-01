@@ -215,30 +215,45 @@ class PerformanceDashboard {
    * Attach listeners to performance monitor
    */
   attachMonitorListeners() {
+    let lastRenderTime = 0;
+    const renderThrottleMs = 500; // Update UI at most twice a second
+
+    const throttledUpdate = (updateFn) => {
+      const now = performance.now();
+      if (now - lastRenderTime > renderThrottleMs) {
+        requestAnimationFrame(() => {
+          updateFn();
+          lastRenderTime = performance.now();
+        });
+      }
+    };
+
     this.monitor.on("recording-updated", (data) => {
-      this.updateRecordingStats(data);
+      throttledUpdate(() => this.updateRecordingStats(data));
     });
 
     this.monitor.on("memory-updated", (data) => {
-      this.updateMemoryStats(data);
-      this.drawMemoryChart(data);
+      throttledUpdate(() => {
+        this.updateMemoryStats(data);
+        this.drawMemoryChart(data);
+      });
     });
 
     this.monitor.on("ipc-updated", (data) => {
-      this.updateIPCStats(data);
+      throttledUpdate(() => this.updateIPCStats(data));
     });
 
     this.monitor.on("hotspots-updated", (hotspots) => {
-      this.updateHotspotsList(hotspots);
+      throttledUpdate(() => this.updateHotspotsList(hotspots));
     });
 
     this.monitor.on("encoding-started", (data) => {
       this.showEncodingSection(true);
-      this.updateEncodingStats(data);
+      throttledUpdate(() => this.updateEncodingStats(data));
     });
 
     this.monitor.on("encoding-progress", (data) => {
-      this.updateEncodingStats(data);
+      throttledUpdate(() => this.updateEncodingStats(data));
     });
 
     this.monitor.on("encoding-finished", (data) => {

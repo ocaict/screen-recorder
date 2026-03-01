@@ -19,6 +19,27 @@ let startX = 0, startY = 0;
 let currentPath = [];
 let history = [];
 let historyIndex = -1;
+/**
+ * Overlay Annotation Renderer
+ * Runs inside the transparent fullscreen BrowserWindow.
+ * Draws directly on top of whatever is on the user's screen.
+ */
+
+// Initialize canvases
+const canvas = document.getElementById("annotationCanvas");
+const tempCanvas = document.getElementById("tempCanvas");
+const ctx = canvas.getContext("2d");
+const tempCtx = tempCanvas.getContext("2d");
+
+// ── State ────────────────────────────────────────────────────────────────────
+let currentTool = "pen";
+let currentColor = "#ff0000";
+let strokeWidth = 3;
+let isDrawing = false;
+let startX = 0, startY = 0;
+let currentPath = [];
+let history = [];
+let historyIndex = -1;
 let drawModeActive = false;
 let textInput = null;
 // clickHighlightsEnabled moved to highlight logic section below
@@ -26,6 +47,7 @@ let textInput = null;
 console.log('[Overlay] Script initialized');
 
 // ── Canvas sizing ─────────────────────────────────────────────────────────────
+let resizeTimeout = null;
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -37,8 +59,14 @@ function resize() {
     tempCtx.lineJoin = "round";
     redrawHistory();
 }
+
+function debouncedResize() {
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(resize, 150);
+}
+
 resize();
-window.addEventListener("resize", resize);
+window.addEventListener("resize", debouncedResize);
 
 // ── Draw-mode toggle (sent from main process via IPC) ─────────────────────────
 window.electronAPI.onOverlayDrawMode((enabled) => {
@@ -112,10 +140,10 @@ function animateRipples() {
         tempCtx.save();
         const size = highlightSettings.glowSize;
         const intensity = highlightSettings.glowIntensity / 100;
-        
+
         // Convert hex to RGB
         const leftColor = hexToRgb(highlightSettings.leftColor);
-        
+
         const gradient = tempCtx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, size);
         gradient.addColorStop(0, `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${intensity})`);
         gradient.addColorStop(1, `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, 0)`);
@@ -157,7 +185,7 @@ function animateRipples() {
             const leftColor = hexToRgb(highlightSettings.leftColor);
             color = `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${ripple.opacity})`;
         }
-        
+
         tempCtx.strokeStyle = color;
         tempCtx.lineWidth = 3;
 
@@ -190,7 +218,7 @@ const handleStealthClick = (e) => {
 
     // Auto-ripple disabled for testing - click ripples now come from uiohook
     // Kept only for cursor glow animation
-    
+
     // If highlights are active, keep the animation loop running for cursor glow
     if (clickHighlightsEnabled && activeRipples.length === 0) {
         requestAnimationFrame(animateRipples);
@@ -229,6 +257,9 @@ document.addEventListener("mouseup", (e) => {
     }
 }, true);
 
+// Tracking bounds for dirty rectangle rendering
+let dirtyRect = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+
 function handleMouseDown(e) {
     if (currentTool === "text") {
         addText(e.clientX, e.clientY);
@@ -240,6 +271,16 @@ function handleMouseDown(e) {
     startX = e.clientX;
     startY = e.clientY;
     currentPath = [{ x: startX, y: startY }];
+
+    // Initialize dirty rect for this new stroke, adding a bit of padding for stroke width
+    const padding = (currentTool === "highlighter" ? 20 : strokeWidth) * 2;
+    dirtyRect = {
+        minX: startX - padding,
+        minY: startY - padding,
+        maxX: startX + padding,
+        maxY: startY + padding
+    };
+
     applyStyle(tempCtx);
 
     window.electronAPI.sendOverlayAction({
@@ -257,7 +298,17 @@ function handleMouseMove(e) {
     // Use client coordinates directly for drawing on the overlay
     const x = e.clientX;
     const y = e.clientY;
-    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+    // Clear only the dirty rectangle instead of the whole screen
+    tempCtx.clearRect(dirtyRect.minX, dirtyRect.minY, dirtyRect.maxX - dirtyRect.minX, dirtyRect.maxY - dirtyRect.minY);
+
+    // Update dirty rect with new bounds
+    const padding = (currentTool === "highlighter" ? 20 : strokeWidth) * 2;
+    dirtyRect.minX = Math.min(dirtyRect.minX, x - padding);
+    dirtyRect.minY = Math.min(dirtyRect.minY, y - padding);
+    dirtyRect.maxX = Math.max(dirtyRect.maxX, x + padding);
+    dirtyRect.maxY = Math.max(dirtyRect.maxY, y + padding);
+
     applyStyle(tempCtx);
 
     if (currentTool === "pen" || currentTool === "highlighter") {
@@ -282,7 +333,10 @@ function handleMouseUp(e) {
     // Use client coordinates directly for drawing on the overlay
     const endX = e.clientX;
     const endY = e.clientY;
-    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+    // Clear only the dirty rectangle on the temp canvas
+    tempCtx.clearRect(Math.floor(dirtyRect.minX), Math.floor(dirtyRect.minY), Math.ceil(dirtyRect.maxX - dirtyRect.minX), Math.ceil(dirtyRect.maxY - dirtyRect.minY));
+
     applyStyle(ctx);
 
     if (currentTool === "pen" || currentTool === "highlighter") {
@@ -305,6 +359,9 @@ function handleMouseUp(e) {
     window.electronAPI.sendOverlayAction({ type: "mouseup", x: endX, y: endY });
     isDrawing = false;
     currentPath = [];
+
+    // Reset dirty rect for next stroke
+    dirtyRect = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 }
 
 // ── Tool / color / width updates from main window ────────────────────────────
@@ -328,7 +385,6 @@ window.electronAPI.onOverlaySettings((settings) => {
     if (settings.highlightGlowSize) highlightSettings.glowSize = settings.highlightGlowSize;
     if (settings.highlightGlowIntensity) highlightSettings.glowIntensity = settings.highlightGlowIntensity;
 });
-
 // ── Clear / undo from main window ─────────────────────────────────────────────
 window.electronAPI.onOverlayCommand((cmd) => {
     if (cmd === "undo") undo();
@@ -345,13 +401,7 @@ ctx.lineJoin = "round";
 tempCtx.lineCap = "round";
 tempCtx.lineJoin = "round";
 
-window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    tempCanvas.width = window.innerWidth;
-    tempCanvas.height = window.innerHeight;
-    redrawHistory();
-});
+window.addEventListener("resize", debouncedResize);
 
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 function applyStyle(c) {

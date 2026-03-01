@@ -53,7 +53,7 @@ function setupClickHighlightHook(enabled) {
     log("warn", "setupClickHighlightHook: uIOhook not available");
     return;
   }
-  
+
   if (enabled && !clickHighlightHookRunning) {
     try {
       if (!uiohookListenerRegistered) {
@@ -183,9 +183,13 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     return { success: false, error: "No recording data available" };
   }
 
-  if (!fs.existsSync(outputDir)) {
+  const fsPromises = fs.promises;
+  let dirExists = false;
+  try { await fsPromises.access(outputDir); dirExists = true; } catch (e) { }
+
+  if (!dirExists) {
     try {
-      fs.mkdirSync(outputDir, { recursive: true });
+      await fsPromises.mkdir(outputDir, { recursive: true });
     } catch (mkdirErr) {
       log("error", `Failed to create output directory: ${mkdirErr.message}`);
       return { success: false, error: "Cannot access output directory" };
@@ -220,11 +224,15 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     filePath = path.join(outputDir, defaultName);
     let counter = 1;
     const basePath = filePath;
-    while (fs.existsSync(filePath)) {
+    let fileExists = false;
+    try { await fsPromises.access(filePath); fileExists = true; } catch (e) { }
+
+    while (fileExists) {
       const ext = path.extname(basePath);
       const name = path.basename(basePath, ext);
       filePath = path.join(outputDir, `${name}_${counter}${ext}`);
       counter++;
+      try { await fsPromises.access(filePath); fileExists = true; } catch (e) { fileExists = false; }
     }
     log("info", `Auto-saving to: ${filePath}, ext=${path.extname(filePath)}`);
   } else {
@@ -257,23 +265,32 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     if (chunkFiles && chunkFiles.length > 0) {
       const allChunks = [];
       for (const chunkPath of chunkFiles) {
-        if (fs.existsSync(chunkPath)) {
-          const chunkData = fs.readFileSync(chunkPath);
+        let chunkExists = false;
+        try { await fsPromises.access(chunkPath); chunkExists = true; } catch (e) { }
+        if (chunkExists) {
+          const chunkData = await fsPromises.readFile(chunkPath);
           allChunks.push(chunkData);
-          fs.unlinkSync(chunkPath);
+          await fsPromises.unlink(chunkPath);
         }
       }
       if (streamData && streamData.byteLength > 0) {
         allChunks.push(Buffer.from(new Uint8Array(streamData)));
       }
-      fs.writeFileSync(tempFilePath, Buffer.concat(allChunks));
+      if (allChunks.length > 0) {
+        await fsPromises.writeFile(tempFilePath, Buffer.concat(allChunks));
+      } else {
+        log("error", "No data to stream into temporary file");
+        return { success: false, error: "No data available in stream" };
+      }
     } else {
       const buffer = Buffer.from(new Uint8Array(streamData));
-      fs.writeFileSync(tempFilePath, buffer);
+      await fsPromises.writeFile(tempFilePath, buffer);
     }
 
-    if (fs.existsSync(tempFilePath)) {
-      const stats = fs.statSync(tempFilePath);
+    let tempExists = false;
+    try { await fsPromises.access(tempFilePath); tempExists = true; } catch (e) { }
+    if (tempExists) {
+      const stats = await fsPromises.stat(tempFilePath);
       log(
         "info",
         `Recording saved to temp: ${tempFilePath}, size: ${stats.size} bytes`,
@@ -285,9 +302,11 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     if (ext === ".mp4") {
       const convertedPath = filePath;
 
+      let convertedExists = false;
+      try { await fsPromises.access(tempFilePath); convertedExists = true; } catch (e) { }
       log(
         "info",
-        `Starting conversion: temp=${tempFilePath}, output=${convertedPath}, exists=${fs.existsSync(tempFilePath)}`,
+        `Starting conversion: temp=${tempFilePath}, output=${convertedPath}, exists=${convertedExists}`,
       );
 
       mainWindow?.webContents.send("conversion-started");
@@ -296,8 +315,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
         mainWindow?.webContents.send("conversion-progress", progress);
       })
         .then(async () => {
-          if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
+          let tempStillExists = false;
+          try { await fsPromises.access(tempFilePath); tempStillExists = true; } catch (e) { }
+          if (tempStillExists) {
+            await fsPromises.unlink(tempFilePath);
           }
           const thumbPath = await generateThumbnailHelper(convertedPath);
           addRecentRecording(convertedPath, thumbPath);
@@ -311,7 +332,7 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
             `Conversion failed: ${convertErr.message}, saving as webm`,
           );
           const webmPath = filePath.replace(/\.mp4$/i, ".webm");
-          fs.renameSync(tempFilePath, webmPath);
+          try { await fsPromises.rename(tempFilePath, webmPath); } catch (e) { }
           const thumbPath = await generateThumbnailHelper(webmPath);
           addRecentRecording(webmPath, thumbPath);
           mainWindow?.webContents.send("conversion-complete", webmPath);
@@ -324,7 +345,7 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
         backgroundProcessing: true,
       };
     } else {
-      fs.renameSync(tempFilePath, filePath);
+      await fsPromises.rename(tempFilePath, filePath);
       log("info", `Recording saved: ${filePath}`);
 
       const thumbPath = await generateThumbnailHelper(filePath);
@@ -1520,7 +1541,7 @@ function setupIpcHandlers() {
         if (recording && settings.showClickHighlights) {
           // Start global click hook for capturing mouse clicks
           setupClickHighlightHook(true);
-          
+
           const { screen } = require("electron");
           const primaryDisplay = screen.getPrimaryDisplay();
           const bounds = primaryDisplay.bounds;
@@ -1563,7 +1584,7 @@ function setupIpcHandlers() {
         } else if (!recording) {
           // Stop global click hook
           setupClickHighlightHook(false);
-          
+
           // If stopped recording, hide the overlay
           if (overlayWindow && !overlayWindow.isDestroyed()) {
             overlayWindow.hide();

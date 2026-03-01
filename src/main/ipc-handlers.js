@@ -1107,6 +1107,12 @@ function setupIpcHandlers() {
         : "yuv420p",
       showMiniControls: Boolean(newSettings.showMiniControls),
       showClickHighlights: Boolean(newSettings.showClickHighlights),
+      highlightLeftColor: typeof newSettings.highlightLeftColor === 'string' ? newSettings.highlightLeftColor : '#FFEB3B',
+      highlightRightColor: typeof newSettings.highlightRightColor === 'string' ? newSettings.highlightRightColor : '#2196F3',
+      highlightRippleSize: Number.isInteger(newSettings.highlightRippleSize) ? newSettings.highlightRippleSize : 50,
+      highlightRippleSpeed: Number.isInteger(newSettings.highlightRippleSpeed) ? newSettings.highlightRippleSpeed : 400,
+      highlightGlowSize: Number.isInteger(newSettings.highlightGlowSize) ? newSettings.highlightGlowSize : 25,
+      highlightGlowIntensity: Number.isInteger(newSettings.highlightGlowIntensity) ? newSettings.highlightGlowIntensity : 30,
     };
 
     saveSettings(validatedSettings);

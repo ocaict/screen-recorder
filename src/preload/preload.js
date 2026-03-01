@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   startRegionSelection: () => ipcRenderer.invoke("start-region-selection"),
   sendRegionSelected: (region) => ipcRenderer.send("region-selected", region),
   sendRegionCancelled: () => ipcRenderer.send("region-cancelled"),
+  onRegionInit: (callback) =>
+    ipcRenderer.on("region-init", (_, data) => callback(data)),
 
   // Chunked recording API
   startChunkedRecording: (options) =>

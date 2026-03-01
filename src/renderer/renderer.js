@@ -47,71 +47,9 @@ class ScreenRecorder {
         const region = await window.electronAPI.startRegionSelection();
         if (region) {
           this.recordingManager.selectedRegion = region;
-
-          try {
-            const sources = await window.electronAPI.getCaptureSources();
-            const screenSource = sources.find((s) =>
-              s.id.startsWith("screen:"),
-            );
-
-            if (screenSource) {
-              const fullStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                  mandatory: {
-                    chromeMediaSource: "desktop",
-                    chromeMediaSourceId: screenSource.id,
-                    minWidth: 1920,
-                    maxWidth: 1920,
-                    minHeight: 1080,
-                    maxHeight: 1080,
-                  },
-                },
-                audio: false,
-              });
-
-              const cropCanvas = document.createElement("canvas");
-              cropCanvas.width = region.width;
-              cropCanvas.height = region.height;
-              const ctx = cropCanvas.getContext("2d");
-
-              const fullVideo = document.createElement("video");
-              fullVideo.srcObject = fullStream;
-              fullVideo.muted = true;
-              fullVideo.playsInline = true;
-              await fullVideo.play();
-
-              const drawCrop = () => {
-                if (fullVideo.readyState >= 2) {
-                  ctx.drawImage(
-                    fullVideo,
-                    region.x,
-                    region.y,
-                    region.width,
-                    region.height,
-                    0,
-                    0,
-                    region.width,
-                    region.height,
-                  );
-                }
-                this.cropDrawId = requestAnimationFrame(drawCrop);
-              };
-              this.cropDrawId = requestAnimationFrame(drawCrop);
-
-              const croppedStream = cropCanvas.captureStream(30);
-              this.previewVideo.srcObject = croppedStream;
-              this.previewVideo.style.objectFit = "contain";
-              this.previewVideo.style.width = "100%";
-              this.previewVideo.style.height = "100%";
-              await this.previewVideo.play();
-              this.noSourceMessage.classList.add("hidden");
-
-              this.currentPreviewStream = fullStream;
-              this.currentCropCanvas = cropCanvas;
-            }
-          } catch (previewErr) {
-            console.warn("Preview capture failed:", previewErr);
-          }
+          // Unified stream setup for both preview and recording.
+          // This fixes the '3 streams' issue and uses RAF for performance.
+          await this.recordingManager.setupRegionStream(false);
 
           this.showToast(
             `Region selected: ${region.width}x${region.height}`,

@@ -5,7 +5,11 @@ const {
   desktopCapturer,
   app,
   Notification,
+  BrowserWindow,
+  screen,
+  nativeImage,
 } = require("electron");
+
 const path = require("path");
 const fs = require("fs");
 const { log } = require("../utils/logger");
@@ -1241,81 +1245,128 @@ function setupIpcHandlers() {
     }
   });
 
+  // ── Region Selection Persistence ───────────────────────────
+  let pendingRegionSelection = null;
+
   ipcMain.handle("start-region-selection", async () => {
+    if (pendingRegionSelection) {
+      log("warn", "Start-region-selection: Already in progress");
+      return null;
+    }
+
+    let regionWindow = null;
     try {
-      const { screen, BrowserWindow } = require("electron");
       const primaryDisplay = screen.getPrimaryDisplay();
       if (!primaryDisplay) {
         log("error", "start-region-selection: No primary display found");
         return null;
       }
-      const { width, height } = primaryDisplay.size;
 
-      const regionWindow = new BrowserWindow({
-        x: 0,
-        y: 0,
-        width: width,
-        height: height,
+      const { x, y, width, height } = primaryDisplay.bounds;
+      const scaleFactor = primaryDisplay.scaleFactor || 1;
+      const lastRegion = getSettings().lastRegion || null;
+
+      regionWindow = new BrowserWindow({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
         frame: false,
         transparent: true,
         alwaysOnTop: true,
-        fullscreen: true,
         skipTaskbar: true,
         resizable: false,
         movable: false,
         hasShadow: false,
+        show: false,
         webPreferences: {
-          nodeIntegration: true,
-          contextIsolation: false,
+          nodeIntegration: false,
+          contextIsolation: true,
+          preload: path.join(__dirname, "..", "preload", "preload.js"),
         },
-      });
-
-      regionWindow.on("closed", () => {
-        log("info", "Region selection window closed");
-      });
-
-      regionWindow.on("error", (err) => {
-        log("error", `Region selection window error: ${err.message}`);
       });
 
       regionWindow.loadFile(
         path.join(__dirname, "..", "renderer", "region-select.html"),
       );
-      regionWindow.setIgnoreMouseEvents(false);
 
-      return new Promise((resolve) => {
-        const timeoutId = setTimeout(
-          () => {
-            log("warn", "Region selection timed out after 5 minutes");
-            if (!regionWindow.isDestroyed()) {
-              regionWindow.close();
-            }
-            resolve(null);
-          },
-          5 * 60 * 1000,
-        );
-
-        ipcMain.once("region-selected-result", (_, region) => {
-          clearTimeout(timeoutId);
-          if (!regionWindow.isDestroyed()) {
-            regionWindow.close();
-          }
-          resolve(region);
-        });
-
-        ipcMain.once("region-cancelled-result", () => {
-          clearTimeout(timeoutId);
-          if (!regionWindow.isDestroyed()) {
-            regionWindow.close();
-          }
-          resolve(null);
-        });
+      regionWindow.webContents.once("did-finish-load", () => {
+        if (regionWindow && !regionWindow.isDestroyed()) {
+          regionWindow.show();
+          regionWindow.webContents.send("region-init", {
+            scaleFactor,
+            screenshot: null,
+            lastRegion,
+          });
+          regionWindow.focus();
+        }
       });
+
+      return (pendingRegionSelection = new Promise((resolve) => {
+        let isFinalized = false;
+
+        const finalize = (result = null) => {
+          if (isFinalized) return;
+          isFinalized = true;
+          pendingRegionSelection = null;
+
+          log("info", `Finalizing selection. Result: ${result ? "Region" : "None"}`);
+
+          // Remove listeners
+          ipcMain.removeListener("region-selected", onSelected);
+          ipcMain.removeListener("region-cancelled", onCancelled);
+
+          if (regionWindow && !regionWindow.isDestroyed()) {
+            try {
+              regionWindow.hide();
+              log("info", "Region window hidden");
+
+              // Resolve BEFORE destroying to avoid blocking the main thread
+              resolve(result);
+
+              // Use setImmediate to let the current turn of the event loop finish
+              setImmediate(() => {
+                if (regionWindow && !regionWindow.isDestroyed()) {
+                  regionWindow.destroy();
+                  log("info", "Region window destroyed");
+                }
+              });
+            } catch (err) {
+              log("error", `Error during window cleanup: ${err.message}`);
+              resolve(result);
+            }
+          } else {
+            resolve(result);
+          }
+        };
+
+        const onSelected = (_, region) => {
+          if (region) {
+            try {
+              const current = getSettings();
+              saveSettings({ ...current, lastRegion: region });
+            } catch (e) { }
+          }
+          finalize(region);
+        };
+
+        const onCancelled = () => {
+          finalize(null);
+        };
+
+        ipcMain.once("region-selected", onSelected);
+        ipcMain.once("region-cancelled", onCancelled);
+
+        regionWindow.once("closed", () => finalize(null));
+      }));
     } catch (err) {
-      log("error", `start-region-selection failed: ${err.message}`);
+      log("error", `start-region-selection error: ${err.message}`);
+      if (regionWindow && !regionWindow.isDestroyed()) regionWindow.destroy();
+      pendingRegionSelection = null;
       return null;
     }
   });
+
 
   ipcMain.handle("get-available-encoders", async () => {
     try {

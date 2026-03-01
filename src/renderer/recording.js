@@ -213,89 +213,54 @@ class RecordingManager {
       this.fullScreenVideo.playsInline = true;
       await this.fullScreenVideo.play();
 
-      if (includeAnnotations && this.app.annotationManager) {
-        this.regionCompositor = document.createElement("canvas");
-        this.regionCompositor.width = region.width;
-        this.regionCompositor.height = region.height;
-        this.regionCompositorCtx = this.regionCompositor.getContext("2d");
+      this.cropCanvas = document.createElement("canvas");
+      this.cropCanvas.width = region.width;
+      this.cropCanvas.height = region.height;
+      this.cropCtx = this.cropCanvas.getContext("2d");
 
-        const drawRegionFrame = () => {
-          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2)
-            return;
+      // Use requestAnimationFrame for smoother and more efficient cropping
+      const cropFrame = () => {
+        if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2) return;
 
-          this.regionCompositorCtx.drawImage(
-            this.fullScreenVideo,
-            region.x,
-            region.y,
-            region.width,
-            region.height,
-            0,
-            0,
-            region.width,
-            region.height,
-          );
-
-          const annotationCanvas = this.app.annotationManager.getCanvas();
-          const tempCanvas = this.app.annotationManager.getTempCanvas();
-
-          this.regionCompositorCtx.drawImage(
-            annotationCanvas,
-            region.x,
-            region.y,
-            region.width,
-            region.height,
-            0,
-            0,
-            region.width,
-            region.height,
-          );
-          this.regionCompositorCtx.drawImage(
-            tempCanvas,
-            region.x,
-            region.y,
-            region.width,
-            region.height,
-            0,
-            0,
-            region.width,
-            region.height,
-          );
-        };
-
-        drawRegionFrame();
-        this.cropInterval = setInterval(drawRegionFrame, 1000 / frameRate);
-
-        this.canvasStream = this.regionCompositor.captureStream(frameRate);
-        this.videoStream = this.canvasStream;
-      } else {
-        this.cropCanvas = document.createElement("canvas");
-        this.cropCanvas.width = region.width;
-        this.cropCanvas.height = region.height;
-        this.cropCtx = this.cropCanvas.getContext("2d");
-
-        const cropFrame = () => {
-          if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2)
-            return;
-
+        if (includeAnnotations && this.app.annotationManager) {
+          // Optimized composite: draw video then both annotation layers
           this.cropCtx.drawImage(
             this.fullScreenVideo,
-            region.x,
-            region.y,
-            region.width,
-            region.height,
-            0,
-            0,
-            region.width,
-            region.height,
+            region.x, region.y, region.width, region.height,
+            0, 0, region.width, region.height
           );
-        };
 
-        cropFrame();
-        this.cropInterval = setInterval(cropFrame, 1000 / frameRate);
+          const annCanvas = this.app.annotationManager.getCanvas();
+          const tempCanvas = this.app.annotationManager.getTempCanvas();
 
-        this.canvasStream = this.cropCanvas.captureStream(frameRate);
-        this.videoStream = this.canvasStream;
-      }
+          this.cropCtx.drawImage(
+            annCanvas,
+            region.x, region.y, region.width, region.height,
+            0, 0, region.width, region.height
+          );
+          this.cropCtx.drawImage(
+            tempCanvas,
+            region.x, region.y, region.width, region.height,
+            0, 0, region.width, region.height
+          );
+        } else {
+          // Video only crop
+          this.cropCtx.drawImage(
+            this.fullScreenVideo,
+            region.x, region.y, region.width, region.height,
+            0, 0, region.width, region.height
+          );
+        }
+
+        this.cropDrawId = requestAnimationFrame(cropFrame);
+      };
+
+      // Start the loop
+      this.cropDrawId = requestAnimationFrame(cropFrame);
+
+      this.canvasStream = this.cropCanvas.captureStream(frameRate);
+      this.videoStream = this.canvasStream;
+
 
       try {
         this.app.previewVideo.srcObject = this.videoStream;
@@ -474,6 +439,11 @@ class RecordingManager {
       clearInterval(this.cropInterval);
       this.cropInterval = null;
     }
+    if (this.cropDrawId) {
+      cancelAnimationFrame(this.cropDrawId);
+      this.cropDrawId = null;
+    }
+
     if (this.fullScreenStream) {
       this.fullScreenStream.getTracks().forEach((track) => track.stop());
       this.fullScreenStream = null;
@@ -483,6 +453,7 @@ class RecordingManager {
     this.cropCtx = null;
     this.regionCompositor = null;
     this.regionCompositorCtx = null;
+
 
     try {
       this.app.previewVideo.srcObject = null;

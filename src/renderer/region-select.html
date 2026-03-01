@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,315 +11,645 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
-      width: 100vw;
-      height: 100vh;
+      background: rgba(0, 0, 0, 0.15);
+      /* Tinted transparent background */
+      margin: 0;
       overflow: hidden;
-      background: transparent;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      user-select: none;
+      -webkit-app-region: no-drag;
       cursor: crosshair;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: white;
     }
-    
+
+    /* ── Screenshot background ─────────────────────────────────── */
+    #screenshot-bg {
+      position: fixed;
+      inset: 0;
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+    }
+
+    /* ── Dark overlay (punched out by the selection box) ───────── */
     #overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.3);
-    }
-    
-    #selection {
-      position: absolute;
-      border: 2px solid #00a8ff;
-      background: transparent;
-      display: none;
-      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-    }
-    
-    #selection::before {
-      content: '';
-      position: absolute;
-      top: -2px;
-      left: -2px;
-      right: -2px;
-      bottom: -2px;
-      border: 2px dashed white;
+      inset: 0;
+      /* Rendered by canvas for edge-accurate cutout */
       pointer-events: none;
     }
-    
-    .dimension-label {
-      position: absolute;
-      top: -30px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #00a8ff;
-      color: white;
-      padding: 4px 12px;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 500;
-      white-space: nowrap;
+
+    #overlay-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      pointer-events: all;
     }
-    
+
+    /* ── Selection rect ─────────────────────────────────────────── */
+    #selection {
+      position: fixed;
+      display: none;
+      border: 2px solid #1a73e8;
+      /* Nicer blue */
+      box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.4), inset 0 0 10px rgba(0, 212, 255, 0.1);
+      cursor: move;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.01);
+      /* CRUCIAL: nearly transparent but catches mouse clicks */
+      pointer-events: auto;
+    }
+
+    /* Edge resize handles (invisible but clickable) */
+    .edge {
+      position: absolute;
+      z-index: 10;
+    }
+
+    .edge-n {
+      top: -5px;
+      left: 6px;
+      right: 6px;
+      height: 10px;
+      cursor: n-resize;
+    }
+
+    .edge-s {
+      bottom: -5px;
+      left: 6px;
+      right: 6px;
+      height: 10px;
+      cursor: s-resize;
+    }
+
+    .edge-w {
+      left: -5px;
+      top: 6px;
+      bottom: 6px;
+      width: 10px;
+      cursor: w-resize;
+    }
+
+    .edge-e {
+      right: -5px;
+      top: 6px;
+      bottom: 6px;
+      width: 10px;
+      cursor: e-resize;
+    }
+
+    /* Corner handles */
     .corner {
       position: absolute;
-      width: 12px;
-      height: 12px;
-      background: #00a8ff;
-      border: 2px solid white;
-      border-radius: 2px;
+      width: 14px;
+      height: 14px;
+      background: #00d4ff;
+      border: 2px solid #fff;
+      border-radius: 3px;
+      z-index: 11;
     }
-    
-    .corner-tl { top: -7px; left: -7px; cursor: nwse-resize; }
-    .corner-tr { top: -7px; right: -7px; cursor: nesw-resize; }
-    .corner-bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
-    .corner-br { bottom: -7px; right: -7px; cursor: nwse-resize; }
-    
+
+    .corner::after {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      /* Expand hit target without expanding visual */
+    }
+
+    .corner-tl {
+      top: -8px;
+      left: -8px;
+      cursor: nwse-resize;
+    }
+
+    .corner-tr {
+      top: -8px;
+      right: -8px;
+      cursor: nesw-resize;
+    }
+
+    .corner-bl {
+      bottom: -8px;
+      left: -8px;
+      cursor: nesw-resize;
+    }
+
+    .corner-br {
+      bottom: -8px;
+      right: -8px;
+      cursor: nwse-resize;
+    }
+
+    /* ── Dimension badge ──────────────────────────────────────── */
+    #dimension-badge {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.82);
+      border: 1px solid rgba(0, 212, 255, 0.5);
+      color: #00d4ff;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      pointer-events: none;
+      white-space: nowrap;
+      display: none;
+      backdrop-filter: blur(6px);
+      transform: translateX(-50%);
+    }
+
+    /* ── Top instructions bar ─────────────────────────────────── */
     #instructions {
       position: fixed;
-      top: 20px;
+      top: 18px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 16px;
+      background: rgba(10, 10, 20, 0.88);
+      color: #e8e8f0;
+      padding: 10px 22px;
+      border-radius: 30px;
+      font-size: 13px;
       text-align: center;
       z-index: 1000;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      white-space: nowrap;
     }
-    
+
     #instructions kbd {
-      background: #333;
-      padding: 2px 8px;
+      background: rgba(255, 255, 255, 0.12);
+      padding: 2px 7px;
       border-radius: 4px;
-      border: 1px solid #555;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 11px;
+      font-family: inherit;
     }
-    
-    #actions {
+
+    #instructions span {
+      color: #888;
+      font-size: 11px;
+    }
+
+    /* ── Preset resolution buttons ────────────────────────────── */
+    #presets {
       position: fixed;
-      bottom: 20px;
+      top: 70px;
       left: 50%;
       transform: translateX(-50%);
-      display: none;
-      gap: 12px;
+      display: flex;
+      gap: 8px;
       z-index: 1000;
     }
-    
-    #actions button {
-      padding: 10px 24px;
-      font-size: 14px;
+
+    .preset-btn {
+      background: rgba(10, 10, 20, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #ccc;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 11px;
       font-weight: 500;
-      border: none;
-      border-radius: 6px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
+      white-space: nowrap;
+      backdrop-filter: blur(6px);
     }
-    
+
+    .preset-btn:hover {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00d4ff;
+      color: #00d4ff;
+    }
+
+    /* ── Bottom action bar ────────────────────────────────────── */
+    #actions {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 60px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: rgba(10, 10, 20, 0.92);
+      padding: 10px 18px;
+      border-radius: 40px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      z-index: 30;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(15px);
+    }
+
+    #actions .hint {
+      color: #666;
+      font-size: 11px;
+    }
+
     #btn-confirm {
-      background: #00a8ff;
+      background: linear-gradient(135deg, #00d4ff, #0080cc);
       color: white;
+      border: none;
+      padding: 8px 24px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 2px 12px rgba(0, 212, 255, 0.3);
     }
-    
+
     #btn-confirm:hover {
-      background: #0088cc;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(0, 212, 255, 0.5);
     }
-    
+
     #btn-cancel {
-      background: #666;
-      color: white;
+      background: rgba(255, 255, 255, 0.08);
+      color: #aaa;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    
+
     #btn-cancel:hover {
-      background: #555;
+      background: rgba(255, 80, 80, 0.15);
+      color: #ff6060;
+      border-color: #ff6060;
+    }
+
+    /* ── Magnifier / crosshair ────────────────────────────────── */
+    #magnifier {
+      position: fixed;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 212, 255, 0.8);
+      pointer-events: none;
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+      z-index: 2000;
+    }
+
+    #magnifier canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #magnifier::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, transparent calc(50% - 0.5px), rgba(0, 212, 255, 0.7) calc(50% - 0.5px), rgba(0, 212, 255, 0.7) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+        linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(0, 212, 255, 0.7) calc(50% - 0.5px), rgba(0, 212, 255, 0.7) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+      border-radius: 50%;
+      pointer-events: none;
     }
   </style>
 </head>
+
 <body>
-  <div id="overlay"></div>
+  <div id="screenshot-bg"></div>
+  <canvas id="overlay-canvas"></canvas>
+
   <div id="selection">
-    <div class="dimension-label" id="dimensionLabel">0 x 0</div>
+    <div class="edge edge-n" data-edge="n"></div>
+    <div class="edge edge-s" data-edge="s"></div>
+    <div class="edge edge-w" data-edge="w"></div>
+    <div class="edge edge-e" data-edge="e"></div>
     <div class="corner corner-tl" data-corner="tl"></div>
     <div class="corner corner-tr" data-corner="tr"></div>
     <div class="corner corner-bl" data-corner="bl"></div>
     <div class="corner corner-br" data-corner="br"></div>
   </div>
-  
+
+  <div id="dimension-badge">0 × 0</div>
+
   <div id="instructions">
-    Click and drag to select a region. Press <kbd>Esc</kbd> to cancel.
-  </div>
-  
-  <div id="actions">
-    <button id="btn-confirm">Confirm Selection</button>
-    <button id="btn-cancel">Cancel</button>
+    <span>🖱 Drag to select</span>
+    <span>·</span>
+    <kbd>Shift</kbd><span>= 16:9 lock</span>
+    <span>·</span>
+    <kbd>↑↓←→</kbd><span>= nudge</span>
+    <span>·</span>
+    <kbd>Enter</kbd><span>= confirm</span>
+    <span>·</span>
+    <kbd>Esc</kbd><span>= cancel</span>
   </div>
 
+  <div id="presets">
+    <button class="preset-btn" data-w="1280" data-h="720">1280×720</button>
+    <button class="preset-btn" data-w="1920" data-h="1080">1920×1080</button>
+    <button class="preset-btn" data-w="1280" data-h="800">16:10</button>
+    <button class="preset-btn" data-w="800" data-h="600">4:3</button>
+    <button class="preset-btn" data-w="720" data-h="720">1:1 Square</button>
+  </div>
+
+  <div id="actions">
+    <button id="btn-cancel">Cancel</button>
+    <span class="hint" id="size-hint">0 × 0 px</span>
+    <button id="btn-confirm">✓ Confirm Selection</button>
+  </div>
+
+  <div id="magnifier"><canvas id="mag-canvas"></canvas></div>
+
   <script>
-    const overlay = document.getElementById('overlay');
-    const selection = document.getElementById('selection');
-    const dimensionLabel = document.getElementById('dimensionLabel');
+    // ── Use the preload API instead of direct Electron ──────────
+    const api = window.electronAPI;
+
+    // ── DOM refs ───────────────────────────────────────────────
+    const screenshotBg = document.getElementById('screenshot-bg');
+    const overlayCanvas = document.getElementById('overlay-canvas');
+    const oc = overlayCanvas.getContext('2d');
+    const selEl = document.getElementById('selection');
+    const badge = document.getElementById('dimension-badge');
     const instructions = document.getElementById('instructions');
     const actions = document.getElementById('actions');
+    const sizeHint = document.getElementById('size-hint');
     const btnConfirm = document.getElementById('btn-confirm');
     const btnCancel = document.getElementById('btn-cancel');
-    
-    let isDragging = false;
-    let startX, startY;
-    let region = { x: 0, y: 0, width: 0, height: 0 };
-    let activeCorner = null;
-    
-    overlay.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      
-      region = { x: startX, y: startY, width: 0, height: 0 };
-      
-      selection.style.left = startX + 'px';
-      selection.style.top = startY + 'px';
-      selection.style.width = '0px';
-      selection.style.height = '0px';
-      selection.style.display = 'block';
-      
-      instructions.style.display = 'none';
-      actions.style.display = 'none';
-    });
-    
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      
-      const currentX = e.clientX;
-      const currentY = e.clientY;
-      
-      const left = Math.min(startX, currentX);
-      const top = Math.min(startY, currentY);
-      const width = Math.abs(currentX - startX);
-      const height = Math.abs(currentY - startY);
-      
-      region = { x: left, y: top, width, height };
-      
-      selection.style.left = left + 'px';
-      selection.style.top = top + 'px';
-      selection.style.width = width + 'px';
-      selection.style.height = height + 'px';
-      
-      dimensionLabel.textContent = `${Math.round(width)} x ${Math.round(height)}`;
-    });
-    
-    document.addEventListener('mouseup', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      
-      if (region.width > 10 && region.height > 10) {
-        actions.style.display = 'flex';
-      } else {
-        selection.style.display = 'none';
-        instructions.style.display = 'block';
+    const magnifier = document.getElementById('magnifier');
+    const magCanvas = document.getElementById('mag-canvas');
+    const magCtx = magCanvas.getContext('2d');
+
+    // ── State ──────────────────────────────────────────────────
+    let scaleFactor = 1;
+    let screenshotImg = null;
+    let region = { x: 0, y: 0, w: 0, h: 0 };
+    let hasRegion = false;
+
+    const MODES = { IDLE: 0, DRAW: 1, MOVE: 2, RESIZE_CORNER: 3, RESIZE_EDGE: 4 };
+    let mode = MODES.IDLE;
+    let dragStart = { x: 0, y: 0 };
+    let regionAtDragStart = null;
+    let activeHandle = null;
+    let lockAspect = false;
+    const ASPECT_16_9 = 16 / 9;
+
+    // ── Canvas resizing ──────────────────────────────────────────
+    function resizeCanvas() {
+      overlayCanvas.width = window.innerWidth;
+      overlayCanvas.height = window.innerHeight;
+      drawOverlay();
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ── Overlay drawing ──────────────────────────────────────────
+    function drawOverlay() {
+      const W = overlayCanvas.width, H = overlayCanvas.height;
+      oc.clearRect(0, 0, W, H);
+      oc.fillStyle = 'rgba(0,0,0,0.52)';
+      oc.fillRect(0, 0, W, H);
+
+      if (hasRegion && region.w > 0 && region.h > 0) {
+        oc.clearRect(region.x, region.y, region.w, region.h);
+        oc.strokeStyle = 'rgba(0,212,255,0.9)';
+        oc.lineWidth = 1.5;
+        oc.strokeRect(region.x + 0.5, region.y + 0.5, region.w - 1, region.h - 1);
+
+        oc.strokeStyle = 'rgba(255,255,255,0.12)';
+        oc.lineWidth = 1;
+        for (let i = 1; i < 3; i++) {
+          const gx = region.x + (region.w * i / 3);
+          const gy = region.y + (region.h * i / 3);
+          oc.beginPath(); oc.moveTo(gx, region.y); oc.lineTo(gx, region.y + region.h); oc.stroke();
+          oc.beginPath(); oc.moveTo(region.x, gy); oc.lineTo(region.x + region.w, gy); oc.stroke();
+        }
       }
+    }
+
+    function syncSelectionEl() {
+      if (!hasRegion) { selEl.style.display = 'none'; return; }
+      selEl.style.display = 'block';
+      selEl.style.left = region.x + 'px';
+      selEl.style.top = region.y + 'px';
+      selEl.style.width = region.w + 'px';
+      selEl.style.height = region.h + 'px';
+      drawOverlay();
+      updateBadge();
+    }
+
+    function updateBadge() {
+      const pw = Math.round(region.w * scaleFactor);
+      const ph = Math.round(region.h * scaleFactor);
+      badge.textContent = `${pw} × ${ph}`;
+      sizeHint.textContent = `${pw} × ${ph} px`;
+      const badgeY = region.y > 46 ? region.y - 38 : region.y + region.h + 12;
+      badge.style.left = (region.x + region.w / 2) + 'px';
+      badge.style.top = badgeY + 'px';
+      badge.style.display = 'block';
+    }
+
+    function normalise(x1, y1, x2, y2) {
+      return {
+        x: Math.round(Math.min(x1, x2)),
+        y: Math.round(Math.min(y1, y2)),
+        w: Math.round(Math.abs(x2 - x1)),
+        h: Math.round(Math.abs(y2 - y1)),
+      };
+    }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // ── Magnifier ──────────────────────────────────────────────
+    const MAG_ZOOM = 4;
+    const MAG_SIZE = 96;
+
+    function updateMagnifier(cx, cy) {
+      if (!screenshotImg) { magnifier.style.display = 'none'; return; }
+      magnifier.style.display = 'block';
+      const offX = 20, offY = -MAG_SIZE - 12;
+      let mx = cx + offX, my = cy + offY;
+      if (mx + MAG_SIZE > window.innerWidth) mx = cx - MAG_SIZE - offX;
+      if (my < 0) my = cy + 20;
+      magnifier.style.left = mx + 'px';
+      magnifier.style.top = my + 'px';
+
+      const sw = MAG_SIZE / MAG_ZOOM;
+      const sh = MAG_SIZE / MAG_ZOOM;
+      magCanvas.width = MAG_SIZE;
+      magCanvas.height = MAG_SIZE;
+      magCtx.drawImage(
+        screenshotImg,
+        (cx - sw / 2) * scaleFactor, (cy - sh / 2) * scaleFactor,
+        sw * scaleFactor, sh * scaleFactor,
+        0, 0, MAG_SIZE, MAG_SIZE
+      );
+    }
+
+    function hideMagnifier() { magnifier.style.display = 'none'; }
+
+    // ── Mouse events ────────────────────────────────────────────
+    overlayCanvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      mode = MODES.DRAW;
+      hasRegion = true;
+      dragStart = { x: e.clientX, y: e.clientY };
+      region = normalise(e.clientX, e.clientY, e.clientX, e.clientY);
+      actions.style.display = 'none';
+      instructions.style.display = 'none';
+      if (magnifier) magnifier.style.display = 'block';
+      syncSelectionEl();
     });
-    
-    document.querySelectorAll('.corner').forEach(corner => {
-      corner.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        activeCorner = corner.dataset.corner;
-        
-        document.addEventListener('mousemove', resizeCorner);
-        document.addEventListener('mouseup', stopResize);
+
+    document.addEventListener('mousemove', (e) => {
+      lockAspect = e.shiftKey;
+      if (mode === MODES.IDLE) {
+        if (!hasRegion) updateMagnifier(e.clientX, e.clientY);
+        return;
+      }
+
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      const W = window.innerWidth, H = window.innerHeight;
+
+      if (mode === MODES.DRAW) {
+        let x2 = e.clientX, y2 = e.clientY;
+        if (lockAspect) {
+          const aw = Math.abs(x2 - dragStart.x), ah = Math.abs(y2 - dragStart.y);
+          if (aw / ah > ASPECT_16_9) y2 = dragStart.y + Math.sign(y2 - dragStart.y) * (aw / ASPECT_16_9);
+          else x2 = dragStart.x + Math.sign(x2 - dragStart.x) * (ah * ASPECT_16_9);
+        }
+        region = normalise(dragStart.x, dragStart.y, x2, y2);
+        updateMagnifier(e.clientX, e.clientY);
+      } else if (mode === MODES.MOVE) {
+        const r = regionAtDragStart;
+        region = { x: clamp(r.x + dx, 0, W - r.w), y: clamp(r.y + dy, 0, H - r.h), w: r.w, h: r.h };
+      } else if (mode === MODES.RESIZE_CORNER) {
+        const r = regionAtDragStart;
+        let nx1 = r.x, ny1 = r.y, nx2 = r.x + r.w, ny2 = r.y + r.h;
+        if (activeHandle.includes('l')) nx1 = clamp(e.clientX, 0, nx2 - 20);
+        if (activeHandle.includes('r')) nx2 = clamp(e.clientX, nx1 + 20, W);
+        if (activeHandle.includes('t')) ny1 = clamp(e.clientY, 0, ny2 - 20);
+        if (activeHandle.includes('b')) ny2 = clamp(e.clientY, ny1 + 20, H);
+        if (lockAspect) {
+          const nw = nx2 - nx1, nh = ny2 - ny1;
+          if (nw / nh > ASPECT_16_9) ny2 = ny1 + Math.round(nw / ASPECT_16_9);
+          else nx2 = nx1 + Math.round(nh * ASPECT_16_9);
+        }
+        region = { x: nx1, y: ny1, w: nx2 - nx1, h: ny2 - ny1 };
+      } else if (mode === MODES.RESIZE_EDGE) {
+        const r = regionAtDragStart;
+        let nx1 = r.x, ny1 = r.y, nx2 = r.x + r.w, ny2 = r.y + r.h;
+        if (activeHandle === 'n') ny1 = clamp(e.clientY, 0, ny2 - 20);
+        if (activeHandle === 's') ny2 = clamp(e.clientY, ny1 + 20, H);
+        if (activeHandle === 'w') nx1 = clamp(e.clientX, 0, nx2 - 20);
+        if (activeHandle === 'e') nx2 = clamp(e.clientX, nx1 + 20, W);
+        region = { x: nx1, y: ny1, w: nx2 - nx1, h: ny2 - ny1 };
+      }
+      syncSelectionEl();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (mode === MODES.IDLE) return;
+      selEl.style.cursor = 'move';
+      hideMagnifier();
+      if (mode === MODES.DRAW && region.w < 10 && region.h < 10) {
+        hasRegion = false; selEl.style.display = 'none'; badge.style.display = 'none';
+        drawOverlay(); mode = MODES.IDLE; return;
+      }
+      mode = MODES.IDLE;
+      actions.style.display = 'flex';
+      syncSelectionEl();
+    });
+
+    document.querySelectorAll('.corner').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.stopPropagation(); mode = MODES.RESIZE_CORNER; activeHandle = el.dataset.corner;
+        dragStart = { x: e.clientX, y: e.clientY }; regionAtDragStart = { ...region };
+        actions.style.display = 'none';
       });
     });
-    
-    function resizeCorner(e) {
-      if (!activeCorner) return;
-      
-      const rect = selection.getBoundingClientRect();
-      let newX = region.x;
-      let newY = region.y;
-      let newWidth = region.width;
-      let newHeight = region.height;
-      
-      if (activeCorner.includes('r')) {
-        newWidth = e.clientX - region.x;
-      }
-      if (activeCorner.includes('l')) {
-        newWidth = region.width + (region.x - e.clientX);
-        newX = e.clientX;
-      }
-      if (activeCorner.includes('b')) {
-        newHeight = e.clientY - region.y;
-      }
-      if (activeCorner.includes('t')) {
-        newHeight = region.height + (region.y - e.clientY);
-        newY = e.clientY;
-      }
-      
-      if (newWidth > 10 && newHeight > 10) {
-        region = { x: newX, y: newY, width: newWidth, height: newHeight };
-        
-        selection.style.left = newX + 'px';
-        selection.style.top = newY + 'px';
-        selection.style.width = newWidth + 'px';
-        selection.style.height = newHeight + 'px';
-        
-        dimensionLabel.textContent = `${Math.round(newWidth)} x ${Math.round(newHeight)}`;
-      }
-    }
-    
-    function stopResize() {
-      activeCorner = null;
-      document.removeEventListener('mousemove', resizeCorner);
-      document.removeEventListener('mouseup', stopResize);
-    }
-    
-    btnConfirm.addEventListener('click', () => {
-      const displayWidth = window.innerWidth;
-      const displayHeight = window.innerHeight;
-      
-      const scaleX = window.innerWidth / document.body.offsetWidth;
-      const scaleY = window.innerHeight / document.body.offsetHeight;
-      
-      const finalRegion = {
-        x: Math.round(region.x * scaleX),
-        y: Math.round(region.y * scaleY),
-        width: Math.round(region.width * scaleX),
-        height: Math.round(region.height * scaleY)
-      };
-      
-      const { ipcRenderer } = require('electron');
-      ipcRenderer.send('region-selected-result', finalRegion);
+
+    document.querySelectorAll('.edge').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.stopPropagation(); mode = MODES.RESIZE_EDGE; activeHandle = el.dataset.edge;
+        dragStart = { x: e.clientX, y: e.clientY }; regionAtDragStart = { ...region };
+        actions.style.display = 'none';
+      });
     });
-    
-    btnConfirm.addEventListener('click', () => {
-      const scaleX = window.innerWidth / document.body.offsetWidth;
-      const scaleY = window.innerHeight / document.body.offsetHeight;
-      
-      const finalRegion = {
-        x: Math.round(region.x * scaleX),
-        y: Math.round(region.y * scaleY),
-        width: Math.round(region.width * scaleX),
-        height: Math.round(region.height * scaleY)
-      };
-      
-      const { ipcRenderer } = require('electron');
-      ipcRenderer.send('region-selected-result', finalRegion);
+
+    selEl.addEventListener('mousedown', e => {
+      if (e.target !== selEl) return;
+      e.stopPropagation(); mode = MODES.MOVE;
+      dragStart = { x: e.clientX, y: e.clientY }; regionAtDragStart = { ...region };
+      selEl.style.cursor = 'grabbing';
+      actions.style.display = 'none';
     });
-    
-    btnCancel.addEventListener('click', () => {
-      const { ipcRenderer } = require('electron');
-      ipcRenderer.send('region-cancelled-result');
-    });
-    
+
+    // ── Keyboard ────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.send('region-cancelled-result');
-      } else if (e.key === 'Enter' && actions.style.display !== 'none') {
-        btnConfirm.click();
+      if (e.key === 'Escape') { api.sendRegionCancelled(); return; }
+      if (e.key === 'Enter' && hasRegion && region.w > 10) { sendConfirm(); return; }
+
+      if (hasRegion && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const W = window.innerWidth, H = window.innerHeight;
+        if (e.key === 'ArrowLeft') region.x = clamp(region.x - step, 0, W - region.w);
+        if (e.key === 'ArrowRight') region.x = clamp(region.x + step, 0, W - region.w);
+        if (e.key === 'ArrowUp') region.y = clamp(region.y - step, 0, H - region.h);
+        if (e.key === 'ArrowDown') region.y = clamp(region.y + step, 0, H - region.h);
+        syncSelectionEl();
+      }
+    });
+
+    // ── Actions ─────────────────────────────────────────────────
+    btnConfirm.addEventListener('click', sendConfirm);
+    btnCancel.addEventListener('click', () => api.sendRegionCancelled());
+
+    function makeEven(v) {
+      const val = Math.round(v);
+      return val % 2 === 0 ? val : val - 1;
+    }
+
+    function sendConfirm() {
+      if (!hasRegion || region.w < 10) return;
+
+      // FFmpeg (H.264) requires even dimensions for yuv420p.
+      // We force the physical dimensions to be even.
+      api.sendRegionSelected({
+        x: Math.round(region.x * scaleFactor),
+        y: Math.round(region.y * scaleFactor),
+        width: makeEven(region.w * scaleFactor),
+        height: makeEven(region.h * scaleFactor),
+      });
+    }
+
+    // ── Presets ─────────────────────────────────────────────────
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pw = parseInt(btn.dataset.w), ph = parseInt(btn.dataset.h);
+        const lw = Math.round(pw / scaleFactor), lh = Math.round(ph / scaleFactor);
+        region = { x: Math.round((window.innerWidth - lw) / 2), y: Math.round((window.innerHeight - lh) / 2), w: lw, h: lh };
+        hasRegion = true; syncSelectionEl(); actions.style.display = 'flex'; instructions.style.display = 'none';
+      });
+    });
+
+    // ── IPC Init ────────────────────────────────────────────────
+    api.onRegionInit((data) => {
+      scaleFactor = data.scaleFactor || 1;
+      if (data.screenshot) {
+        screenshotBg.style.backgroundImage = `url('${data.screenshot}')`;
+        screenshotImg = new Image();
+        screenshotImg.src = data.screenshot;
+      }
+      if (data.lastRegion) {
+        const lr = data.lastRegion;
+        region = { x: Math.round(lr.x / scaleFactor), y: Math.round(lr.y / scaleFactor), w: Math.round(lr.width / scaleFactor), h: Math.round(lr.height / scaleFactor) };
+        hasRegion = true; syncSelectionEl(); actions.style.display = 'flex'; instructions.style.display = 'none';
       }
     });
   </script>
 </body>
+
 </html>

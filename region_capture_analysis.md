@@ -177,3 +177,25 @@ On stop → stream tracks all stopped cleanly
 | UX/Polish | ⚠️ Basic, no live preview, no reposition | ✨ Snipping Tool quality |
 | Stability/Bugs | 🐛 Duplicate IPC, DPI bug, stream leak | 🛡️ Solid |
 | Security | ⚠️ bare require('electron') | 🔒 contextBridge preload |
+
+
+
+
+ Suggested New Features
+Visual Recording Border:
+
+While recording a region, show a 1px-thin dashed red or yellow border around the actual area on the desktop.
+Benefit: Users often forget exactly where the "camera" is pointing. This provides a clear boundary.
+Intelligent Window Snapping:
+
+Update the selector to automatically detect open windows near the cursor. If the user draws near a Chrome window, it "snaps" to the window's exact edges.
+Benefit: Perfectly capturing a specific app window without manual pixel-fiddling.
+Multi-Display Support:
+
+Currently, the tool locks to the primary monitor. We should allow selecting a region across any connected display.
+Region Continuity (Persistent Region):
+
+Add a "Lock Region" toggle. If enabled, the app remembers the exact coordinates even after the app is restarted.
+Floating Dimension Badge (Advanced):
+
+Show current RAM/CPU usage of the recording process right on the selection border so users know if their settings are too high for their hardware.

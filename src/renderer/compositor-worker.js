@@ -69,10 +69,19 @@ function handleRenderFrame(payload) {
   const { screenBitmap, webcamBitmap, annotationBitmap, tempAnnotationBitmap } = payload;
 
   try {
-    // 1. Draw Screen Video Frame
+    // 1. Draw Screen Video Frame (with cropping if needed)
     if (screenBitmap) {
-      ctx.drawImage(screenBitmap, 0, 0, config.width, config.height);
-      screenBitmap.close(); // Immediate GC cleanup
+      if (settings.cropRegion) {
+        const { x, y, width, height } = settings.cropRegion;
+        ctx.drawImage(
+          screenBitmap,
+          x, y, width, height, // Source rect
+          0, 0, config.width, config.height // Dest rect
+        );
+      } else {
+        ctx.drawImage(screenBitmap, 0, 0, config.width, config.height);
+      }
+      screenBitmap.close();
     }
 
     // 2. Draw Webcam Overlay Frame if enabled
@@ -81,18 +90,29 @@ function handleRenderFrame(payload) {
       webcamBitmap.close();
     }
 
-    // 3. Draw Annotation Overlays if enabled
+    // 3. Draw Annotation Overlays if enabled (with cropping if needed)
     if (settings.includeAnnotations) {
-      if (annotationBitmap) {
-        ctx.drawImage(annotationBitmap, 0, 0, config.width, config.height);
-        annotationBitmap.close();
-      }
-      if (tempAnnotationBitmap) {
-        ctx.drawImage(tempAnnotationBitmap, 0, 0, config.width, config.height);
-        tempAnnotationBitmap.close();
+      if (settings.cropRegion) {
+        const { x, y, width, height } = settings.cropRegion;
+        if (annotationBitmap) {
+          ctx.drawImage(annotationBitmap, x, y, width, height, 0, 0, config.width, config.height);
+          annotationBitmap.close();
+        }
+        if (tempAnnotationBitmap) {
+          ctx.drawImage(tempAnnotationBitmap, x, y, width, height, 0, 0, config.width, config.height);
+          tempAnnotationBitmap.close();
+        }
+      } else {
+        if (annotationBitmap) {
+          ctx.drawImage(annotationBitmap, 0, 0, config.width, config.height);
+          annotationBitmap.close();
+        }
+        if (tempAnnotationBitmap) {
+          ctx.drawImage(tempAnnotationBitmap, 0, 0, config.width, config.height);
+          tempAnnotationBitmap.close();
+        }
       }
     }
-
   } catch (err) {
     console.error("Frame draw error in worker:", err);
   }

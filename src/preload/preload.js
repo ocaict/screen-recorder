@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sendRegionCancelled: () => ipcRenderer.send("region-cancelled"),
   onRegionInit: (callback) =>
     ipcRenderer.on("region-init", (_, data) => callback(data)),
+  onWindowsUpdate: (callback) =>
+    ipcRenderer.on("windows-update", (_, windows) => callback(windows)),
+
+  // Visual Region Indicator during recording
+  showRegionIndicator: (region) => ipcRenderer.send("region-indicator-show", region),
+  hideRegionIndicator: () => ipcRenderer.send("region-indicator-hide"),
+  onRegionUpdate: (callback) =>
+    ipcRenderer.on("region-update", (_, region) => callback(region)),
+  onInit: (callback) =>
+    ipcRenderer.on("region-init", (_, data) => callback(data)),
 
   // Chunked recording API
   startChunkedRecording: (options) =>

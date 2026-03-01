@@ -4,79 +4,86 @@
   "resolution": "native",
   "recordAudio": true,
   "recordSystemAudio": true,
-  "selectedMicrophone": "default",
+  "selectedMicrophone": "e0dfb56ad46bbe803669a8ff4304b6957ed5ade6bc5cab3e45077b28f0908c04",
   "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
-  "shortcutEnabled": false,
+  "shortcutEnabled": true,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
-  "showNotifications": false,
+  "showNotifications": true,
   "autoOpenAfterRecording": true,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
-  "countdown": 0,
+  "countdown": 3,
   "recentRecordings": [
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_10-21-52.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772356964889.png",
-      "fileName": "Recording_2026-03-01_10-21-52.mp4",
-      "recordedAt": "2026-03-01T09:22:45.109Z",
-      "size": 5247039
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-31-07.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772368418778.png",
+      "fileName": "Recording_2026-03-01_13-31-07.mp4",
+      "recordedAt": "2026-03-01T12:33:39.135Z",
+      "size": 9612625
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_10-20-52.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772356867005.png",
-      "fileName": "Recording_2026-03-01_10-20-52.mp4",
-      "recordedAt": "2026-03-01T09:21:07.415Z",
-      "size": 1607775
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-27-45.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772368079425.png",
+      "fileName": "Recording_2026-03-01_13-27-45.mp4",
+      "recordedAt": "2026-03-01T12:27:59.640Z",
+      "size": 2008431
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_10-19-03.webm",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772356744131.png",
-      "fileName": "Recording_2026-03-01_10-19-03.webm",
-      "recordedAt": "2026-03-01T09:19:04.327Z",
-      "size": 8967369
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-26-54.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772368029371.png",
+      "fileName": "Recording_2026-03-01_13-26-54.mp4",
+      "recordedAt": "2026-03-01T12:27:09.704Z",
+      "size": 2716502
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_10-12-09.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772356352781.png",
-      "fileName": "Recording_2026-03-01_10-12-09.mp4",
-      "recordedAt": "2026-03-01T09:12:32.996Z",
-      "size": 1772041
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-19-59.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772367610639.png",
+      "fileName": "Recording_2026-03-01_13-19-59.mp4",
+      "recordedAt": "2026-03-01T12:20:10.993Z",
+      "size": 2369249
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_10-07-15.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772356041867.png",
-      "fileName": "Recording_2026-03-01_10-07-15.mp4",
-      "recordedAt": "2026-03-01T09:07:22.300Z",
-      "size": 694649
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-18-36.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772367550408.png",
+      "fileName": "Recording_2026-03-01_13-18-36.mp4",
+      "recordedAt": "2026-03-01T12:19:10.680Z",
+      "size": 6021014
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_09-53-13.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772355199632.png",
-      "fileName": "Recording_2026-03-01_09-53-13.mp4",
-      "recordedAt": "2026-03-01T08:53:20.270Z",
-      "size": 1148281
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-17-08.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772367466748.png",
+      "fileName": "Recording_2026-03-01_13-17-08.mp4",
+      "recordedAt": "2026-03-01T12:17:47.198Z",
+      "size": 5601317
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_08-36-29.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772351243241.png",
-      "fileName": "Recording_2026-03-01_08-36-29.mp4",
-      "recordedAt": "2026-03-01T07:47:23.672Z",
-      "size": 64001450
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-12-26.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772367162705.png",
+      "fileName": "Recording_2026-03-01_13-12-26.mp4",
+      "recordedAt": "2026-03-01T12:12:43.163Z",
+      "size": 2400112
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_07-52-23.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772347994557.png",
-      "fileName": "Recording_2026-03-01_07-52-23.mp4",
-      "recordedAt": "2026-03-01T06:53:15.730Z",
-      "size": 6682886
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-08-15.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772367074859.png",
+      "fileName": "Recording_2026-03-01_13-08-15.mp4",
+      "recordedAt": "2026-03-01T12:11:15.300Z",
+      "size": 19608833
     },
     {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-02-28_21-50-55.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772312131893.png",
-      "fileName": "Recording_2026-02-28_21-50-55.mp4",
-      "recordedAt": "2026-02-28T20:55:32.424Z",
-      "size": 27157843
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-07-33.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772366869602.png",
+      "fileName": "Recording_2026-03-01_13-07-33.mp4",
+      "recordedAt": "2026-03-01T12:07:49.811Z",
+      "size": 319675
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-01_13-07-01.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772366833440.png",
+      "fileName": "Recording_2026-03-01_13-07-01.mp4",
+      "recordedAt": "2026-03-01T12:07:13.650Z",
+      "size": 230112
     }
   ],
   "maxRecentRecordings": 10,
@@ -95,17 +102,17 @@
   "colorFormat": "yuv420p",
   "showMiniControls": false,
   "showClickHighlights": false,
-  "highlightLeftColor": "#cc0000",
-  "highlightRightColor": "#00ff4c",
+  "highlightLeftColor": "#ffeb3b",
+  "highlightRightColor": "#2196f3",
   "highlightRippleSize": 50,
   "highlightRippleSpeed": 400,
   "highlightGlowSize": 25,
   "highlightGlowIntensity": 30,
   "nvencPromptDismissed": false,
   "lastRegion": {
-    "x": 119,
-    "y": 41,
-    "width": 1420,
-    "height": 778
+    "x": 0,
+    "y": 0,
+    "width": 1600,
+    "height": 900
   }
 }

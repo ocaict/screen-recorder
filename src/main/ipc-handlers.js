@@ -31,6 +31,7 @@ const {
 const tray = require("./tray");
 const shortcuts = require("./shortcuts");
 const state = require("./state");
+const { getVisibleWindowBounds } = require("../utils/windows");
 
 let uiohook = null;
 let uIOhook = null;
@@ -49,6 +50,7 @@ try {
 let mainWindow = null;
 let overlayWindow = null;
 let miniControlsWindow = null;
+let regionIndicatorWindow = null;
 let ICON_PATH = null;
 let clickHighlightHookRunning = false;
 
@@ -1254,6 +1256,11 @@ function setupIpcHandlers() {
       return null;
     }
 
+    // Hide existing indicator if drawing a new region
+    if (regionIndicatorWindow && !regionIndicatorWindow.isDestroyed()) {
+      regionIndicatorWindow.hide();
+    }
+
     let regionWindow = null;
     try {
       const primaryDisplay = screen.getPrimaryDisplay();
@@ -1273,12 +1280,14 @@ function setupIpcHandlers() {
         height: Math.round(height),
         frame: false,
         transparent: true,
-        alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
         movable: false,
         hasShadow: false,
         show: false,
+        focusable: true,
+        enableLargerThanScreen: true,
+        thickFrame: false,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -1290,15 +1299,40 @@ function setupIpcHandlers() {
         path.join(__dirname, "..", "renderer", "region-select.html"),
       );
 
-      regionWindow.webContents.once("did-finish-load", () => {
+      const windowBoundsPromise = getVisibleWindowBounds();
+
+      regionWindow.webContents.once("did-finish-load", async () => {
         if (regionWindow && !regionWindow.isDestroyed()) {
+          // On Windows, setFullScreen is the most reliable way to cover the taskbar
+          regionWindow.setFullScreen(true);
           regionWindow.show();
+
+          // Force above everything including taskbar with a higher priority (1)
+          regionWindow.setAlwaysOnTop(true, "screen-saver", 1);
+          regionWindow.moveTop();
+
+          // Prevent the selection UI itself from being captured if recording starts early
+          regionWindow.setContentProtection(true);
+
+          // Send initial data immediately
           regionWindow.webContents.send("region-init", {
             scaleFactor,
             screenshot: null,
             lastRegion,
+            monitorX: x,
+            monitorY: y,
+            windows: [], // Start empty, will update soon
           });
+
           regionWindow.focus();
+
+          // Fetch windows asynchronously to not block the UI
+          windowBoundsPromise.then(windows => {
+            if (regionWindow && !regionWindow.isDestroyed()) {
+              console.log(`[IPC] Asynchronously sending ${windows.length} window bounds to renderer`);
+              regionWindow.webContents.send("windows-update", windows);
+            }
+          });
         }
       });
 
@@ -1479,6 +1513,71 @@ function setupIpcHandlers() {
 
     if (ov.webContents) {
       ov.webContents.send("overlay-draw-mode", enabled);
+    }
+  });
+
+  // ── Region Indicator Handlers ──────────────────────────────────────────
+
+  ipcMain.on("region-indicator-show", (event, region) => {
+    if (!region) return;
+
+    if (!regionIndicatorWindow || regionIndicatorWindow.isDestroyed()) {
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { x, y, width, height } = primaryDisplay.bounds;
+
+      regionIndicatorWindow = new BrowserWindow({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+        frame: false,
+        transparent: true,
+        skipTaskbar: true,
+        resizable: false,
+        movable: false,
+        hasShadow: false,
+        focusable: false,
+        show: false,
+        enableLargerThanScreen: true,
+        thickFrame: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          preload: path.join(__dirname, "..", "preload", "preload.js"),
+        },
+      });
+
+      regionIndicatorWindow.setIgnoreMouseEvents(true);
+      // Use setFullScreen to definitively cover the taskbar
+      regionIndicatorWindow.setFullScreen(true);
+      // Use higher alwaysOnTop priority
+      regionIndicatorWindow.setAlwaysOnTop(true, "screen-saver", 1);
+      // CRITICAL: Prevent the red border from being recorded in the output video
+      regionIndicatorWindow.setContentProtection(true);
+
+      regionIndicatorWindow.loadFile(
+        path.join(__dirname, "..", "renderer", "region-indicator.html")
+      );
+    }
+
+    regionIndicatorWindow.webContents.once("did-finish-load", () => {
+      if (regionIndicatorWindow && !regionIndicatorWindow.isDestroyed()) {
+        regionIndicatorWindow.showInactive();
+        regionIndicatorWindow.webContents.send("region-update", region);
+      }
+    });
+
+    // Always send the region update to ensure it's fresh when shown
+    regionIndicatorWindow.webContents.send("region-update", region);
+
+    if (!regionIndicatorWindow.isVisible()) {
+      regionIndicatorWindow.showInactive();
+    }
+  });
+
+  ipcMain.on("region-indicator-hide", () => {
+    if (regionIndicatorWindow && !regionIndicatorWindow.isDestroyed()) {
+      regionIndicatorWindow.hide();
     }
   });
 

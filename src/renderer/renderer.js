@@ -51,6 +51,11 @@ class ScreenRecorder {
           // This fixes the '3 streams' issue and uses RAF for performance.
           await this.recordingManager.setupRegionStream(false);
 
+          // Show the red guide border immediately after selection
+          if (window.electronAPI.showRegionIndicator) {
+            window.electronAPI.showRegionIndicator(region);
+          }
+
           this.showToast(
             `Region selected: ${region.width}x${region.height}`,
             "success",

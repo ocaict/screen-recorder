@@ -180,6 +180,8 @@
       align-items: center;
       gap: 16px;
       white-space: nowrap;
+      pointer-events: none;
+      /* Don't block clicks/drawing through labels */
     }
 
     #instructions kbd {
@@ -205,6 +207,13 @@
       display: flex;
       gap: 8px;
       z-index: 1000;
+      pointer-events: none;
+      /* Container doesn't block */
+    }
+
+    #presets>* {
+      pointer-events: auto;
+      /* Buttons inside do */
     }
 
     .preset-btn {
@@ -243,6 +252,13 @@
       z-index: 30;
       border: 1px solid rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(15px);
+      pointer-events: none;
+      /* Container doesn't block */
+    }
+
+    #actions>* {
+      pointer-events: auto;
+      /* Elements inside do */
     }
 
     #actions .hint {
@@ -250,33 +266,50 @@
       font-size: 11px;
     }
 
-    #btn-confirm {
-      background: linear-gradient(135deg, #00d4ff, #0080cc);
-      color: white;
-      border: none;
-      padding: 8px 24px;
+    .btn {
+      padding: 8px 18px;
       border-radius: 20px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.15s;
-      box-shadow: 0 2px 12px rgba(0, 212, 255, 0.3);
+      transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+      border: 1px solid transparent;
+      outline: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
     }
 
-    #btn-confirm:hover {
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00d4ff, #0080cc);
+      color: white;
+      border: none;
+      box-shadow: 0 2px 12px rgba(0, 212, 255, 0.3);
+      padding: 8px 24px;
+    }
+
+    .btn-primary:hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 18px rgba(0, 212, 255, 0.5);
+      filter: brightness(1.1);
     }
 
-    #btn-cancel {
-      background: rgba(255, 255, 255, 0.08);
-      color: #aaa;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      padding: 8px 18px;
-      border-radius: 20px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.15s;
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.12);
+      /* Slightly more visible */
+      color: #eee;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.25);
     }
 
     #btn-cancel:hover {
@@ -354,9 +387,10 @@
   </div>
 
   <div id="actions">
-    <button id="btn-cancel">Cancel</button>
+    <button id="btn-cancel" class="btn btn-secondary">Cancel</button>
+    <button id="btn-reset" class="btn btn-secondary" title="Clear Selection">Reset</button>
     <span class="hint" id="size-hint">0 × 0 px</span>
-    <button id="btn-confirm">✓ Confirm Selection</button>
+    <button id="btn-confirm" class="btn btn-primary">✓ Confirm Selection</button>
   </div>
 
   <div id="magnifier"><canvas id="mag-canvas"></canvas></div>
@@ -376,6 +410,7 @@
     const sizeHint = document.getElementById('size-hint');
     const btnConfirm = document.getElementById('btn-confirm');
     const btnCancel = document.getElementById('btn-cancel');
+    const btnReset = document.getElementById('btn-reset');
     const magnifier = document.getElementById('magnifier');
     const magCanvas = document.getElementById('mag-canvas');
     const magCtx = magCanvas.getContext('2d');
@@ -394,6 +429,14 @@
     let lockAspect = false;
     const ASPECT_16_9 = 16 / 9;
 
+    // ── Snapping System ─────────────────────────────────────────
+    const SNAP_THRESHOLD = 20; // Pixels distance to snap
+    let snapWindows = []; // Fetched from Main Process
+    let ghostRegion = null; // Region to show as preview 
+    let ghostAtMouseDown = null; // To distinguish between snap-click and draw-drag
+    let monitorX = 0;
+    let monitorY = 0;
+
     // ── Canvas resizing ──────────────────────────────────────────
     function resizeCanvas() {
       overlayCanvas.width = window.innerWidth;
@@ -409,6 +452,18 @@
       oc.clearRect(0, 0, W, H);
       oc.fillStyle = 'rgba(0,0,0,0.52)';
       oc.fillRect(0, 0, W, H);
+
+      // Draw Ghost Preview (Auto Snap)
+      if (ghostRegion && !hasRegion) {
+        oc.save();
+        oc.setLineDash([5, 5]);
+        oc.strokeStyle = 'rgba(0, 212, 255, 0.6)';
+        oc.lineWidth = 2;
+        oc.strokeRect(ghostRegion.x, ghostRegion.y, ghostRegion.w, ghostRegion.h);
+        oc.fillStyle = 'rgba(0, 212, 255, 0.05)';
+        oc.fillRect(ghostRegion.x, ghostRegion.y, ghostRegion.w, ghostRegion.h);
+        oc.restore();
+      }
 
       if (hasRegion && region.w > 0 && region.h > 0) {
         oc.clearRect(region.x, region.y, region.w, region.h);
@@ -436,6 +491,79 @@
       selEl.style.height = region.h + 'px';
       drawOverlay();
       updateBadge();
+    }
+
+    /**
+     * Finds the best ghost region based on mouse pointer
+     */
+    function findGhostRegion(mx, my) {
+      if (mode !== MODES.IDLE) return null;
+
+      // Logic: If there is an existing selection, only show ghosts if the mouse
+      // is NOT near an edge/handle (otherwise it interferes with resizing/moving)
+      if (hasRegion) {
+        const handle = getHandleAt(mx, my);
+        if (handle) return null;
+      }
+
+      // Look for the smallest window that contains this point
+      let best = null;
+      let minArea = Infinity;
+
+      for (const win of snapWindows) {
+        // Adjust for monitor offset AND device pixel ratio
+        const wx = (win.x - monitorX) / scaleFactor;
+        const wy = (win.y - monitorY) / scaleFactor;
+        const ww = win.width / scaleFactor;
+        const wh = win.height / scaleFactor;
+
+        if (mx >= wx && mx <= wx + ww && my >= wy && my <= wy + wh) {
+          const area = ww * wh;
+          if (area < minArea) {
+            minArea = area;
+            best = { x: Math.round(wx), y: Math.round(wy), w: Math.round(ww), h: Math.round(wh) };
+          }
+        }
+      }
+      return best;
+    }
+
+    /**
+     * Logic to snap a value to a near window edge
+     */
+    function snapValue(val, type, excludeBest = false) {
+      let bestSnap = val;
+      let minDiff = SNAP_THRESHOLD;
+
+      // Also snap to screen edges
+      const экранEdges = (type === 'x' || type === 'w') ? [0, window.innerWidth] : [0, window.innerHeight];
+
+      // Use edges from all windows
+      const edges = [...экранEdges];
+      for (const win of snapWindows) {
+        const wx = (win.x - monitorX) / scaleFactor;
+        const wy = (win.y - monitorY) / scaleFactor;
+        const ww = win.width / scaleFactor;
+        const wh = win.height / scaleFactor;
+
+        if (type === 'x' || type === 'w') {
+          edges.push(wx);
+          edges.push(wx + ww);
+        } else {
+          edges.push(wy);
+          edges.push(wy + wh);
+        }
+      }
+
+      for (const edge of edges) {
+        const diff = Math.abs(val - edge);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestSnap = edge;
+        }
+      }
+
+      return Math.round(bestSnap);
     }
 
     function updateBadge() {
@@ -491,19 +619,39 @@
     // ── Mouse events ────────────────────────────────────────────
     overlayCanvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
+
+      // Reset region for DRAW
+      dragStart = { x: e.clientX, y: e.clientY };
+      ghostAtMouseDown = ghostRegion; // Remember if we were over a ghost
+
       mode = MODES.DRAW;
       hasRegion = true;
-      dragStart = { x: e.clientX, y: e.clientY };
-      region = normalise(e.clientX, e.clientY, e.clientX, e.clientY);
+      region = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
+
       actions.style.display = 'none';
       instructions.style.display = 'none';
       if (magnifier) magnifier.style.display = 'block';
       syncSelectionEl();
     });
 
+    /**
+     * Helper to detect if cursor is over a resize handle
+     */
+    function getHandleAt(x, y) {
+      // Small buffer for handles
+      const b = 15;
+      if (Math.abs(x - region.x) < b && Math.abs(y - region.y) < b) return 'nw';
+      if (Math.abs(x - (region.x + region.w)) < b && Math.abs(y - region.y) < b) return 'ne';
+      if (Math.abs(x - region.x) < b && Math.abs(y - (region.y + region.h)) < b) return 'sw';
+      if (Math.abs(x - (region.x + region.w)) < b && Math.abs(y - (region.y + region.h)) < b) return 'se';
+      return null;
+    }
+
     document.addEventListener('mousemove', (e) => {
       lockAspect = e.shiftKey;
       if (mode === MODES.IDLE) {
+        ghostRegion = findGhostRegion(e.clientX, e.clientY);
+        drawOverlay();
         if (!hasRegion) updateMagnifier(e.clientX, e.clientY);
         return;
       }
@@ -514,6 +662,11 @@
 
       if (mode === MODES.DRAW) {
         let x2 = e.clientX, y2 = e.clientY;
+
+        // Snapping logic for DRAW
+        x2 = snapValue(x2, 'x');
+        y2 = snapValue(y2, 'y');
+
         if (lockAspect) {
           const aw = Math.abs(x2 - dragStart.x), ah = Math.abs(y2 - dragStart.y);
           if (aw / ah > ASPECT_16_9) y2 = dragStart.y + Math.sign(y2 - dragStart.y) * (aw / ASPECT_16_9);
@@ -523,14 +676,19 @@
         updateMagnifier(e.clientX, e.clientY);
       } else if (mode === MODES.MOVE) {
         const r = regionAtDragStart;
-        region = { x: clamp(r.x + dx, 0, W - r.w), y: clamp(r.y + dy, 0, H - r.h), w: r.w, h: r.h };
+        let nx = r.x + dx;
+        let ny = r.y + dy;
+        nx = snapValue(nx, 'x');
+        ny = snapValue(ny, 'y');
+        region = { x: clamp(nx, 0, W - r.w), y: clamp(ny, 0, H - r.h), w: r.w, h: r.h };
       } else if (mode === MODES.RESIZE_CORNER) {
         const r = regionAtDragStart;
         let nx1 = r.x, ny1 = r.y, nx2 = r.x + r.w, ny2 = r.y + r.h;
-        if (activeHandle.includes('l')) nx1 = clamp(e.clientX, 0, nx2 - 20);
-        if (activeHandle.includes('r')) nx2 = clamp(e.clientX, nx1 + 20, W);
-        if (activeHandle.includes('t')) ny1 = clamp(e.clientY, 0, ny2 - 20);
-        if (activeHandle.includes('b')) ny2 = clamp(e.clientY, ny1 + 20, H);
+        if (activeHandle.includes('l')) nx1 = snapValue(clamp(e.clientX, 0, nx2 - 20), 'x');
+        if (activeHandle.includes('r')) nx2 = snapValue(clamp(e.clientX, nx1 + 20, W), 'x');
+        if (activeHandle.includes('t')) ny1 = snapValue(clamp(e.clientY, 0, ny2 - 20), 'y');
+        if (activeHandle.includes('b')) ny2 = snapValue(clamp(e.clientY, ny1 + 20, H), 'y');
+
         if (lockAspect) {
           const nw = nx2 - nx1, nh = ny2 - ny1;
           if (nw / nh > ASPECT_16_9) ny2 = ny1 + Math.round(nw / ASPECT_16_9);
@@ -540,24 +698,40 @@
       } else if (mode === MODES.RESIZE_EDGE) {
         const r = regionAtDragStart;
         let nx1 = r.x, ny1 = r.y, nx2 = r.x + r.w, ny2 = r.y + r.h;
-        if (activeHandle === 'n') ny1 = clamp(e.clientY, 0, ny2 - 20);
-        if (activeHandle === 's') ny2 = clamp(e.clientY, ny1 + 20, H);
-        if (activeHandle === 'w') nx1 = clamp(e.clientX, 0, nx2 - 20);
-        if (activeHandle === 'e') nx2 = clamp(e.clientX, nx1 + 20, W);
+        if (activeHandle === 'n') ny1 = snapValue(clamp(e.clientY, 0, ny2 - 20), 'y');
+        if (activeHandle === 's') ny2 = snapValue(clamp(e.clientY, ny1 + 20, H), 'y');
+        if (activeHandle === 'w') nx1 = snapValue(clamp(e.clientX, 0, nx2 - 20), 'x');
+        if (activeHandle === 'e') nx2 = snapValue(clamp(e.clientX, nx1 + 20, W), 'x');
         region = { x: nx1, y: ny1, w: nx2 - nx1, h: ny2 - ny1 };
       }
       syncSelectionEl();
     });
 
-    document.addEventListener('mouseup', () => {
+    document.addEventListener('mouseup', (e) => {
       if (mode === MODES.IDLE) return;
       selEl.style.cursor = 'move';
       hideMagnifier();
-      if (mode === MODES.DRAW && region.w < 10 && region.h < 10) {
-        hasRegion = false; selEl.style.display = 'none'; badge.style.display = 'none';
-        drawOverlay(); mode = MODES.IDLE; return;
+
+      if (mode === MODES.DRAW) {
+        const dist = Math.sqrt(Math.pow(e.clientX - dragStart.x, 2) + Math.pow(e.clientY - dragStart.y, 2));
+
+        // If it was a short click and we were over a window ghost, snap to it!
+        if (dist < 10 && ghostAtMouseDown) {
+          region = { ...ghostAtMouseDown };
+          hasRegion = true;
+        } else if (region.w < 10 && region.h < 10) {
+          // If just a tiny click on empty space, clear everything
+          hasRegion = false;
+          selEl.style.display = 'none';
+          badge.style.display = 'none';
+          drawOverlay();
+          mode = MODES.IDLE;
+          return;
+        }
       }
+
       mode = MODES.IDLE;
+      ghostAtMouseDown = null;
       actions.style.display = 'flex';
       syncSelectionEl();
     });
@@ -579,6 +753,18 @@
     });
 
     selEl.addEventListener('mousedown', e => {
+      // If there is a ghost window under the cursor, allow clicking it to snap
+      // even if we are clicking on the selection box itself.
+      if (ghostRegion) {
+        region = { ...ghostRegion };
+        hasRegion = true;
+        mode = MODES.IDLE;
+        ghostRegion = null;
+        actions.style.display = 'flex';
+        syncSelectionEl();
+        return;
+      }
+
       if (e.target !== selEl) return;
       e.stopPropagation(); mode = MODES.MOVE;
       dragStart = { x: e.clientX, y: e.clientY }; regionAtDragStart = { ...region };
@@ -606,6 +792,14 @@
     // ── Actions ─────────────────────────────────────────────────
     btnConfirm.addEventListener('click', sendConfirm);
     btnCancel.addEventListener('click', () => api.sendRegionCancelled());
+    btnReset.addEventListener('click', () => {
+      hasRegion = false;
+      region = { x: 0, y: 0, w: 0, h: 0 };
+      actions.style.display = 'none';
+      instructions.style.display = 'block';
+      syncSelectionEl();
+      drawOverlay();
+    });
 
     function makeEven(v) {
       const val = Math.round(v);
@@ -637,7 +831,11 @@
 
     // ── IPC Init ────────────────────────────────────────────────
     api.onRegionInit((data) => {
+      console.log("[RENDERER] onRegionInit", data);
       scaleFactor = data.scaleFactor || 1;
+      monitorX = data.monitorX || 0;
+      monitorY = data.monitorY || 0;
+      snapWindows = data.windows || [];
       if (data.screenshot) {
         screenshotBg.style.backgroundImage = `url('${data.screenshot}')`;
         screenshotImg = new Image();
@@ -648,6 +846,12 @@
         region = { x: Math.round(lr.x / scaleFactor), y: Math.round(lr.y / scaleFactor), w: Math.round(lr.width / scaleFactor), h: Math.round(lr.height / scaleFactor) };
         hasRegion = true; syncSelectionEl(); actions.style.display = 'flex'; instructions.style.display = 'none';
       }
+    });
+
+    api.onWindowsUpdate((windows) => {
+      console.log("[RENDERER] onWindowsUpdate", windows.length);
+      snapWindows = windows;
+      drawOverlay();
     });
   </script>
 </body>

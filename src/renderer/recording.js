@@ -110,11 +110,14 @@ class RecordingManager {
         mandatory: {
           chromeMediaSource: "desktop",
           chromeMediaSourceId: source.id,
-          minFrameRate: frameRate,
-          maxFrameRate: frameRate,
-        }
+        },
+        optional: [
+          { minFrameRate: frameRate },
+          { maxFrameRate: frameRate }
+        ]
       };
 
+      // Add resolution constraints only if not native
       if (resolution !== "native") {
         const [width, height] = resolution.split("x").map(Number);
         videoConstraints.mandatory.minWidth = width;
@@ -166,16 +169,12 @@ class RecordingManager {
         sources = await window.electronAPI.getCaptureSources();
       } catch (sourcesErr) {
         console.error("Failed to get capture sources:", sourcesErr);
-        this.app.showToast(
-          `Failed to get sources: ${sourcesErr.message}`,
-          "error",
-        );
+        this.app.showToast(`Failed to get sources: ${sourcesErr.message}`, "error");
         this.videoStream = null;
         return;
       }
 
       const screenSource = sources?.find((s) => s.id.startsWith("screen:"));
-
       if (!screenSource) {
         this.app.showToast("No screen available for region capture", "error");
         this.videoStream = null;
@@ -184,8 +183,9 @@ class RecordingManager {
 
       this.selectedSource = screenSource;
 
+      let fullStream;
       try {
-        this.fullScreenStream = await navigator.mediaDevices.getUserMedia({
+        fullStream = await navigator.mediaDevices.getUserMedia({
           video: {
             mandatory: {
               chromeMediaSource: "desktop",
@@ -201,66 +201,21 @@ class RecordingManager {
           audio: false,
         });
       } catch (streamErr) {
-        console.error("Region stream error:", streamErr);
-        this.app.showToast(`Failed to capture: ${streamErr.message}`, "error");
+        console.error("Region source stream error:", streamErr);
+        this.app.showToast(`Failed to capture source: ${streamErr.message}`, "error");
         this.videoStream = null;
         return;
       }
 
-      this.fullScreenVideo = document.createElement("video");
-      this.fullScreenVideo.srcObject = this.fullScreenStream;
-      this.fullScreenVideo.muted = true;
-      this.fullScreenVideo.playsInline = true;
-      await this.fullScreenVideo.play();
+      // Use the high-performance worker-based compositor for region cropping & preview
+      this.videoStream = await this.createCompositedStream(
+        fullStream.getVideoTracks(),
+        [],
+        includeAnnotations
+      );
 
-      this.cropCanvas = document.createElement("canvas");
-      this.cropCanvas.width = region.width;
-      this.cropCanvas.height = region.height;
-      this.cropCtx = this.cropCanvas.getContext("2d");
-
-      // Use requestAnimationFrame for smoother and more efficient cropping
-      const cropFrame = () => {
-        if (!this.fullScreenVideo || this.fullScreenVideo.readyState < 2) return;
-
-        if (includeAnnotations && this.app.annotationManager) {
-          // Optimized composite: draw video then both annotation layers
-          this.cropCtx.drawImage(
-            this.fullScreenVideo,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
-          );
-
-          const annCanvas = this.app.annotationManager.getCanvas();
-          const tempCanvas = this.app.annotationManager.getTempCanvas();
-
-          this.cropCtx.drawImage(
-            annCanvas,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
-          );
-          this.cropCtx.drawImage(
-            tempCanvas,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
-          );
-        } else {
-          // Video only crop
-          this.cropCtx.drawImage(
-            this.fullScreenVideo,
-            region.x, region.y, region.width, region.height,
-            0, 0, region.width, region.height
-          );
-        }
-
-        this.cropDrawId = requestAnimationFrame(cropFrame);
-      };
-
-      // Start the loop
-      this.cropDrawId = requestAnimationFrame(cropFrame);
-
-      this.canvasStream = this.cropCanvas.captureStream(frameRate);
-      this.videoStream = this.canvasStream;
-
+      // Clean up the temporary full stream (tracks are cloned inside createCompositedStream)
+      fullStream.getTracks().forEach(t => t.stop());
 
       try {
         this.app.previewVideo.srcObject = this.videoStream;
@@ -339,7 +294,27 @@ class RecordingManager {
       // Return the stream which now effectively only has the system audio track
       return stream;
     } catch (err) {
-      console.warn("Could not get system audio stream:", err);
+      console.warn("Could not get system audio stream for specific source:", err);
+
+      // Fallback: Try global system audio if specific source capture fails (common with window IDs)
+      if (this.selectedSource.id.startsWith("window:")) {
+        try {
+          const sources = await window.electronAPI.getCaptureSources();
+          const screenSource = sources?.find((s) => s.id.startsWith("screen:"));
+          if (screenSource) {
+            console.log("Retrying system audio capture with global screen source...");
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              audio: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: screenSource.id } },
+              video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: screenSource.id } },
+            });
+            fallbackStream.getVideoTracks().forEach((track) => track.stop());
+            return fallbackStream; // Succeeded with global screen
+          }
+        } catch (fbErr) {
+          console.error("System audio fallback also failed:", fbErr);
+        }
+      }
+
       this.app.showToast("System audio capture failed", "warn");
       return null;
     }
@@ -368,7 +343,7 @@ class RecordingManager {
   }
 
 
-  stopCurrentStream() {
+  stopCurrentStream(keepAudio = false) {
     try {
       if (this.videoStream) {
         this.videoStream.getTracks().forEach((track) => {
@@ -385,20 +360,38 @@ class RecordingManager {
       this.videoStream = null;
     }
 
-    try {
-      if (this.audioStream) {
-        this.audioStream.getTracks().forEach((track) => {
-          try {
-            track.stop();
-          } catch (e) {
-            console.warn("Failed to stop audio track:", e);
-          }
-        });
+    if (!keepAudio) {
+      try {
+        if (this.audioStream) {
+          this.audioStream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch (e) {
+              console.warn("Failed to stop audio track:", e);
+            }
+          });
+          this.audioStream = null;
+        }
+      } catch (e) {
+        console.warn("Error stopping audio stream:", e);
         this.audioStream = null;
       }
-    } catch (e) {
-      console.warn("Error stopping audio stream:", e);
-      this.audioStream = null;
+
+      try {
+        if (this.systemAudioStream) {
+          this.systemAudioStream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch (e) {
+              console.warn("Failed to stop system audio track:", e);
+            }
+          });
+          this.systemAudioStream = null;
+        }
+      } catch (e) {
+        console.warn("Error stopping system audio stream:", e);
+        this.systemAudioStream = null;
+      }
     }
 
     try {
@@ -468,20 +461,26 @@ class RecordingManager {
     includeAnnotations = true,
   ) {
     const screenTrack = videoTracks[0].clone();
-
     const screenSettings = screenTrack.getSettings();
-    const width = screenSettings.width || 1920;
-    const height = screenSettings.height || 1080;
     const frameRate = screenSettings.frameRate || 30;
+
+    // Use selectedRegion if available to determine canvas size
+    const region = this.selectedRegion;
+    const width = region ? region.width : (screenSettings.width || 1920);
+    const height = region ? region.height : (screenSettings.height || 1080);
 
     // Use a regular canvas and transfer its control to an offscreen compositor
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
 
-    // Ensure local annotation canvases match this resolution for correct compositing
+    // Ensure local annotation canvases match the screen resolution (not just the crop)
+    // because annotations are drawn over the full desktop view
     if (this.app.annotationManager) {
-      this.app.annotationManager.setDrawingResolution(width, height);
+      this.app.annotationManager.setDrawingResolution(
+        screenSettings.width || 1920,
+        screenSettings.height || 1080
+      );
     }
 
     // We can capture stream directly from the canvas element on the main thread
@@ -521,6 +520,7 @@ class RecordingManager {
           includeAnnotations: includeAnnotations,
           webcamPosition: this.app.settings.webcamPosition || "bottom-right",
           webcamSize: this.app.settings.webcamSize || "medium",
+          cropRegion: region ? { x: region.x, y: region.y, width, height } : null
         }
       }
     }, [offscreenCanvas]);
@@ -528,7 +528,8 @@ class RecordingManager {
     // We send bitmaps to the worker to render on its dedicated thread
     const drawFrame = async () => {
       try {
-        if (!this.isRecording) return;
+        // Continue if we have an active compositor ID (set in preview or recording)
+        if (!this.compositorDrawId) return;
 
         if (this.monitor) {
           this.monitor.recordFrame();
@@ -561,20 +562,22 @@ class RecordingManager {
         if (annotationBitmap) transferables.push(annotationBitmap);
         if (tempAnnotationBitmap) transferables.push(tempAnnotationBitmap);
 
-        this.compositorWorker.postMessage({
-          type: "renderFrame",
-          payload: {
-            screenBitmap,
-            webcamBitmap,
-            annotationBitmap,
-            tempAnnotationBitmap
-          }
-        }, transferables);
+        if (this.compositorWorker) {
+          this.compositorWorker.postMessage({
+            type: "renderFrame",
+            payload: {
+              screenBitmap,
+              webcamBitmap,
+              annotationBitmap,
+              tempAnnotationBitmap
+            }
+          }, transferables);
+        }
       } catch (err) {
         console.error("Main thread frame dispatch error:", err);
       }
 
-      if (this.isRecording && this.compositorDrawId) {
+      if (this.compositorDrawId) {
         this.compositorDrawId = requestAnimationFrame(drawFrame);
       }
     };
@@ -701,8 +704,15 @@ class RecordingManager {
 
       this.audioMeterNode = new AudioWorkletNode(context, "meter-processor");
       const source = context.createMediaStreamSource(streamToMeter);
+
+      // Use a silent gain node to pull data through the worklet without playing it to speakers
+      // This prevents audio feedback/echo while recording.
+      const silencer = context.createGain();
+      silencer.gain.value = 0;
+
       source.connect(this.audioMeterNode);
-      this.audioMeterNode.connect(context.destination);
+      this.audioMeterNode.connect(silencer);
+      silencer.connect(context.destination);
 
       const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
 
@@ -787,9 +797,20 @@ class RecordingManager {
       this.selectedRegion.width &&
       this.selectedRegion.height
     ) {
-      await this.setupRegionStream(true);
-      if (!this.videoStream) {
-        this.app.showToast("Failed to capture region", "error");
+      // For region capture, we just need to ensure we have the raw screen source ready.
+      // We don't call setupRegionStream(true) here because that would start a redundant worker.
+      // Instead, we just refresh the selectedSource if needed.
+      if (!this.selectedSource) {
+        try {
+          const sources = await window.electronAPI.getCaptureSources();
+          this.selectedSource = sources?.find((s) => s.id.startsWith("screen:"));
+        } catch (e) {
+          console.error("Failed to refresh sources for region:", e);
+        }
+      }
+
+      if (!this.selectedSource) {
+        this.app.showToast("Screen source not found for region capture", "error");
         return;
       }
     }
@@ -820,19 +841,40 @@ class RecordingManager {
         this.systemAudioStream = await this.setupSystemAudioStream();
       }
 
-      let videoTracks;
+      let videoTracks = [];
       let audioTracks = [];
       let finalAudioStream = null;
 
       try {
-        videoTracks = this.videoStream.getTracks();
+        // 1. Get RAW Video Tracks
+        if (this.selectedRegion) {
+          // CAPTURE RAW FULL SCREEN FOR REGION CROP
+          const frameRate = this.app.settings.frameRate || 30;
+          const fullStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              mandatory: {
+                chromeMediaSource: "desktop",
+                chromeMediaSourceId: this.selectedSource.id,
+                minWidth: 1920,
+                maxWidth: 3840,
+                minHeight: 1080,
+                maxHeight: 2160,
+                minFrameRate: frameRate,
+                maxFrameRate: frameRate,
+              },
+            },
+            audio: false,
+          });
+          videoTracks = fullStream.getVideoTracks();
+        } else if (this.videoStream) {
+          // CRITICAL: Clone the tracks BEFORE they are stopped by stopCurrentStream()
+          // This keeps the hardware capture alive for the new recording compositor.
+          videoTracks = this.videoStream.getTracks().map(t => t.clone());
+        }
 
-        // Mix audio tracks if we have both mic and system audio
+        // 2. Prepare Audio
         if (this.audioStream && this.systemAudioStream) {
-          finalAudioStream = await this.mixAudioStreams(
-            this.audioStream,
-            this.systemAudioStream,
-          );
+          finalAudioStream = await this.mixAudioStreams(this.audioStream, this.systemAudioStream);
         } else if (this.audioStream) {
           finalAudioStream = this.audioStream;
         } else if (this.systemAudioStream) {
@@ -840,8 +882,12 @@ class RecordingManager {
         }
 
         if (finalAudioStream) {
-          audioTracks = finalAudioStream.getAudioTracks();
-          await this.startAudioMeter(finalAudioStream);
+          // CLONE the audio tracks so they aren't killed by stopCurrentStream() cleanup
+          audioTracks = finalAudioStream.getAudioTracks().map(t => t.clone());
+
+          // Start the meter with a stream containing the CLONED tracks
+          const meterStream = new MediaStream(audioTracks);
+          await this.startAudioMeter(meterStream);
         }
       } catch (trackErr) {
         console.error("Failed to get tracks:", trackErr);
@@ -852,81 +898,48 @@ class RecordingManager {
         throw new Error("No video tracks available");
       }
 
-      const webcamEnabled =
-        this.app.settings.webcamEnabled ||
-        document.getElementById("settingsWebcam")?.checked;
-
+      // 3. Handle Webcam
+      const webcamEnabled = this.app.settings.webcamEnabled || document.getElementById("settingsWebcam")?.checked;
       if (webcamEnabled) {
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter((d) => d.kind === "videoinput");
-
-          if (videoDevices.length === 0) {
-            this.app.showToast("No camera found", "error");
-          } else {
-            const cameraId =
-              this.app.settings.selectedCamera ||
-              document.getElementById("settingsCamera")?.value;
-
-            let constraints = {
-              audio: false,
-              video: {},
-            };
-
-            if (
-              cameraId &&
-              cameraId !== "default" &&
-              videoDevices.find((d) => d.deviceId === cameraId)
-            ) {
-              constraints.video.deviceId = { exact: cameraId };
-            }
-
-            this.webcamStream =
-              await navigator.mediaDevices.getUserMedia(constraints);
-            this.app.showToast("Webcam enabled", "info");
+          if (videoDevices.length > 0) {
+            const cameraId = this.app.settings.selectedCamera || "default";
+            let constraints = { audio: false, video: {} };
+            if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
+            this.webcamStream = await navigator.mediaDevices.getUserMedia(constraints);
           }
         } catch (webcamErr) {
-          console.error(
-            "Webcam error details:",
-            webcamErr.message,
-            webcamErr.name,
-          );
-          if (webcamErr.name === "NotReadableError") {
-            this.app.showToast(
-              "Webcam in use by another app - close other apps using camera",
-              "error",
-            );
-          } else if (webcamErr.name === "NotAllowedError") {
-            this.app.showToast("Webcam permission denied", "error");
-          } else {
-            this.app.showToast(
-              "Webcam unavailable, recording screen only",
-              "info",
-            );
-          }
+          console.warn("Webcam failing, continuing with screen only:", webcamErr);
         }
       }
 
+      // 4. Create Unified Composited Stream (ONE WORKER)
       try {
-        const annotationsActive = this.app.annotationManager?.isActive;
+        // Kill any existing preview compositor before starting recording compositor
+        // IMPORTANT: We preserve the audio tracks we just prepared for recording
+        this.stopCurrentStream(true);
 
-        if (this.webcamStream) {
-          this.mixedStream = await this.createCompositedStream(
-            videoTracks,
-            audioTracks,
-            annotationsActive,
-          );
-        } else if (annotationsActive) {
-          this.mixedStream = await this.createCompositedStream(
-            videoTracks,
-            audioTracks,
-            true,
-          );
-        } else {
-          this.mixedStream = new MediaStream([...videoTracks, ...audioTracks]);
+        const annotationsActive = this.app.annotationManager?.isActive;
+        // The worker-based createCompositedStream handles Region Crop + Webcam + Annotations in ONE loop
+        this.mixedStream = await this.createCompositedStream(
+          videoTracks,
+          audioTracks,
+          annotationsActive
+        );
+
+        // RE-ATTACH TO PREVIEW UI
+        if (this.app.previewVideo) {
+          this.app.previewVideo.srcObject = this.mixedStream;
+          try {
+            await this.app.previewVideo.play();
+          } catch (e) {
+            console.warn("Preview play failed during recording start:", e);
+          }
         }
       } catch (streamErr) {
-        console.error("Failed to create mixed stream:", streamErr);
+        console.error("Failed to create unified compositor stream:", streamErr);
         throw new Error("Failed to create recording stream");
       }
 
@@ -1036,6 +1049,11 @@ class RecordingManager {
       this.app.updateUIForRecording();
       this.startRecordingTimer();
 
+      // Show visual border for region recording
+      if (this.selectedRegion && window.electronAPI.showRegionIndicator) {
+        window.electronAPI.showRegionIndicator(this.selectedRegion);
+      }
+
       if (this.app.timerPreset > 0) {
         const durationMs = this.app.timerPreset * 60 * 1000;
         this.recordingTimeout = setTimeout(() => {
@@ -1077,6 +1095,11 @@ class RecordingManager {
       if (this.recordingTimeout) {
         clearTimeout(this.recordingTimeout);
         this.recordingTimeout = null;
+      }
+
+      // Hide visual border if active
+      if (window.electronAPI.hideRegionIndicator) {
+        window.electronAPI.hideRegionIndicator();
       }
 
       this.stopChunkedRecording();
@@ -1212,10 +1235,17 @@ class RecordingManager {
       }
 
       // Adaptive Bitrate & Auto-Pause feature
-      if (this.monitor && this.monitor.frameCount > 100) {
+      // Increased threshold for performance check to allow for startup settle-down.
+      // Custom regions (using compositor worker) have more overhead initially.
+      const startThreshold = this.selectedRegion ? 400 : 200;
+
+      if (this.monitor && this.monitor.frameCount > startThreshold) {
         const dropPercent = (this.monitor.metrics.recording.droppedFrames / this.monitor.frameCount) * 100;
 
-        if (dropPercent > 5) {
+        // Be more tolerant for custom regions which are renderer-intensive but usually stabilize.
+        const dropTolerance = this.selectedRegion ? 8 : 5;
+
+        if (dropPercent > dropTolerance) {
           if (!this.bitrateReduced) {
             this.bitrateReduced = true;
             this.app.showToast("System struggling: Auto-pausing & reducing compositing rate to stabilize...", "warning");

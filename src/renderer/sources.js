@@ -98,6 +98,9 @@ class SourceManager {
 
     this.app.recordingManager.selectedSource = source;
     this.app.recordingManager.selectedRegion = null;
+    if (window.electronAPI.hideRegionIndicator) {
+      window.electronAPI.hideRegionIndicator();
+    }
     await this.app.recordingManager.setupVideoStream(source);
     this.updateSourcePreview(source);
     this.app.updateQuickSettings();

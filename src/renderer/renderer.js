@@ -244,6 +244,21 @@ class ScreenRecorder {
         document.getElementById("settingsShortcutKey").value = "F9";
         document.getElementById("settingsShortcutKey").disabled = false;
         document.getElementById("settingsShowNotifications").checked = true;
+        if (document.getElementById("settingsShowMiniControls")) {
+          document.getElementById("settingsShowMiniControls").checked = true;
+        }
+        if (document.getElementById("settingsShowClickHighlights")) {
+          document.getElementById("settingsShowClickHighlights").checked = false;
+        }
+        if (document.getElementById("settingsIdleDetection")) {
+          document.getElementById("settingsIdleDetection").checked = false;
+          if (document.getElementById("idleTimeoutGroup")) {
+            document.getElementById("idleTimeoutGroup").style.display = "none";
+          }
+        }
+        if (document.getElementById("settingsIdleTimeout")) {
+          document.getElementById("settingsIdleTimeout").value = "5";
+        }
 
         if (document.getElementById("settingsVideoCodec")) {
           document.getElementById("settingsVideoCodec").value = "libx264";
@@ -293,6 +308,15 @@ class ScreenRecorder {
         webcamGroups.forEach((el) => {
           el.style.display = e.target.checked ? "block" : "none";
         });
+      });
+
+    document
+      .getElementById("settingsIdleDetection")
+      ?.addEventListener("change", (e) => {
+        const idleTimeoutGroup = document.getElementById("idleTimeoutGroup");
+        if (idleTimeoutGroup) {
+          idleTimeoutGroup.style.display = e.target.checked ? "block" : "none";
+        }
       });
 
     const qualityControlSelect = document.getElementById("settingsQualityControl");
@@ -1070,6 +1094,23 @@ class ScreenRecorder {
           this.settings.webcamEnabled || false ? "block" : "none";
       });
     }
+
+    if (document.getElementById("settingsIdleDetection")) {
+      document.getElementById("settingsIdleDetection").checked =
+        this.settings.idleDetectionEnabled || false;
+      const idleTimeoutGroup = document.getElementById("idleTimeoutGroup");
+      if (idleTimeoutGroup) {
+        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled ? "block" : "none";
+      }
+    }
+    if (document.getElementById("settingsIdleTimeout")) {
+      document.getElementById("settingsIdleTimeout").value =
+        this.settings.idleTimeoutMinutes || 5;
+    }
+    if (document.getElementById("settingsMemoryThreshold")) {
+      document.getElementById("settingsMemoryThreshold").value =
+        this.settings.memoryThresholdMB || 500;
+    }
   }
 
   async loadAudioDevices() { }
@@ -1343,6 +1384,19 @@ class ScreenRecorder {
       document.getElementById("highlightGlowIntensity").value = this.settings.highlightGlowIntensity || 30;
       document.getElementById("glowIntensityValue").textContent = this.settings.highlightGlowIntensity || 30;
     }
+    if (document.getElementById("settingsIdleDetection")) {
+      document.getElementById("settingsIdleDetection").checked = this.settings.idleDetectionEnabled || false;
+      const idleTimeoutGroup = document.getElementById("idleTimeoutGroup");
+      if (idleTimeoutGroup) {
+        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled ? "block" : "none";
+      }
+    }
+    if (document.getElementById("settingsIdleTimeout")) {
+      document.getElementById("settingsIdleTimeout").value = this.settings.idleTimeoutMinutes || 5;
+    }
+    if (document.getElementById("settingsMemoryThreshold")) {
+      document.getElementById("settingsMemoryThreshold").value = this.settings.memoryThresholdMB || 500;
+    }
 
     // Advanced Settings
     if (document.getElementById("settingsVideoCodec")) {
@@ -1374,13 +1428,12 @@ class ScreenRecorder {
       document.getElementById("settingsColorFormat").value = this.settings.colorFormat || "yuv420p";
     }
 
-    this.loadAudioDevicesForSettings();
-    this.updateHardwareAccelerationOptions();
+    this.openModal(this.settingsModal);
     this.updateFileSizeEstimate();
+    this.loadAudioDevicesForSettings();
     this.loadRecordingStats();
     this.updateAdvancedSettings();
-
-    this.openModal(this.settingsModal);
+    this.updateHardwareAccelerationOptions();
   }
 
   updateAdvancedSettings() {
@@ -1473,6 +1526,10 @@ class ScreenRecorder {
 
   async updateHardwareAccelerationOptions() {
     const hwSelect = document.getElementById("settingsHardwareAcceleration");
+    const hwLoading = document.getElementById("hwLoading");
+    
+    if (hwLoading) hwLoading.style.display = "inline";
+    
     let resp = null;
     try {
       resp = await window.electronAPI.getAvailableEncoders();
@@ -1480,6 +1537,9 @@ class ScreenRecorder {
       console.error("Failed to get available encoders:", err);
       resp = { nvenc: false, qsv: false, amf: false };
     }
+    
+    if (hwLoading) hwLoading.style.display = "none";
+    
     const encoders = resp && resp.encoders ? resp.encoders : resp;
     const systemPath = resp && resp.systemFfmpeg ? resp.systemFfmpeg : null;
 
@@ -1536,18 +1596,11 @@ class ScreenRecorder {
       let videoDevices = [];
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
-        stream.getTracks().forEach((track) => track.stop());
         const devices = await navigator.mediaDevices.enumerateDevices();
         audioDevices = devices.filter((d) => d.kind === "audioinput");
         videoDevices = devices.filter((d) => d.kind === "videoinput");
       } catch (e) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        audioDevices = devices.filter((d) => d.kind === "audioinput");
-        videoDevices = devices.filter((d) => d.kind === "videoinput");
+        console.warn("Failed to enumerate devices:", e);
       }
 
       const micSelect = document.getElementById("settingsMicrophone");
@@ -1654,6 +1707,9 @@ class ScreenRecorder {
       highlightRippleSpeed: parseInt(document.getElementById("highlightRippleSpeed")?.value) || 400,
       highlightGlowSize: parseInt(document.getElementById("highlightGlowSize")?.value) || 25,
       highlightGlowIntensity: parseInt(document.getElementById("highlightGlowIntensity")?.value) || 30,
+      idleDetectionEnabled: document.getElementById("settingsIdleDetection")?.checked || false,
+      idleTimeoutMinutes: parseInt(document.getElementById("settingsIdleTimeout")?.value) || 5,
+      memoryThresholdMB: parseInt(document.getElementById("settingsMemoryThreshold")?.value) || 500,
     };
 
     try {

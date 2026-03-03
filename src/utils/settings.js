@@ -41,6 +41,9 @@ let settings = {
   highlightRippleSpeed: 400,
   highlightGlowSize: 25,
   highlightGlowIntensity: 30,
+  idleDetectionEnabled: false,
+  idleTimeoutMinutes: 5,
+  memoryThresholdMB: 500,
 };
 
 let settingsFile = null;
@@ -139,6 +142,9 @@ function resetSettings() {
     showMiniControls: true,
     showClickHighlights: false,
     nvencPromptDismissed: false,
+    idleDetectionEnabled: false,
+    idleTimeoutMinutes: 5,
+    memoryThresholdMB: 500,
   };
   saveSettings(settings);
   return settings;

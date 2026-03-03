@@ -532,6 +532,17 @@
                 Real-time MP4 Encoding
               </label>
             </div>
+            <div class="form-group">
+              <label for="settingsMemoryThreshold">Memory Threshold (MB)</label>
+              <select id="settingsMemoryThreshold" class="form-select">
+                <option value="250">250 MB</option>
+                <option value="500" selected>500 MB</option>
+                <option value="750">750 MB</option>
+                <option value="1000">1 GB</option>
+                <option value="2000">2 GB</option>
+              </select>
+              <div class="form-note">Auto-save when memory usage exceeds this limit</div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -692,6 +703,22 @@
                 <input type="checkbox" id="settingsShowNotifications" checked>
                 Show Push Notifications
               </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsIdleDetection">
+                Auto-pause When Idle
+              </label>
+            </div>
+            <div class="form-group" id="idleTimeoutGroup" style="margin-left: 20px; display: none;">
+              <label for="settingsIdleTimeout">Pause after (minutes)</label>
+              <select id="settingsIdleTimeout" class="form-select">
+                <option value="1">1 minute</option>
+                <option value="3">3 minutes</option>
+                <option value="5" selected>5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
+              </select>
             </div>
             <div class="form-group">
               <label>

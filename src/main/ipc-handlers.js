@@ -463,7 +463,6 @@ function setupIpcHandlers() {
         const ffmpegModule = require("../utils/ffmpeg");
         const ffmpegPath = ffmpegModule.getSystemFfmpegPath() || "ffmpeg";
 
-        // Advanced Encoder Settings integration
         const hwAccel = settings.hardwareAcceleration || "none";
         const preferredCodec = settings.videoCodec || "libx264";
         const qualityMode = settings.qualityControl || "crf";
@@ -479,40 +478,23 @@ function setupIpcHandlers() {
           const encoders = await ffmpegModule.getAvailableEncoders();
           if (hwAccel !== "none") {
             const isHevc = preferredCodec === "libx265";
-            if ((hwAccel === "nvenc" || hwAccel === "auto")) {
-              if (isHevc && encoders.nvenc && encoders.nvenc.hevc) {
-                v_codec = "hevc_nvenc";
-              } else if (encoders.nvenc && encoders.nvenc.h264) {
-                v_codec = "h264_nvenc";
-              }
-              if (v_codec.includes("nvenc")) {
-                v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString()];
-              }
-            } else if ((hwAccel === "qsv" || hwAccel === "auto")) {
-              if (isHevc && encoders.qsv && encoders.qsv.hevc) {
-                v_codec = "hevc_qsv";
-              } else if (encoders.qsv && encoders.qsv.h264) {
-                v_codec = "h264_qsv";
-              }
-              if (v_codec.includes("qsv")) {
-                v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString()];
-              }
-            } else if ((hwAccel === "amf" || hwAccel === "auto")) {
-              if (isHevc && encoders.amf && encoders.amf.hevc) {
-                v_codec = "hevc_amf";
-              } else if (encoders.amf && encoders.amf.h264) {
-                v_codec = "h264_amf";
-              }
-              if (v_codec.includes("amf")) {
-                v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
-              }
+            // Each branch checks encoder availability explicitly so "auto" can fall through the chain
+            if (hwAccel === "nvenc" || (hwAccel === "auto" && encoders.nvenc?.h264)) {
+              v_codec = isHevc && encoders.nvenc?.hevc ? "hevc_nvenc" : "h264_nvenc";
+              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString()];
+            } else if (hwAccel === "qsv" || (hwAccel === "auto" && encoders.qsv?.h264)) {
+              v_codec = isHevc && encoders.qsv?.hevc ? "hevc_qsv" : "h264_qsv";
+              v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString()];
+            } else if (hwAccel === "amf" || (hwAccel === "auto" && encoders.amf?.h264)) {
+              v_codec = isHevc && encoders.amf?.hevc ? "hevc_amf" : "h264_amf";
+              v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
             }
           }
         } catch (encErr) {
           log("warn", `Could not query encoders: ${encErr.message}`);
         }
 
-        // Apply visual settings based on selected codec and quality mode
+        // Apply SW encoder settings if no HW encoder was selected
         if (v_codec === "libx264" || v_codec === "libx265") {
           v_options = ["-preset", "ultrafast", "-tune", "zerolatency"];
           if (qualityMode === "crf") {
@@ -521,11 +503,8 @@ function setupIpcHandlers() {
             v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
           }
           if (v_codec === "libx265") v_options.push("-vtag", "hvc1");
-        } else {
-          // Hardware encoders specific adjustments for bitrate mode
-          if (qualityMode === "vbr") {
-            v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
-          }
+        } else if (qualityMode === "vbr") {
+          v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
         }
 
         // Resolve output path
@@ -544,12 +523,12 @@ function setupIpcHandlers() {
         log("info", `Starting live FFmpeg pipe (${v_codec}) -> ${finalPath}`);
 
         const args = [
-          "-loglevel", "error",
-          "-thread_queue_size", "4096",
-          "-probesize", "2M",
-          "-analyzeduration", "2000000",
-          "-fflags", "+genpts+igndts",
-          "-threads", "0",
+          "-loglevel", "warning",
+          "-thread_queue_size", "8192",
+          "-probesize", "10M",
+          "-analyzeduration", "10M",
+          "-fflags", "+genpts+discardcorrupt+nobuffer",
+          "-threads", "2",
           "-f", "webm",
           "-i", "pipe:0",
           "-c:v", v_codec,
@@ -559,6 +538,7 @@ function setupIpcHandlers() {
           "-b:a", "128k",
           "-pix_fmt", colorFmt,
           "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+          "-flush_packets", "1",
           "-y",
           finalPath
         ];
@@ -588,22 +568,38 @@ function setupIpcHandlers() {
               log("info", "HW encoder failed, retrying with libx264...");
               try { proc.kill(); } catch (e) { }
 
-              const swArgs = [...args];
-              const vIdx = swArgs.indexOf("-c:v");
-              if (vIdx !== -1) {
-                swArgs[vIdx + 1] = "libx264";
-                swArgs.splice(vIdx + 2, v_options.length, "-preset", "ultrafast", "-tune", "zerolatency", "-crf", selectedCrf.toString());
-              }
+              // Rebuild SW args from scratch to avoid HW arg mutation bugs
+              const swArgs = [
+                "-loglevel", "warning",
+                "-thread_queue_size", "8192",
+                "-probesize", "10M",
+                "-analyzeduration", "10M",
+                "-fflags", "+genpts+discardcorrupt+nobuffer",
+                "-threads", "2",
+                "-f", "webm",
+                "-i", "pipe:0",
+                "-c:v", "libx264",
+                "-preset", "ultrafast", "-tune", "zerolatency",
+                "-crf", selectedCrf.toString(),
+                "-r", String(settings.frameRate || 24),
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+                "-flush_packets", "1",
+                "-y", finalPath
+              ];
               ffmpegProcess = spawn(ffmpegPath, swArgs);
               setupHandlers(ffmpegProcess, true);
 
-              const sess = chunkSessions.get(sessionId);
-              if (sess) {
-                sess.ffmpegProcess = ffmpegProcess;
-                if (sess.initialBuffer) {
-                  for (const chunk of sess.initialBuffer) {
+              const sessFallback = chunkSessions.get(sessionId);
+              if (sessFallback) {
+                sessFallback.ffmpegProcess = ffmpegProcess;
+                if (sessFallback.initialBuffer) {
+                  for (const chunk of sessFallback.initialBuffer) {
                     if (ffmpegProcess.stdin.writable) ffmpegProcess.stdin.write(chunk);
                   }
+                  sessFallback.initialBuffer = null;
                 }
               }
             }
@@ -619,14 +615,18 @@ function setupIpcHandlers() {
               sess.ffmpegProcess = null;
               sess.tempFilePath = path.join(tempDir, `chunked_${Date.now()}_fallback.webm`);
               sess.ws = fs.createWriteStream(sess.tempFilePath, { flags: "w" });
-              if (sess.initialBuffer) {
-                sess.initialBuffer.forEach(c => sess.ws.write(c));
-                sess.initialBuffer = null;
-              }
-              if (sess.writeQueue) {
-                sess.writeQueue.forEach(c => sess.ws.write(c));
-                sess.writeQueue = [];
-              }
+              sess.ws.on("error", (e) => log("error", `Tier-3 fallback ws error: ${e.message}`));
+              // Replay buffered chunks only after the stream confirms it is open
+              sess.ws.once("open", () => {
+                if (sess.initialBuffer) {
+                  sess.initialBuffer.forEach(c => sess.ws.write(c));
+                  sess.initialBuffer = null;
+                }
+                if (sess.writeQueue) {
+                  sess.writeQueue.forEach(c => sess.ws.write(c));
+                  sess.writeQueue = [];
+                }
+              });
               if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send("conversion-started");
                 mainWindow.webContents.send("conversion-progress", {
@@ -651,7 +651,6 @@ function setupIpcHandlers() {
           createdAt: Date.now(),
           isFinalizing: false,
           initialBuffer: [],
-          isStable: false,
           writeQueue: [],
           isWaitingForDrain: false,
           mimeType: options.mimeType || "",
@@ -681,18 +680,14 @@ function setupIpcHandlers() {
       const sess = chunkSessions.get(sessionId);
       if (!sess) return;
 
-      const buf = Buffer.from(uint8Array);
+      const buf = Buffer.from(uint8Array.buffer, uint8Array.byteOffset, uint8Array.byteLength);
 
       if (sess.isLive && sess.ffmpegProcess) {
         if (sess.isFinalizing) return;
 
-        // Keep initial chunks for HW-encoder recovery
+        // Keep the first 40 chunks (~4 s) for HW-encoder tier-2 recovery replay
         if (sess.initialBuffer && sess.initialBuffer.length < 40) {
           sess.initialBuffer.push(buf);
-          if (sess.initialBuffer.length === 40) {
-            sess.isStable = true;
-            setTimeout(() => { if (sess.initialBuffer) sess.initialBuffer = null; }, 2000);
-          }
         }
 
         // Backpressure-aware queue
@@ -736,7 +731,7 @@ function setupIpcHandlers() {
           sess.isFinalizing = true;
 
           (async () => {
-            // Drain remaining queue
+            // Drain remaining write queue
             const initialQueueSize = sess.writeQueue ? sess.writeQueue.length : 0;
             let lastQueueSize = initialQueueSize;
             let stalledCycles = 0;
@@ -778,15 +773,41 @@ function setupIpcHandlers() {
               }
             });
 
-            // Wait for FFmpeg to fully exit
-            await new Promise(resolve => {
-              if (!sess.ffmpegProcess || sess.ffmpegProcess.exitCode !== null) return resolve();
-              sess.ffmpegProcess.on("close", resolve);
-              setTimeout(resolve, 10000);
+            // Wait for FFmpeg to fully exit and capture exit code
+            const ffmpegExitCode = await new Promise(resolve => {
+              if (!sess.ffmpegProcess || sess.ffmpegProcess.exitCode !== null)
+                return resolve(sess.ffmpegProcess?.exitCode ?? 0);
+              sess.ffmpegProcess.on("close", (code) => resolve(code));
+              setTimeout(() => resolve(-1), 10000);
             });
 
             const finalPath = sess.finalPath;
+            const { spawn: spawnDefrag } = require("child_process");
+            const defragFfmpegPath = require("../utils/ffmpeg").getSystemFfmpegPath() || "ffmpeg";
             chunkSessions.delete(sessionId);
+
+            // Defragment fMP4 → standard MP4 with +faststart for better seeking & player compat
+            if (ffmpegExitCode === 0 && fs.existsSync(finalPath)) {
+              const defragPath = finalPath + ".defrag.mp4";
+              try {
+                await new Promise((res, rej) => {
+                  const dp = spawnDefrag(defragFfmpegPath, [
+                    "-loglevel", "error",
+                    "-i", finalPath,
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    "-y", defragPath
+                  ]);
+                  dp.on("close", (c) => (c === 0 ? res() : rej(new Error(`defrag exit ${c}`))));
+                  dp.on("error", rej);
+                });
+                fs.renameSync(defragPath, finalPath);
+                log("info", `fMP4 faststart applied: ${finalPath}`);
+              } catch (defragErr) {
+                log("warn", `fMP4 defrag skipped (file still usable): ${defragErr.message}`);
+                try { if (fs.existsSync(defragPath)) fs.unlinkSync(defragPath); } catch (_) { }
+              }
+            }
 
             const thumbPath = await generateThumbnailHelper(finalPath);
             addRecentRecording(finalPath, thumbPath);
@@ -1405,9 +1426,8 @@ function setupIpcHandlers() {
   ipcMain.handle("get-available-encoders", async () => {
     try {
       const ffmpegUtil = require("../utils/ffmpeg");
-      const { getAvailableEncoders, resetEncoderCheck, getSystemFfmpegPath } =
+      const { getAvailableEncoders, getSystemFfmpegPath } =
         ffmpegUtil;
-      resetEncoderCheck();
       const enc = await getAvailableEncoders();
       const systemPath = getSystemFfmpegPath();
       return { encoders: enc, systemFfmpeg: systemPath };

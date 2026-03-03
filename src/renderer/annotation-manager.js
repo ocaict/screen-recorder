@@ -10,8 +10,10 @@ class AnnotationManager {
     this.startY = 0;
     this.history = [];
     this.historyIndex = -1;
+    this.maxHistorySize = 100;
     this.currentPath = [];
     this.textInput = null;
+    this.dirty = false;
 
     this.canvas = null;
     this.ctx = null;
@@ -498,9 +500,14 @@ class AnnotationManager {
   }
 
   saveToHistory(action) {
+    if (this.history.length >= this.maxHistorySize) {
+      this.history.shift();
+      this.historyIndex--;
+    }
     this.history = this.history.slice(0, this.historyIndex + 1);
     this.history.push(action);
     this.historyIndex++;
+    this.dirty = true;
   }
 
   undo() {
@@ -509,6 +516,7 @@ class AnnotationManager {
     this.history.pop();
     this.historyIndex--;
     this.redrawHistory();
+    this.dirty = true;
 
     if (this.isActiveOverlay && window.electronAPI?.sendOverlayCommand) {
       window.electronAPI.sendOverlayCommand("undo");
@@ -520,6 +528,7 @@ class AnnotationManager {
     this.historyIndex = -1;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
+    this.dirty = true;
 
     if (this.isActiveOverlay && window.electronAPI?.sendOverlayCommand) {
       window.electronAPI.sendOverlayCommand("clear");
@@ -528,6 +537,7 @@ class AnnotationManager {
 
   redrawHistory() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.dirty = true;
 
     for (const action of this.history) {
       this.ctx.strokeStyle = action.color;
@@ -602,6 +612,14 @@ class AnnotationManager {
 
   getTempCanvas() {
     return this.tempCanvas;
+  }
+
+  checkAndResetDirty() {
+    if (this.dirty) {
+      this.dirty = false;
+      return true;
+    }
+    return false;
   }
 
   destroy() {

@@ -101,15 +101,17 @@ class SourceManager {
     if (window.electronAPI.hideRegionIndicator) {
       window.electronAPI.hideRegionIndicator();
     }
-    await this.app.recordingManager.setupVideoStream(source);
-    this.updateSourcePreview(source);
-    this.app.updateQuickSettings();
-    this.app.showQuickSettings();
+    
     this.app.closeModal(this.app.sourceModal);
     this.app.startBtn.disabled = false;
     document
       .querySelectorAll(".timer-preset")
       .forEach((btn) => (btn.disabled = false));
+    
+    await this.app.recordingManager.setupVideoStream(source);
+    this.updateSourcePreview(source);
+    this.app.updateQuickSettings();
+    this.app.showQuickSettings();
   }
 
   updateSourcePreview(source) {

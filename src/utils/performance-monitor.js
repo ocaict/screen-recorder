@@ -119,6 +119,17 @@ class PerformanceMonitor {
   }
 
   /**
+   * Reset frame counters (called on resume after pause)
+   */
+  resetFrameCount() {
+    this.frameCount = 0;
+    this.lastFrameTime = 0;
+    this.metrics.recording.droppedFrames = 0;
+    this.frameTimesCursor = 0;
+    this.frameTimesCount = 0;
+  }
+
+  /**
    * Record a video frame with timing
    */
   recordFrame() {

@@ -64,6 +64,10 @@ function handleInit(payload) {
   }
 }
 
+let cachedWebcamBitmap = null;
+let cachedAnnotationBitmap = null;
+let cachedTempAnnotationBitmap = null;
+
 function handleRenderFrame(payload) {
   if (!ctx) return;
   const { screenBitmap, webcamBitmap, annotationBitmap, tempAnnotationBitmap } = payload;
@@ -82,36 +86,64 @@ function handleRenderFrame(payload) {
         ctx.drawImage(screenBitmap, 0, 0, config.width, config.height);
       }
       screenBitmap.close();
+    } else {
+      // Clear to black if no screen bitmap
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, config.width, config.height);
     }
 
     // 2. Draw Webcam Overlay Frame if enabled
-    if (settings.includeWebcam && webcamBitmap) {
-      drawWebcamOverlay(webcamBitmap);
-      webcamBitmap.close();
+    if (settings.includeWebcam) {
+      if (webcamBitmap) {
+        if (cachedWebcamBitmap) cachedWebcamBitmap.close();
+        cachedWebcamBitmap = webcamBitmap;
+      }
+      if (cachedWebcamBitmap) {
+        drawWebcamOverlay(cachedWebcamBitmap);
+      }
+    } else {
+      if (cachedWebcamBitmap) {
+        cachedWebcamBitmap.close();
+        cachedWebcamBitmap = null;
+      }
+      if (webcamBitmap) webcamBitmap.close();
     }
 
-    // 3. Draw Annotation Overlays if enabled (with cropping if needed)
+    // 3. Draw Annotation Overlays if enabled
     if (settings.includeAnnotations) {
-      if (settings.cropRegion) {
-        const { x, y, width, height } = settings.cropRegion;
-        if (annotationBitmap) {
-          ctx.drawImage(annotationBitmap, x, y, width, height, 0, 0, config.width, config.height);
-          annotationBitmap.close();
-        }
-        if (tempAnnotationBitmap) {
-          ctx.drawImage(tempAnnotationBitmap, x, y, width, height, 0, 0, config.width, config.height);
-          tempAnnotationBitmap.close();
-        }
-      } else {
-        if (annotationBitmap) {
-          ctx.drawImage(annotationBitmap, 0, 0, config.width, config.height);
-          annotationBitmap.close();
-        }
-        if (tempAnnotationBitmap) {
-          ctx.drawImage(tempAnnotationBitmap, 0, 0, config.width, config.height);
-          tempAnnotationBitmap.close();
-        }
+      if (annotationBitmap) {
+        if (cachedAnnotationBitmap) cachedAnnotationBitmap.close();
+        cachedAnnotationBitmap = annotationBitmap;
       }
+      if (tempAnnotationBitmap) {
+        if (cachedTempAnnotationBitmap) cachedTempAnnotationBitmap.close();
+        cachedTempAnnotationBitmap = tempAnnotationBitmap;
+      }
+
+      const drawCached = (bmp) => {
+        if (!bmp) return;
+        if (settings.cropRegion) {
+          const { x, y, width, height } = settings.cropRegion;
+          ctx.drawImage(bmp, x, y, width, height, 0, 0, config.width, config.height);
+        } else {
+          ctx.drawImage(bmp, 0, 0, config.width, config.height);
+        }
+      };
+
+      drawCached(cachedAnnotationBitmap);
+      drawCached(cachedTempAnnotationBitmap);
+
+    } else {
+      if (cachedAnnotationBitmap) {
+        cachedAnnotationBitmap.close();
+        cachedAnnotationBitmap = null;
+      }
+      if (cachedTempAnnotationBitmap) {
+        cachedTempAnnotationBitmap.close();
+        cachedTempAnnotationBitmap = null;
+      }
+      if (annotationBitmap) annotationBitmap.close();
+      if (tempAnnotationBitmap) tempAnnotationBitmap.close();
     }
   } catch (err) {
     console.error("Frame draw error in worker:", err);

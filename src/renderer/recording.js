@@ -24,7 +24,6 @@ class RecordingManager {
     this.canvasStream = null;
     this.compositorInterval = null;
 
-    // Listen for mini-control commands
     if (window.electronAPI) {
       window.electronAPI.onMiniCommand?.((data) => {
         this.handleMiniCommand(data);
@@ -96,6 +95,11 @@ class RecordingManager {
     this.recordedChunks = [];
     this.recordedBytes = 0;
     this.chunkFiles = [];
+
+    if (this.perfObserver) {
+      this.perfObserver.disconnect();
+      this.perfObserver = null;
+    }
   }
 
   async setupVideoStream(source) {
@@ -525,31 +529,33 @@ class RecordingManager {
       }
     }, [offscreenCanvas]);
 
-    // We send bitmaps to the worker to render on its dedicated thread
-    const drawFrame = async () => {
+    const drawFrame = async (timestamp) => {
       try {
-        // Continue if we have an active compositor ID (set in preview or recording)
         if (!this.compositorDrawId) return;
 
         if (this.monitor) {
           this.monitor.recordFrame();
         }
 
-        // Grab current screen frame
         let screenBitmap;
-        if (screenVideo.readyState >= 2) {
+        if (screenVideo.readyState >= 2 && screenVideo.currentTime > 0) {
           screenBitmap = await createImageBitmap(screenVideo);
         }
 
-        // Grab current webcam frame
         let webcamBitmap;
-        if (webcamVideo && webcamVideo.readyState >= 2) {
+        if (webcamVideo && webcamVideo.readyState >= 2 && webcamVideo.currentTime > 0) {
           webcamBitmap = await createImageBitmap(webcamVideo);
         }
 
-        // Grab annotations
+        if (!screenBitmap && !webcamBitmap) {
+          if (this.compositorDrawId) {
+            this.compositorDrawId = requestAnimationFrame(drawFrame);
+          }
+          return;
+        }
+
         let annotationBitmap, tempAnnotationBitmap;
-        if (includeAnnotations && this.app.annotationManager?.isActive) {
+        if (includeAnnotations && this.app.annotationManager?.isActive && this.app.annotationManager.checkAndResetDirty()) {
           const annCanvas = this.app.annotationManager.getCanvas();
           const tempCanvas = this.app.annotationManager.getTempCanvas();
           annotationBitmap = await createImageBitmap(annCanvas);
@@ -818,6 +824,201 @@ class RecordingManager {
     const countdownSeconds = this.app.settings.countdown || 0;
 
     if (countdownSeconds > 0) {
+    }
+  }
+
+  startRecordingTimer() {
+    let lastTimeStr = "";
+    this.recordingTimer = setInterval(() => {
+      const elapsed = Date.now() - this.recordingStartTime;
+      const timeStr = this.formatTime(elapsed);
+      this.app.recordingTime.textContent = timeStr;
+
+      // Update Mini Controls Timer only if the string changed (reduces IPC load)
+      if (timeStr !== lastTimeStr && window.electronAPI.sendRecordingTimerUpdate) {
+        window.electronAPI.sendRecordingTimerUpdate(timeStr);
+        lastTimeStr = timeStr;
+      }
+
+      if (this.app.pillTime) {
+        const totalSeconds = Math.floor(elapsed / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        this.app.pillTime.textContent = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+      this.updateRecordingStats();
+    }, 1000);
+  }
+
+  updateRecordingStats() {
+    if (!this.selectedSource) return;
+
+    const resolution = this.app.settings.resolution || "1920x1080";
+    const frameRate = this.app.settings.frameRate || 24;
+    const resLabel =
+      resolution === "1920x1080"
+        ? "1080p"
+        : resolution === "1280x720"
+          ? "720p"
+          : resolution === "2560x1440"
+            ? "1440p"
+            : resolution === "3840x2160"
+              ? "4K"
+              : resolution === "native"
+                ? "Native"
+                : resolution;
+
+    const estimatedFps = frameRate;
+    const sizeStr = this.app.formatFileSize(this.recordedBytes);
+
+    if (this.app.statFps) this.app.statFps.textContent = estimatedFps;
+    if (this.app.statSize) this.app.statSize.textContent = sizeStr;
+    if (this.app.statRes) this.app.statRes.textContent = resLabel;
+  }
+
+  formatTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds]
+      .map((v) => v.toString().padStart(2, "0"))
+      .join(":");
+  }
+
+  async startAudioMeter(audioStream) {
+    const streamToMeter = audioStream || this.audioStream;
+    if (!streamToMeter) return;
+
+    this.app.audioMeter?.classList.remove("hidden");
+
+    try {
+      const context = await this.getAudioContext();
+
+      // Load Worklet to process audio securely off the main UI thread
+
+      try {
+        await context.audioWorklet.addModule("meter-processor.js");
+      } catch (e) {
+        // Module might already be added
+      }
+
+      this.audioMeterNode = new AudioWorkletNode(context, "meter-processor");
+      const source = context.createMediaStreamSource(streamToMeter);
+
+      // Use a silent gain node to pull data through the worklet without playing it to speakers
+      // This prevents audio feedback/echo while recording.
+      const silencer = context.createGain();
+      silencer.gain.value = 0;
+
+      source.connect(this.audioMeterNode);
+      this.audioMeterNode.connect(silencer);
+      silencer.connect(context.destination);
+
+      const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
+
+      this.audioMeterNode.port.onmessage = (event) => {
+        if (!bars) return;
+
+        let scalarVol = event.data.volume; // Float 0.0 - 1.0
+
+        // Dynamically style visual volume bars using off-loaded mathematics
+        bars.forEach((bar, index) => {
+          let requiredThreshold = (index + 1) / bars.length;
+
+          if (scalarVol >= requiredThreshold - 0.02) {
+            const height = Math.max(4, 20); // Maximum bar visual height
+            bar.style.height = `${height}px`;
+            bar.classList.add("active");
+
+            if (index > bars.length * 0.75) {
+              bar.classList.add("high");
+            } else if (index > bars.length * 0.4) {
+              bar.classList.add("medium");
+            } else {
+              bar.classList.remove("high", "medium");
+            }
+          } else {
+            bar.style.height = `4px`; // Resting state
+            bar.classList.remove("active", "medium", "high");
+          }
+        });
+      };
+
+    } catch (err) {
+      console.warn("Audio worklet initialization failed:", err);
+    }
+  }
+
+  stopAudioMeter() {
+    if (this.audioAnimationId) {
+      cancelAnimationFrame(this.audioAnimationId);
+      this.audioAnimationId = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+
+    this.audioAnalyser = null;
+    this.app.audioMeter?.classList.add("hidden");
+
+    const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
+    bars?.forEach((bar) => {
+      bar.style.height = "4px";
+      bar.classList.remove("active", "medium", "high");
+    });
+  }
+
+  async startRecording() {
+    if (this.isRecording) {
+      this.app.showToast("Recording already in progress", "error");
+      return;
+    }
+
+    if (!this.selectedSource && !this.selectedRegion) {
+      this.app.showToast("Please select a screen or region first", "error");
+      return;
+    }
+
+    if (
+      this.selectedSource &&
+      (!this.videoStream || !this.videoStream.active)
+    ) {
+      this.app.showToast(
+        "Source stream is no longer active. Please select source again.",
+        "error",
+      );
+      return;
+    }
+
+    if (
+      this.selectedRegion &&
+      this.selectedRegion.width &&
+      this.selectedRegion.height
+    ) {
+      // For region capture, we just need to ensure we have the raw screen source ready.
+      // We don't call setupRegionStream(true) here because that would start a redundant worker.
+      // Instead, we just refresh the selectedSource if needed.
+      if (!this.selectedSource) {
+        try {
+          const sources = await window.electronAPI.getCaptureSources();
+          this.selectedSource = sources?.find((s) => s.id.startsWith("screen:"));
+        } catch (e) {
+          console.error("Failed to refresh sources for region:", e);
+        }
+      }
+
+      if (!this.selectedSource) {
+        this.app.showToast("Screen source not found for region capture", "error");
+        return;
+      }
+    }
+
+    const countdownSeconds = this.app.settings.countdown || 0;
+
+    if (countdownSeconds > 0) {
       const cancelled = await this.app.runCountdown(countdownSeconds);
       if (cancelled) return;
     }
@@ -826,6 +1027,7 @@ class RecordingManager {
       this.recordedChunks = [];
       this.recordedBytes = 0;
       this.chunkFiles = [];
+      this.pendingChunkWrites = [];
       this.app.startBtn.disabled = true;
       this.app.selectSourceBtn.disabled = true;
       this.app.pauseBtn.disabled = true;
@@ -992,7 +1194,7 @@ class RecordingManager {
           }
 
           try {
-            e.data
+            const chunkPromise = e.data
               .arrayBuffer()
               .then((ab) => {
                 try {
@@ -1021,6 +1223,8 @@ class RecordingManager {
               .catch((arrErr) =>
                 console.error("Failed to read chunk arrayBuffer:", arrErr),
               );
+            // Track promise so we can await it before closing FFmpeg stdin
+            if (this.pendingChunkWrites) this.pendingChunkWrites.push(chunkPromise);
           } catch (err) {
             console.error("ondataavailable error:", err);
           }
@@ -1102,8 +1306,13 @@ class RecordingManager {
         window.electronAPI.hideRegionIndicator();
       }
 
+      // Stop chunked recording FIRST to ensure all data is flushed
       this.stopChunkedRecording();
-      this.mediaRecorder.stop();
+
+      // Stop media recorder AFTER chunked recording
+      if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+        this.mediaRecorder.stop();
+      }
       this.isRecording = false;
 
       if (this.recordingTimer) {
@@ -1170,6 +1379,21 @@ class RecordingManager {
       this.recordingStartTime = Date.now();
       this.startRecordingTimer();
 
+      this.warnedAboutMemory = false;
+      this.bitrateReduced = false;
+
+      if (this.monitor) {
+        this.monitor.resetFrameCount();
+      }
+
+      if (this.compositorWorker) {
+        const frameRate = this.app.settings.frameRate || 30;
+        this.compositorWorker.postMessage({
+          type: "updateSettings",
+          payload: { frameRate }
+        });
+      }
+
       this.app.updateUIForRecording();
       this.app.showToast("Recording resumed", "info");
 
@@ -1218,14 +1442,6 @@ class RecordingManager {
 
       const memoryUsage = this.estimateMemoryUsage();
 
-      if (memoryUsage > this.maxMemoryBytes && !this.warnedAboutMemory) {
-        this.warnedAboutMemory = true;
-        this.app.showToast(
-          "Warning: Recording is using significant memory. Consider stopping soon.",
-          "warning",
-        );
-      }
-
       if (memoryUsage > this.maxMemoryBytes * 1.5) {
         this.app.showToast(
           "Memory limit reached. Stopping recording to prevent crash.",
@@ -1234,34 +1450,24 @@ class RecordingManager {
         await this.stopRecording();
       }
 
-      // Adaptive Bitrate & Auto-Pause feature
-      // Increased threshold for performance check to allow for startup settle-down.
-      // Custom regions (using compositor worker) have more overhead initially.
-      const startThreshold = this.selectedRegion ? 400 : 200;
+      // Adaptive Bitrate - more lenient thresholds
+      const startThreshold = this.selectedRegion ? 600 : 300;
 
       if (this.monitor && this.monitor.frameCount > startThreshold) {
         const dropPercent = (this.monitor.metrics.recording.droppedFrames / this.monitor.frameCount) * 100;
 
-        // Be more tolerant for custom regions which are renderer-intensive but usually stabilize.
-        const dropTolerance = this.selectedRegion ? 8 : 5;
+        // Much more tolerant - only act at 25% drops
+        const dropTolerance = this.selectedRegion ? 25 : 20;
 
-        if (dropPercent > dropTolerance) {
-          if (!this.bitrateReduced) {
-            this.bitrateReduced = true;
-            this.app.showToast("System struggling: Auto-pausing & reducing compositing rate to stabilize...", "warning");
+        if (dropPercent > dropTolerance && !this.bitrateReduced) {
+          this.bitrateReduced = true;
+          this.app.showToast("System struggling: Reducing quality to stabilize...", "warning");
 
-            // Adaptive logic: throttle compositor rendering down to lighten active CPU/Memory load
-            if (this.compositorWorker) {
-              this.compositorWorker.postMessage({
-                type: "updateSettings",
-                payload: { frameRate: 15 }
-              });
-            }
-            // Auto pause the encoder to give the system breathing room
-            this.pauseRecording();
-          } else if (dropPercent > 15) {
-            this.app.showToast("Critical frame drops detected: Auto-stopping recording to save file.", "error");
-            await this.stopRecording();
+          if (this.compositorWorker) {
+            this.compositorWorker.postMessage({
+              type: "updateSettings",
+              payload: { frameRate: 15 }
+            });
           }
         }
       }
@@ -1271,8 +1477,6 @@ class RecordingManager {
   estimateMemoryUsage() {
     // We don't want to use recordedBytes since those bytes are streamed out to the native OS
     // via IPC and are thus released from the renderer's V8 heap.
-    // If we count total file size here, we will prematurely stop long recordings.
-
     // Instead check actual JS heap memory if available
     if (window.performance && window.performance.memory) {
       return window.performance.memory.usedJSHeapSize;
@@ -1315,6 +1519,11 @@ class RecordingManager {
 
       if (this.chunkSessionId) {
         try {
+          // Drain all in-flight arrayBuffer() promises so the last chunk reaches FFmpeg before stdin closes
+          if (this.pendingChunkWrites && this.pendingChunkWrites.length > 0) {
+            await Promise.allSettled(this.pendingChunkWrites);
+            this.pendingChunkWrites = [];
+          }
           result = await window.electronAPI.finalizeChunkedRecording(
             this.chunkSessionId,
             { isPartial, forceAutoSave },
@@ -1351,6 +1560,8 @@ class RecordingManager {
       // clear session id after finalize attempt
       this.chunkSessionId = null;
       this.tempChunkPath = null;
+      this.recordedChunks = []; // Clear RAM usage
+      this.pendingChunkWrites = [];
 
       if (!result) {
         throw new Error("No response from save recording handler");

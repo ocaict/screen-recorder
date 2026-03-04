@@ -194,14 +194,6 @@ function drawWebcamOverlay(webcamBitmap) {
   }
 
   try {
-    ctx.drawImage(
-      webcamBitmap,
-      webcamX,
-      webcamY,
-      webcamDisplayWidth,
-      webcamDisplayHeight,
-    );
-
     // Draw semi-transparent border/background
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.beginPath();
@@ -213,6 +205,14 @@ function drawWebcamOverlay(webcamBitmap) {
       8,
     );
     ctx.fill();
+
+    ctx.drawImage(
+      webcamBitmap,
+      webcamX,
+      webcamY,
+      webcamDisplayWidth,
+      webcamDisplayHeight,
+    );
   } catch (err) {
     console.warn("Webcam worker draw error:", err);
   }

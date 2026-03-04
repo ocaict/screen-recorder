@@ -1102,6 +1102,7 @@ class RecordingManager {
 
       // 3. Handle Webcam
       const webcamEnabled = this.app.settings.webcamEnabled || document.getElementById("settingsWebcam")?.checked;
+      let newWebcamStream = null;
       if (webcamEnabled) {
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
@@ -1110,7 +1111,7 @@ class RecordingManager {
             const cameraId = this.app.settings.selectedCamera || "default";
             let constraints = { audio: false, video: {} };
             if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
-            this.webcamStream = await navigator.mediaDevices.getUserMedia(constraints);
+            newWebcamStream = await navigator.mediaDevices.getUserMedia(constraints);
           }
         } catch (webcamErr) {
           console.warn("Webcam failing, continuing with screen only:", webcamErr);
@@ -1119,9 +1120,14 @@ class RecordingManager {
 
       // 4. Create Unified Composited Stream (ONE WORKER)
       try {
-        // Kill any existing preview compositor before starting recording compositor
-        // IMPORTANT: We preserve the audio tracks we just prepared for recording
+        // Kill any existing preview compositor before starting recording compositor.
+        // IMPORTANT: We preserve the audio tracks we just prepared for recording.
         this.stopCurrentStream(true);
+
+        // Now safely assign the webcam stream to track property
+        if (newWebcamStream) {
+          this.webcamStream = newWebcamStream;
+        }
 
         const annotationsActive = this.app.annotationManager?.isActive;
         // The worker-based createCompositedStream handles Region Crop + Webcam + Annotations in ONE loop

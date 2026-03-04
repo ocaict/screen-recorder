@@ -523,7 +523,7 @@ function setupIpcHandlers() {
         log("info", `Starting live FFmpeg pipe (${v_codec}) -> ${finalPath}`);
 
         const args = [
-          "-loglevel", "warning",
+          "-loglevel", "error",
           "-thread_queue_size", "8192",
           "-probesize", "10M",
           "-analyzeduration", "10M",
@@ -570,7 +570,7 @@ function setupIpcHandlers() {
 
               // Rebuild SW args from scratch to avoid HW arg mutation bugs
               const swArgs = [
-                "-loglevel", "warning",
+                "-loglevel", "error",
                 "-thread_queue_size", "8192",
                 "-probesize", "10M",
                 "-analyzeduration", "10M",

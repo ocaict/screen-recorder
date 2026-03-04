@@ -131,4 +131,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   onMiniCommand: (callback) =>
     ipcRenderer.on("mini-command", (_, data) => callback(data)),
+  onWindowMinimized: (callback) => ipcRenderer.on("window-minimized", () => callback()),
+  onWindowRestored: (callback) => ipcRenderer.on("window-restored", () => callback()),
 });

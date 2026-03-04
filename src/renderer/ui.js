@@ -92,6 +92,11 @@ class UIManager {
     this.app.saveTrimBtn = document.getElementById("saveTrimBtn");
     this.app.saveGifBtn = document.getElementById("saveGifBtn");
     this.app.cancelTrimBtn = document.getElementById("cancelTrimBtn");
+
+    // Webcam Drag
+    this.app.webcamDragHandle = document.getElementById("webcamDragHandle");
+    this.app.webcamPreviewVideo = document.getElementById("webcamPreviewVideo");
+    this.app.previewContainer = document.querySelector(".preview-container");
   }
 
   showToast(message, type = "info") {

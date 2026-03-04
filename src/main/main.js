@@ -5,9 +5,14 @@ const { setupLogger, log } = require("../utils/logger");
 const { loadSettings } = require("../utils/settings");
 const tray = require("./tray");
 const shortcuts = require("./shortcuts");
-const { setupIpcHandlers, setMainWindowRef, setOverlayWindowRef, setMiniControlsWindowRef } = require("./ipc-handlers");
+const {
+  setupIpcHandlers,
+  setMainWindowRef,
+  setOverlayWindowRef,
+  setMiniControlsWindowRef,
+} = require("./ipc-handlers");
 
-// We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE) 
+// We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE)
 // often requires the GPU compositor (DWM) to be active to reliably hide windows from capture.
 // app.disableHardwareAcceleration();
 // app.commandLine.appendSwitch("disable-gpu");
@@ -46,6 +51,7 @@ function createWindow() {
     frame: false,
     transparent: false,
     backgroundColor: "#1a1a2e",
+    resizable: false,
     show: false,
     icon: ICON_PATH,
     webPreferences: {
@@ -53,6 +59,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -96,6 +103,14 @@ function createWindow() {
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
+
+  mainWindow.on("minimize", () => {
+    mainWindow.webContents.send("window-minimized");
+  });
+
+  mainWindow.on("restore", () => {
+    mainWindow.webContents.send("window-restored");
+  });
 }
 
 app.whenReady().then(async () => {
@@ -132,7 +147,7 @@ app.whenReady().then(async () => {
       const fs = require("fs");
       if (fs.existsSync(finalPath)) {
         return new Response(fs.readFileSync(finalPath), {
-          headers: { "Content-Type": "image/png" }
+          headers: { "Content-Type": "image/png" },
         });
       }
 
@@ -203,7 +218,9 @@ function createOverlayWindow() {
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   // Load the overlay
-  overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));
+  overlayWindow.loadFile(
+    path.join(__dirname, "..", "renderer", "overlay.html"),
+  );
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;
@@ -241,7 +258,9 @@ function createMiniControlsWindow() {
   }
 
   miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
-  miniControlsWindow.loadFile(path.join(__dirname, "..", "renderer", "mini-controls.html"));
+  miniControlsWindow.loadFile(
+    path.join(__dirname, "..", "renderer", "mini-controls.html"),
+  );
 
   miniControlsWindow.on("closed", () => {
     miniControlsWindow = null;

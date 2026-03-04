@@ -30,9 +30,9 @@ class ScreenRecorder {
 
     await this.recordingManager.init();
 
+    await this.loadSettings();
     this.initializeEventListeners();
     this.initializeIPCListeners();
-    this.loadSettings();
     this.loadAudioDevices();
   }
 
@@ -154,11 +154,13 @@ class ScreenRecorder {
     });
 
     // Clear button
-    document.getElementById("annotationClear")?.addEventListener("click", () => {
-      if (this.overlayAnnotationActive) {
-        window.electronAPI.sendOverlayCommand("clear");
-      }
-    });
+    document
+      .getElementById("annotationClear")
+      ?.addEventListener("click", () => {
+        if (this.overlayAnnotationActive) {
+          window.electronAPI.sendOverlayCommand("clear");
+        }
+      });
     this.closeSourceModal.addEventListener("click", () =>
       this.closeModal(this.sourceModal),
     );
@@ -248,7 +250,8 @@ class ScreenRecorder {
           document.getElementById("settingsShowMiniControls").checked = true;
         }
         if (document.getElementById("settingsShowClickHighlights")) {
-          document.getElementById("settingsShowClickHighlights").checked = false;
+          document.getElementById("settingsShowClickHighlights").checked =
+            false;
         }
         if (document.getElementById("settingsIdleDetection")) {
           document.getElementById("settingsIdleDetection").checked = false;
@@ -264,13 +267,17 @@ class ScreenRecorder {
           document.getElementById("settingsVideoCodec").value = "libx264";
           document.getElementById("settingsQualityControl").value = "crf";
           document.getElementById("settingsCrfValue").value = 23;
-          if (document.getElementById("crfValueDisplay")) document.getElementById("crfValueDisplay").textContent = "23";
+          if (document.getElementById("crfValueDisplay"))
+            document.getElementById("crfValueDisplay").textContent = "23";
           document.getElementById("settingsVideoBitrate").value = 5;
-          if (document.getElementById("vbrValueDisplay")) document.getElementById("vbrValueDisplay").textContent = "5";
+          if (document.getElementById("vbrValueDisplay"))
+            document.getElementById("vbrValueDisplay").textContent = "5";
           document.getElementById("settingsColorFormat").value = "yuv420p";
 
-          if (document.getElementById("crfControlGroup")) document.getElementById("crfControlGroup").style.display = "block";
-          if (document.getElementById("vbrControlGroup")) document.getElementById("vbrControlGroup").style.display = "none";
+          if (document.getElementById("crfControlGroup"))
+            document.getElementById("crfControlGroup").style.display = "block";
+          if (document.getElementById("vbrControlGroup"))
+            document.getElementById("vbrControlGroup").style.display = "none";
         }
 
         this.updateFileSizeEstimate();
@@ -319,7 +326,9 @@ class ScreenRecorder {
         }
       });
 
-    const qualityControlSelect = document.getElementById("settingsQualityControl");
+    const qualityControlSelect = document.getElementById(
+      "settingsQualityControl",
+    );
     const crfGroup = document.getElementById("crfControlGroup");
     const vbrGroup = document.getElementById("vbrControlGroup");
     const crfInput = document.getElementById("settingsCrfValue");
@@ -482,9 +491,15 @@ class ScreenRecorder {
     }
 
     // Click Highlights Popover
-    const clickHighlightsBtn = document.getElementById("clickHighlightsSettingsBtn");
-    const clickHighlightsPopover = document.getElementById("clickHighlightsPopover");
-    const closeClickHighlightsPopover = document.getElementById("closeClickHighlightsPopover");
+    const clickHighlightsBtn = document.getElementById(
+      "clickHighlightsSettingsBtn",
+    );
+    const clickHighlightsPopover = document.getElementById(
+      "clickHighlightsPopover",
+    );
+    const closeClickHighlightsPopover = document.getElementById(
+      "closeClickHighlightsPopover",
+    );
 
     if (clickHighlightsBtn && clickHighlightsPopover) {
       clickHighlightsBtn.addEventListener("click", (e) => {
@@ -498,7 +513,11 @@ class ScreenRecorder {
       });
     }
     document.addEventListener("click", (e) => {
-      if (clickHighlightsPopover && !clickHighlightsPopover.contains(e.target) && !clickHighlightsBtn?.contains(e.target)) {
+      if (
+        clickHighlightsPopover &&
+        !clickHighlightsPopover.contains(e.target) &&
+        !clickHighlightsBtn?.contains(e.target)
+      ) {
         clickHighlightsPopover.classList.remove("show");
       }
     });
@@ -511,7 +530,9 @@ class ScreenRecorder {
         rippleSizeValue.textContent = highlightRippleSize.value;
       });
     }
-    const highlightRippleSpeed = document.getElementById("highlightRippleSpeed");
+    const highlightRippleSpeed = document.getElementById(
+      "highlightRippleSpeed",
+    );
     const rippleSpeedValue = document.getElementById("rippleSpeedValue");
     if (highlightRippleSpeed && rippleSpeedValue) {
       highlightRippleSpeed.addEventListener("input", () => {
@@ -525,7 +546,9 @@ class ScreenRecorder {
         glowSizeValue.textContent = highlightGlowSize.value;
       });
     }
-    const highlightGlowIntensity = document.getElementById("highlightGlowIntensity");
+    const highlightGlowIntensity = document.getElementById(
+      "highlightGlowIntensity",
+    );
     const glowIntensityValue = document.getElementById("glowIntensityValue");
     if (highlightGlowIntensity && glowIntensityValue) {
       highlightGlowIntensity.addEventListener("input", () => {
@@ -535,7 +558,9 @@ class ScreenRecorder {
 
     // Trim Modal Listeners
     if (this.trimStartRange) {
-      this.trimStartRange.addEventListener("input", () => this.updateTrimRange());
+      this.trimStartRange.addEventListener("input", () =>
+        this.updateTrimRange(),
+      );
     }
     if (this.trimEndRange) {
       this.trimEndRange.addEventListener("input", () => this.updateTrimRange());
@@ -577,6 +602,16 @@ class ScreenRecorder {
         }
       });
     }
+
+    if (this.previewVideo) {
+      this.previewVideo.addEventListener("loadedmetadata", () => {
+        this.updateWebcamHandlePosition();
+      });
+    }
+
+    // Initialize Webcam Drag
+    this.setupWebcamDraggable();
+    this.setupWebcamSettingsListeners();
   }
 
   switchTab(tabName) {
@@ -735,6 +770,14 @@ class ScreenRecorder {
         console.error("Error handling conversion complete:", err);
         this.showToast("An error occurred after conversion", "error");
       }
+    });
+
+    window.electronAPI.onWindowMinimized(() => {
+      console.log("[Webcam] Main window minimized");
+    });
+
+    window.electronAPI.onWindowRestored(() => {
+      console.log("[Webcam] Main window restored");
     });
 
     // Relay overlay drawing actions to the local annotation manager (for compositing)
@@ -987,9 +1030,10 @@ class ScreenRecorder {
     }
 
     let videoBitrate = (pixelsPerSecond * bitrateMultiplier) / 8;
-    const recordSystemAudio = document.getElementById("settingsRecordSystemAudio")
-      ?.checked;
-    let audioBitrate = (recordAudio || recordSystemAudio) ? (128 * 1024) / 8 : 0;
+    const recordSystemAudio = document.getElementById(
+      "settingsRecordSystemAudio",
+    )?.checked;
+    let audioBitrate = recordAudio || recordSystemAudio ? (128 * 1024) / 8 : 0;
 
     const totalBitratePerSecond = videoBitrate + audioBitrate;
     const durationSeconds = 60;
@@ -1093,6 +1137,54 @@ class ScreenRecorder {
         el.style.display =
           this.settings.webcamEnabled || false ? "block" : "none";
       });
+
+      // Update actual UI components based on webcam setting
+      if (this.webcamDragHandle) {
+        const webcamEnabled = this.settings.webcamEnabled === true;
+        const hasStream = !!this.recordingManager?.webcamStream;
+        console.log(
+          `[Webcam] applySettings: enabled=${webcamEnabled}, hasStream=${hasStream}`,
+        );
+
+        if (webcamEnabled) {
+          // If enabled, we show it ONLY if we are not recording (recording has its own UI flow)
+          if (!this.recordingManager?.isRecording) {
+            // If stream already exists, show everything
+            if (hasStream) {
+              console.log(
+                "[Webcam] applySettings: removing hidden from handle",
+              );
+              this.webcamDragHandle.classList.remove("hidden");
+
+              // Ensure video is playing
+              if (
+                this.webcamPreviewVideo &&
+                !this.webcamPreviewVideo.srcObject
+              ) {
+                this.webcamPreviewVideo.srcObject =
+                  this.recordingManager.webcamStream;
+              }
+            } else if (this.recordingManager?.selectedSource) {
+              console.log("[Webcam] applySettings: starting stream");
+              // If it should be on but stream is missing, start it
+              this.recordingManager.setupWebcamStream(true);
+            }
+          }
+        } else {
+          console.log("[Webcam] applySettings: hiding handle");
+          this.webcamDragHandle.classList.add("hidden");
+
+          // Ensure we stop any active stream if just disabled
+          if (this.recordingManager?.webcamStream) {
+            this.recordingManager.webcamStream
+              .getTracks()
+              .forEach((t) => t.stop());
+            this.recordingManager.webcamStream = null;
+            if (this.webcamPreviewVideo)
+              this.webcamPreviewVideo.srcObject = null;
+          }
+        }
+      }
     }
 
     if (document.getElementById("settingsIdleDetection")) {
@@ -1100,7 +1192,9 @@ class ScreenRecorder {
         this.settings.idleDetectionEnabled || false;
       const idleTimeoutGroup = document.getElementById("idleTimeoutGroup");
       if (idleTimeoutGroup) {
-        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled ? "block" : "none";
+        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled
+          ? "block"
+          : "none";
       }
     }
     if (document.getElementById("settingsIdleTimeout")) {
@@ -1165,7 +1259,7 @@ class ScreenRecorder {
       try {
         await window.electronAPI.showOverlay(displayId);
         // Wait for overlay to be fully ready
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 300));
         window.electronAPI.setOverlayDrawMode(true);
 
         // Clear any leftover drawings from a previous session
@@ -1192,7 +1286,10 @@ class ScreenRecorder {
         this.annotationManager.activate(true);
       }
 
-      this.showToast("Annotation mode active. Use the toolbar to draw.", "info");
+      this.showToast(
+        "Annotation mode active. Use the toolbar to draw.",
+        "info",
+      );
     }
   }
 
@@ -1230,6 +1327,24 @@ class ScreenRecorder {
 
     this.hotkeyKey.textContent = this.settings.shortcutKey || "F9";
     this.hotkeyOverlay.classList.remove("hidden");
+
+    // Show/Update Webcam Controls
+    if (this.settings.webcamEnabled && this.recordingManager.webcamStream) {
+      this.webcamDragHandle?.classList.remove("hidden");
+
+      // Ensure stream is piped
+      if (
+        this.webcamPreviewVideo &&
+        this.webcamPreviewVideo.srcObject !== this.recordingManager.webcamStream
+      ) {
+        this.webcamPreviewVideo.srcObject = this.recordingManager.webcamStream;
+      }
+
+      this.updateWebcamHandlePosition();
+    } else {
+      this.webcamDragHandle?.classList.add("hidden");
+      if (this.webcamPreviewVideo) this.webcamPreviewVideo.srcObject = null;
+    }
   }
 
   updateUIForStopped() {
@@ -1289,6 +1404,8 @@ class ScreenRecorder {
     this.recordingStats?.classList.add("hidden");
     this.recordingManager.stopAudioMeter();
     this.hotkeyOverlay.classList.add("hidden");
+    this.webcamDragHandle?.classList.add("hidden");
+    if (this.webcamPreviewVideo) this.webcamPreviewVideo.srcObject = null;
 
     // Hide the transparent overlay and clean up old in-app canvas too
     if (this.overlayAnnotationActive) {
@@ -1363,69 +1480,93 @@ class ScreenRecorder {
         this.settings.showClickHighlights !== false;
     }
     if (document.getElementById("highlightLeftColor")) {
-      document.getElementById("highlightLeftColor").value = this.settings.highlightLeftColor || "#FFEB3B";
+      document.getElementById("highlightLeftColor").value =
+        this.settings.highlightLeftColor || "#FFEB3B";
     }
     if (document.getElementById("highlightRightColor")) {
-      document.getElementById("highlightRightColor").value = this.settings.highlightRightColor || "#2196F3";
+      document.getElementById("highlightRightColor").value =
+        this.settings.highlightRightColor || "#2196F3";
     }
     if (document.getElementById("highlightRippleSize")) {
-      document.getElementById("highlightRippleSize").value = this.settings.highlightRippleSize || 50;
-      document.getElementById("rippleSizeValue").textContent = this.settings.highlightRippleSize || 50;
+      document.getElementById("highlightRippleSize").value =
+        this.settings.highlightRippleSize || 50;
+      document.getElementById("rippleSizeValue").textContent =
+        this.settings.highlightRippleSize || 50;
     }
     if (document.getElementById("highlightRippleSpeed")) {
-      document.getElementById("highlightRippleSpeed").value = this.settings.highlightRippleSpeed || 400;
-      document.getElementById("rippleSpeedValue").textContent = this.settings.highlightRippleSpeed || 400;
+      document.getElementById("highlightRippleSpeed").value =
+        this.settings.highlightRippleSpeed || 400;
+      document.getElementById("rippleSpeedValue").textContent =
+        this.settings.highlightRippleSpeed || 400;
     }
     if (document.getElementById("highlightGlowSize")) {
-      document.getElementById("highlightGlowSize").value = this.settings.highlightGlowSize || 25;
-      document.getElementById("glowSizeValue").textContent = this.settings.highlightGlowSize || 25;
+      document.getElementById("highlightGlowSize").value =
+        this.settings.highlightGlowSize || 25;
+      document.getElementById("glowSizeValue").textContent =
+        this.settings.highlightGlowSize || 25;
     }
     if (document.getElementById("highlightGlowIntensity")) {
-      document.getElementById("highlightGlowIntensity").value = this.settings.highlightGlowIntensity || 30;
-      document.getElementById("glowIntensityValue").textContent = this.settings.highlightGlowIntensity || 30;
+      document.getElementById("highlightGlowIntensity").value =
+        this.settings.highlightGlowIntensity || 30;
+      document.getElementById("glowIntensityValue").textContent =
+        this.settings.highlightGlowIntensity || 30;
     }
     if (document.getElementById("settingsIdleDetection")) {
-      document.getElementById("settingsIdleDetection").checked = this.settings.idleDetectionEnabled || false;
+      document.getElementById("settingsIdleDetection").checked =
+        this.settings.idleDetectionEnabled || false;
       const idleTimeoutGroup = document.getElementById("idleTimeoutGroup");
       if (idleTimeoutGroup) {
-        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled ? "block" : "none";
+        idleTimeoutGroup.style.display = this.settings.idleDetectionEnabled
+          ? "block"
+          : "none";
       }
     }
     if (document.getElementById("settingsIdleTimeout")) {
-      document.getElementById("settingsIdleTimeout").value = this.settings.idleTimeoutMinutes || 5;
+      document.getElementById("settingsIdleTimeout").value =
+        this.settings.idleTimeoutMinutes || 5;
     }
     if (document.getElementById("settingsMemoryThreshold")) {
-      document.getElementById("settingsMemoryThreshold").value = this.settings.memoryThresholdMB || 500;
+      document.getElementById("settingsMemoryThreshold").value =
+        this.settings.memoryThresholdMB || 500;
     }
 
     // Advanced Settings
     if (document.getElementById("settingsVideoCodec")) {
-      document.getElementById("settingsVideoCodec").value = this.settings.videoCodec || "libx264";
+      document.getElementById("settingsVideoCodec").value =
+        this.settings.videoCodec || "libx264";
     }
     if (document.getElementById("settingsQualityControl")) {
-      document.getElementById("settingsQualityControl").value = this.settings.qualityControl || "crf";
+      document.getElementById("settingsQualityControl").value =
+        this.settings.qualityControl || "crf";
 
       const crfGroup = document.getElementById("crfControlGroup");
       const vbrGroup = document.getElementById("vbrControlGroup");
       if (crfGroup && vbrGroup) {
-        crfGroup.style.display = (this.settings.qualityControl || "crf") === "crf" ? "block" : "none";
-        vbrGroup.style.display = (this.settings.qualityControl || "crf") === "vbr" ? "block" : "none";
+        crfGroup.style.display =
+          (this.settings.qualityControl || "crf") === "crf" ? "block" : "none";
+        vbrGroup.style.display =
+          (this.settings.qualityControl || "crf") === "vbr" ? "block" : "none";
       }
     }
     if (document.getElementById("settingsCrfValue")) {
-      document.getElementById("settingsCrfValue").value = this.settings.crfValue || 23;
+      document.getElementById("settingsCrfValue").value =
+        this.settings.crfValue || 23;
       if (document.getElementById("crfValueDisplay")) {
-        document.getElementById("crfValueDisplay").textContent = this.settings.crfValue || 23;
+        document.getElementById("crfValueDisplay").textContent =
+          this.settings.crfValue || 23;
       }
     }
     if (document.getElementById("settingsVideoBitrate")) {
-      document.getElementById("settingsVideoBitrate").value = this.settings.videoBitrate || 5;
+      document.getElementById("settingsVideoBitrate").value =
+        this.settings.videoBitrate || 5;
       if (document.getElementById("vbrValueDisplay")) {
-        document.getElementById("vbrValueDisplay").textContent = this.settings.videoBitrate || 5;
+        document.getElementById("vbrValueDisplay").textContent =
+          this.settings.videoBitrate || 5;
       }
     }
     if (document.getElementById("settingsColorFormat")) {
-      document.getElementById("settingsColorFormat").value = this.settings.colorFormat || "yuv420p";
+      document.getElementById("settingsColorFormat").value =
+        this.settings.colorFormat || "yuv420p";
     }
 
     this.openModal(this.settingsModal);
@@ -1527,9 +1668,9 @@ class ScreenRecorder {
   async updateHardwareAccelerationOptions() {
     const hwSelect = document.getElementById("settingsHardwareAcceleration");
     const hwLoading = document.getElementById("hwLoading");
-    
+
     if (hwLoading) hwLoading.style.display = "inline";
-    
+
     let resp = null;
     try {
       resp = await window.electronAPI.getAvailableEncoders();
@@ -1537,9 +1678,9 @@ class ScreenRecorder {
       console.error("Failed to get available encoders:", err);
       resp = { nvenc: false, qsv: false, amf: false };
     }
-    
+
     if (hwLoading) hwLoading.style.display = "none";
-    
+
     const encoders = resp && resp.encoders ? resp.encoders : resp;
     const systemPath = resp && resp.systemFfmpeg ? resp.systemFfmpeg : null;
 
@@ -1674,7 +1815,8 @@ class ScreenRecorder {
       hardwareAcceleration: document.getElementById(
         "settingsHardwareAcceleration",
       ).value,
-      recordDirectToMp4: document.getElementById("settingsRecordDirectToMp4")?.checked,
+      recordDirectToMp4: document.getElementById("settingsRecordDirectToMp4")
+        ?.checked,
       defaultFormat: document.getElementById("settingsFormat").value,
       autoSave: document.getElementById("settingsAutoSave").checked,
       autoOpenAfterRecording:
@@ -1690,26 +1832,44 @@ class ScreenRecorder {
         document.getElementById("settingsCamera")?.value || "default",
       webcamPosition: document.getElementById("settingsWebcamPosition").value,
       webcamSize: document.getElementById("settingsWebcamSize").value,
-      videoCodec: document.getElementById("settingsVideoCodec")?.value || "libx264",
-      qualityControl: document.getElementById("settingsQualityControl")?.value || "crf",
-      crfValue: parseInt(document.getElementById("settingsCrfValue")?.value) || 23,
-      videoBitrate: parseInt(document.getElementById("settingsVideoBitrate")?.value) || 5,
-      colorFormat: document.getElementById("settingsColorFormat")?.value || "yuv420p",
+      videoCodec:
+        document.getElementById("settingsVideoCodec")?.value || "libx264",
+      qualityControl:
+        document.getElementById("settingsQualityControl")?.value || "crf",
+      crfValue:
+        parseInt(document.getElementById("settingsCrfValue")?.value) || 23,
+      videoBitrate:
+        parseInt(document.getElementById("settingsVideoBitrate")?.value) || 5,
+      colorFormat:
+        document.getElementById("settingsColorFormat")?.value || "yuv420p",
       showMiniControls: document.getElementById("settingsShowMiniControls")
         ? document.getElementById("settingsShowMiniControls").checked
-        : (this.settings.showMiniControls !== false),
-      showClickHighlights: document.getElementById("settingsShowClickHighlights")
+        : this.settings.showMiniControls !== false,
+      showClickHighlights: document.getElementById(
+        "settingsShowClickHighlights",
+      )
         ? document.getElementById("settingsShowClickHighlights").checked
-        : (this.settings.showClickHighlights !== false),
-      highlightLeftColor: document.getElementById("highlightLeftColor")?.value || "#FFEB3B",
-      highlightRightColor: document.getElementById("highlightRightColor")?.value || "#2196F3",
-      highlightRippleSize: parseInt(document.getElementById("highlightRippleSize")?.value) || 50,
-      highlightRippleSpeed: parseInt(document.getElementById("highlightRippleSpeed")?.value) || 400,
-      highlightGlowSize: parseInt(document.getElementById("highlightGlowSize")?.value) || 25,
-      highlightGlowIntensity: parseInt(document.getElementById("highlightGlowIntensity")?.value) || 30,
-      idleDetectionEnabled: document.getElementById("settingsIdleDetection")?.checked || false,
-      idleTimeoutMinutes: parseInt(document.getElementById("settingsIdleTimeout")?.value) || 5,
-      memoryThresholdMB: parseInt(document.getElementById("settingsMemoryThreshold")?.value) || 500,
+        : this.settings.showClickHighlights !== false,
+      highlightLeftColor:
+        document.getElementById("highlightLeftColor")?.value || "#FFEB3B",
+      highlightRightColor:
+        document.getElementById("highlightRightColor")?.value || "#2196F3",
+      highlightRippleSize:
+        parseInt(document.getElementById("highlightRippleSize")?.value) || 50,
+      highlightRippleSpeed:
+        parseInt(document.getElementById("highlightRippleSpeed")?.value) || 400,
+      highlightGlowSize:
+        parseInt(document.getElementById("highlightGlowSize")?.value) || 25,
+      highlightGlowIntensity:
+        parseInt(document.getElementById("highlightGlowIntensity")?.value) ||
+        30,
+      idleDetectionEnabled:
+        document.getElementById("settingsIdleDetection")?.checked || false,
+      idleTimeoutMinutes:
+        parseInt(document.getElementById("settingsIdleTimeout")?.value) || 5,
+      memoryThresholdMB:
+        parseInt(document.getElementById("settingsMemoryThreshold")?.value) ||
+        500,
     };
 
     try {
@@ -1855,23 +2015,19 @@ class ScreenRecorder {
         }
       });
 
-    toast
-      .querySelector("#playVideo")
-      ?.addEventListener("click", async () => {
-        try {
-          await window.electronAPI.openFile(filePath);
-        } catch (err) {
-          console.error("Failed to open file:", err);
-          this.showToast("Failed to open file", "error");
-        }
-      });
+    toast.querySelector("#playVideo")?.addEventListener("click", async () => {
+      try {
+        await window.electronAPI.openFile(filePath);
+      } catch (err) {
+        console.error("Failed to open file:", err);
+        this.showToast("Failed to open file", "error");
+      }
+    });
 
-    toast
-      .querySelector("#trimVideo")
-      ?.addEventListener("click", () => {
-        toast.remove();
-        this.openTrimModal(filePath);
-      });
+    toast.querySelector("#trimVideo")?.addEventListener("click", () => {
+      toast.remove();
+      this.openTrimModal(filePath);
+    });
 
     toast.querySelector("#closeToast")?.addEventListener("click", () => {
       toast.remove();
@@ -2088,6 +2244,254 @@ class ScreenRecorder {
       return parts[0] * 60 + parts[1];
     }
     return parseFloat(timeStr) || 0;
+  }
+
+  // ── Webcam Interaction Logic ───────────────────────────────────────────────
+
+  setupWebcamDraggable() {
+    if (!this.webcamDragHandle || !this.previewContainer) return;
+
+    let isDragging = false;
+    let startX, startY;
+    let startElemX, startElemY;
+
+    const onMouseDown = (e) => {
+      // Only drag if webcam is active
+      const webcamEnabled =
+        this.settings.webcamEnabled ||
+        document.getElementById("settingsWebcam")?.checked;
+      if (!webcamEnabled) return;
+
+      isDragging = true;
+      this.webcamDragHandle.classList.add("dragging");
+
+      const rect = this.webcamDragHandle.getBoundingClientRect();
+      const parentRect = this.previewContainer.getBoundingClientRect();
+      const videoRect = this.getVideoContentRect(this.previewVideo);
+
+      startX = e.clientX || e.touches?.[0].clientX;
+      startY = e.clientY || e.touches?.[0].clientY;
+
+      // Calculate initial position relative to the video content area
+      startElemX = rect.left - parentRect.left;
+      startElemY = rect.top - parentRect.top;
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+      document.addEventListener("touchmove", onMouseMove, { passive: false });
+      document.addEventListener("touchend", onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+
+      const clientX = e.clientX || e.touches?.[0].clientX;
+      const clientY = e.clientY || e.touches?.[0].clientY;
+
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      let newX = startElemX + dx;
+      let newY = startElemY + dy;
+
+      const parentRect = this.previewContainer.getBoundingClientRect();
+      const videoRect = this.getVideoContentRect(this.previewVideo);
+      const handleRect = this.webcamDragHandle.getBoundingClientRect();
+
+      // Constrain to VIDEO CONTENT area (not the container) to ensure perfect alignment
+      // VideoRect coordinates are relative to the container center
+      const minX = videoRect.x;
+      const maxX = videoRect.x + videoRect.width - handleRect.width;
+      const minY = videoRect.y;
+      const maxY = videoRect.y + videoRect.height - handleRect.height;
+
+      newX = Math.max(minX, Math.min(newX, maxX));
+      newY = Math.max(minY, Math.min(newY, maxY));
+
+      this.webcamDragHandle.style.left = `${newX}px`;
+      this.webcamDragHandle.style.top = `${newY}px`;
+      this.webcamDragHandle.style.bottom = "auto";
+      this.webcamDragHandle.style.right = "auto";
+
+      // Normalize coordinates for the compositor relative to the VIDEO area
+      const normX =
+        (newX - videoRect.x) / (videoRect.width - handleRect.width || 1);
+      const normY =
+        (newY - videoRect.y) / (videoRect.height - handleRect.height || 1);
+
+      this.settings.webcamCustomX = normX;
+      this.settings.webcamCustomY = normY;
+
+      // Real-time update to compositor worker
+      if (this.recordingManager?.compositorWorker) {
+        this.recordingManager.compositorWorker.postMessage({
+          type: "updateSettings",
+          payload: {
+            webcamCustomX: normX,
+            webcamCustomY: normY,
+          },
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      this.webcamDragHandle.classList.remove("dragging");
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("touchmove", onMouseMove);
+      document.removeEventListener("touchend", onMouseUp);
+
+      this.saveSettings();
+    };
+
+    this.webcamDragHandle.addEventListener("mousedown", onMouseDown);
+    this.webcamDragHandle.addEventListener("touchstart", onMouseDown, {
+      passive: false,
+    });
+  }
+
+
+  updateWebcamHandlePosition() {
+    if (!this.webcamDragHandle || !this.previewVideo) return;
+
+    const videoRect = this.getVideoContentRect(this.previewVideo);
+
+    // Exact ratios used in compositor-worker.js
+    let ratio = 0.09375; // Medium (180/1920)
+    const sizeSetting = this.settings.webcamSize || "medium";
+    if (sizeSetting === "small")
+      ratio = 0.0625; // (120/1920)
+    else if (sizeSetting === "large") ratio = 0.125; // (240/1920)
+
+    const size = ratio * videoRect.width;
+
+    this.webcamDragHandle.style.width = `${size}px`;
+    this.webcamDragHandle.style.height = `${size}px`;
+
+    const handleWidth = size;
+    const handleHeight = size;
+
+    if (
+      this.settings.webcamCustomX !== undefined &&
+      this.settings.webcamCustomY !== undefined
+    ) {
+      // Map normalized coordinates back to the VIDEO CONTENT area
+      const x =
+        videoRect.x +
+        this.settings.webcamCustomX * (videoRect.width - handleWidth);
+      const y =
+        videoRect.y +
+        this.settings.webcamCustomY * (videoRect.height - handleHeight);
+
+      this.webcamDragHandle.style.left = `${x}px`;
+      this.webcamDragHandle.style.top = `${y}px`;
+      this.webcamDragHandle.style.bottom = "auto";
+      this.webcamDragHandle.style.right = "auto";
+    } else {
+      // Default to bottom-right (matching compositor's relative 20px padding)
+      const padding = (20 / 1920) * videoRect.width;
+      const x = videoRect.x + videoRect.width - handleWidth - padding;
+      const y = videoRect.y + videoRect.height - handleHeight - padding;
+      this.webcamDragHandle.style.left = `${x}px`;
+      this.webcamDragHandle.style.top = `${y}px`;
+      this.webcamDragHandle.style.bottom = "auto";
+      this.webcamDragHandle.style.right = "auto";
+    }
+  }
+
+  getVideoContentRect(videoEl) {
+    if (!videoEl) return { x: 0, y: 0, width: 0, height: 0 };
+
+    // Fallback if video is not yet loaded or meta not ready
+    if (videoEl.videoWidth === 0) {
+      const rect = videoEl.getBoundingClientRect();
+      const parentRect = this.previewContainer.getBoundingClientRect();
+      return {
+        x: rect.left - parentRect.left,
+        y: rect.top - parentRect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+
+    const containerWidth = videoEl.clientWidth;
+    const containerHeight = videoEl.clientHeight;
+    const videoWidth = videoEl.videoWidth;
+    const videoHeight = videoEl.videoHeight;
+    const containerRatio = containerWidth / containerHeight;
+    const videoRatio = videoWidth / videoHeight;
+
+    let contentWidth, contentHeight, offsetX, offsetY;
+
+    if (videoRatio > containerRatio) {
+      contentWidth = containerWidth;
+      contentHeight = containerWidth / videoRatio;
+      offsetX = 0;
+      offsetY = (containerHeight - contentHeight) / 2;
+    } else {
+      contentHeight = containerHeight;
+      contentWidth = containerHeight * videoRatio;
+      offsetY = 0;
+      offsetX = (containerWidth - contentWidth) / 2;
+    }
+
+    return {
+      x: offsetX,
+      y: offsetY,
+      width: contentWidth,
+      height: contentHeight,
+    };
+  }
+
+  setupWebcamSettingsListeners() {
+    const webcamCheckbox = document.getElementById("settingsWebcam");
+    const webcamSizeSelect = document.getElementById("settingsWebcamSize");
+    const webcamPosSelect = document.getElementById("settingsWebcamPosition");
+
+    if (webcamCheckbox) {
+      webcamCheckbox.addEventListener("change", () => {
+        this.settings.webcamEnabled = webcamCheckbox.checked;
+        if (webcamCheckbox.checked) {
+          this.recordingManager.setupWebcamStream(true);
+        } else {
+          this.webcamDragHandle?.classList.add("hidden");
+          if (!this.recordingManager.isRecording) {
+            this.recordingManager.webcamStream
+              ?.getTracks()
+              .forEach((t) => t.stop());
+            this.recordingManager.webcamStream = null;
+            if (this.webcamPreviewVideo)
+              this.webcamPreviewVideo.srcObject = null;
+          }
+        }
+      });
+    }
+
+    if (webcamSizeSelect) {
+      webcamSizeSelect.addEventListener("change", () => {
+        this.settings.webcamSize = webcamSizeSelect.value;
+        this.updateWebcamHandlePosition();
+        if (this.recordingManager?.compositorWorker) {
+          this.recordingManager.compositorWorker.postMessage({
+            type: "updateSettings",
+            payload: { webcamSize: webcamSizeSelect.value },
+          });
+        }
+      });
+    }
+
+    if (webcamPosSelect) {
+      webcamPosSelect.addEventListener("change", () => {
+        this.settings.webcamPosition = webcamPosSelect.value;
+        // User explicitly picked a preset, clear custom positioning to snap to corner
+        delete this.settings.webcamCustomX;
+        delete this.settings.webcamCustomY;
+        this.updateWebcamHandlePosition();
+      });
+    }
   }
 }
 

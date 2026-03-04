@@ -159,38 +159,46 @@ function drawWebcamOverlay(webcamBitmap) {
   const size = settings.webcamSize || "medium";
   let webcamDisplayWidth;
 
+  // Use proportional sizing based on canvas width (normalized to a 1920px baseline)
   switch (size) {
     case "small":
-      webcamDisplayWidth = 120;
+      webcamDisplayWidth = config.width * 0.0625; // 120/1920
       break;
     case "large":
-      webcamDisplayWidth = 240;
+      webcamDisplayWidth = config.width * 0.125;  // 240/1920
       break;
     default:
-      webcamDisplayWidth = 180;
+      webcamDisplayWidth = config.width * 0.09375; // 180/1920
   }
 
   const webcamDisplayHeight = webcamDisplayWidth; // Perfect circle
   const position = settings.webcamPosition || "bottom-right";
 
-  switch (position) {
-    case "top-left":
-      webcamX = 20;
-      webcamY = 20;
-      break;
-    case "top-right":
-      webcamX = config.width - webcamDisplayWidth - 20;
-      webcamY = 20;
-      break;
-    case "bottom-left":
-      webcamX = 20;
-      webcamY = config.height - webcamDisplayHeight - 20;
-      break;
-    case "bottom-right":
-    default:
-      webcamX = config.width - webcamDisplayWidth - 20;
-      webcamY = config.height - webcamDisplayHeight - 20;
-      break;
+  // If the user has dragged to a custom position, use it (normalized 0-1 coords)
+  if (settings.webcamCustomX !== undefined && settings.webcamCustomY !== undefined) {
+    // Map normalized coordinates (0-1) to the actual available movement range
+    webcamX = Math.round(settings.webcamCustomX * (config.width - webcamDisplayWidth));
+    webcamY = Math.round(settings.webcamCustomY * (config.height - webcamDisplayHeight));
+  } else {
+    switch (position) {
+      case "top-left":
+        webcamX = 20;
+        webcamY = 20;
+        break;
+      case "top-right":
+        webcamX = config.width - webcamDisplayWidth - 20;
+        webcamY = 20;
+        break;
+      case "bottom-left":
+        webcamX = 20;
+        webcamY = config.height - webcamDisplayHeight - 20;
+        break;
+      case "bottom-right":
+      default:
+        webcamX = config.width - webcamDisplayWidth - 20;
+        webcamY = config.height - webcamDisplayHeight - 20;
+        break;
+    }
   }
 
   try {

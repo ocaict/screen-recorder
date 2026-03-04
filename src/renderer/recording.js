@@ -154,11 +154,102 @@ class RecordingManager {
 
       this.app.noSourceMessage.classList.add("hidden");
       this.app.showToast("Source connected", "success");
+
+      // Immediate Webcam Preview if enabled
+      if (this.app.settings.webcamEnabled === true) {
+        this.setupWebcamStream(true).catch(e => console.warn("Initial webcam preview failed:", e));
+      }
     } catch (err) {
       this.stopCurrentStream();
       this.app.showToast(`Failed to connect: ${err.message}`, "error");
       console.error(err);
     }
+  }
+
+  async setupWebcamStream(force = false) {
+    if (!!this.app.settings.webcamEnabled !== true && !this.app.settings.webcamEnabled) return null;
+
+    if (this._webcamInitializing) {
+      console.log("[Webcam Debug] Initialization already in progress, waiting...");
+      return this._webcamInitPromise;
+    }
+
+    this._webcamInitializing = true;
+    this._webcamInitPromise = (async () => {
+      try {
+        // If we already have a stream and it's active, don't re-init unless needed
+        if (this.webcamStream && this.webcamStream.active) {
+          if (this.app.webcamPreviewVideo) {
+            this.app.webcamPreviewVideo.srcObject = this.webcamStream;
+            this.app.webcamDragHandle?.classList.remove("hidden");
+            this.app.updateWebcamHandlePosition();
+          }
+          return this.webcamStream;
+        }
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        if (videoDevices.length === 0) {
+          this.webcamStream = null;
+          return null;
+        }
+
+        const cameraId = this.app.settings.selectedCamera || "default";
+        const constraints = {
+          audio: false,
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: this.app.settings.frameRate || 30 }
+          }
+        };
+        if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
+
+        console.log("[Webcam Debug] Requesting camera access...");
+        
+        // Add timeout wrapper to handle stuck getUserMedia
+        const timeoutMs = 10000;
+        let timeoutId;
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("Timeout starting video source")), timeoutMs);
+        });
+        
+        let stream;
+        try {
+          stream = await Promise.race([
+            navigator.mediaDevices.getUserMedia(constraints),
+            timeoutPromise
+          ]);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        
+        this.webcamStream = stream;
+
+        const videoTracks = stream.getVideoTracks();
+        console.log("[Webcam Debug] Camera access granted, stream ready with", videoTracks.length, "video tracks");
+        if (videoTracks.length > 0) {
+          console.log("[Webcam Debug] Video track settings:", videoTracks[0].getSettings());
+        }
+
+        if (this.app.webcamPreviewVideo) {
+          this.app.webcamPreviewVideo.srcObject = stream;
+          this.app.webcamDragHandle?.classList.remove("hidden");
+          this.app.updateWebcamHandlePosition();
+        }
+
+        return stream;
+      } catch (err) {
+        console.error("Failed to setup webcam stream:", err);
+        this.webcamStream = null;
+        return null;
+      } finally {
+        this._webcamInitializing = false;
+        this._webcamInitPromise = null;
+      }
+    })();
+
+    return this._webcamInitPromise;
   }
 
   async setupRegionStream(includeAnnotations = false) {
@@ -230,6 +321,11 @@ class RecordingManager {
 
       this.app.noSourceMessage.classList.add("hidden");
       this.app.showToast("Region capture ready", "success");
+
+      // Immediate Webcam Preview if enabled
+      if (this.app.settings.webcamEnabled === true) {
+        this.setupWebcamStream(true).catch(e => console.warn("Initial webcam preview failed:", e));
+      }
     } catch (err) {
       this.stopCurrentStream();
       this.app.showToast(`Failed to setup region: ${err.message}`, "error");
@@ -531,7 +627,9 @@ class RecordingManager {
         height,
         frameRate,
         settings: {
-          includeWebcam: !!this.webcamStream,
+          // Disable webcam in compositor BEFORE recording starts to avoid "double vision"
+          // (The DOM-based draggable handle provides the preview during setup)
+          includeWebcam: this.isRecording && !!this.webcamStream,
           includeAnnotations: includeAnnotations,
           webcamPosition: this.app.settings.webcamPosition || "bottom-right",
           webcamSize: this.app.settings.webcamSize || "medium",
@@ -1354,6 +1452,24 @@ class RecordingManager {
       }
 
       this.app.updateUIForRecording();
+
+      // Switch from DOM preview to Compositor preview to avoid "double vision" 
+      // (Compositor handles the recorded file; handle remains for dragging)
+      if (this.compositorWorker && this.webcamStream) {
+        this.compositorWorker.postMessage({
+          type: "updateSettings",
+          payload: { includeWebcam: true }
+        });
+        if (this.app.webcamPreviewVideo) {
+          this.app.webcamPreviewVideo.style.opacity = "0";
+        }
+        if (this.app.webcamDragHandle) {
+          this.app.webcamDragHandle.style.background = "transparent";
+          this.app.webcamDragHandle.style.borderColor = "transparent";
+          this.app.webcamDragHandle.style.boxShadow = "none";
+        }
+      }
+
       this.startRecordingTimer();
 
       // Show visual border for region recording
@@ -1417,6 +1533,16 @@ class RecordingManager {
         this.mediaRecorder.stop();
       }
       this.isRecording = false;
+
+      // Restore DOM preview video visibility
+      if (this.app.webcamPreviewVideo) {
+        this.app.webcamPreviewVideo.style.opacity = "1";
+      }
+      if (this.app.webcamDragHandle) {
+        this.app.webcamDragHandle.style.background = "#000";
+        this.app.webcamDragHandle.style.borderColor = "rgba(255, 255, 255, 1)";
+        this.app.webcamDragHandle.style.boxShadow = "0 4px 20px rgba(0, 0, 0, 0.4)";
+      }
 
       if (this.recordingTimer) {
         clearInterval(this.recordingTimer);

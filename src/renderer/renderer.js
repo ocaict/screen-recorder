@@ -603,11 +603,7 @@ class ScreenRecorder {
       });
     }
 
-    if (this.previewVideo) {
-      this.previewVideo.addEventListener("loadedmetadata", () => {
-        this.updateWebcamHandlePosition();
-      });
-    }
+
 
     // Initialize Webcam
     this.setupWebcamSettingsListeners();

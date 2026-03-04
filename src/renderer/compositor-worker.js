@@ -170,7 +170,7 @@ function drawWebcamOverlay(webcamBitmap) {
       webcamDisplayWidth = 180;
   }
 
-  const webcamDisplayHeight = (webcamHeight / webcamWidth) * webcamDisplayWidth;
+  const webcamDisplayHeight = webcamDisplayWidth; // Perfect circle
   const position = settings.webcamPosition || "bottom-right";
 
   switch (position) {
@@ -194,25 +194,45 @@ function drawWebcamOverlay(webcamBitmap) {
   }
 
   try {
-    // Draw semi-transparent border/background
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    const cx = webcamX + webcamDisplayWidth / 2;
+    const cy = webcamY + webcamDisplayHeight / 2;
+    const radius = webcamDisplayWidth / 2;
+
+    ctx.save();
+
+    // Draw outer white rim and drop shadow
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetY = 5;
+    // Remove shadow offset on x for symmetrical look
+    ctx.shadowOffsetX = 0;
+
     ctx.beginPath();
-    ctx.roundRect(
-      webcamX - 2,
-      webcamY - 2,
-      webcamDisplayWidth + 4,
-      webcamDisplayHeight + 4,
-      8,
-    );
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
     ctx.fill();
+
+    // Reset shadow internally so it doesn't leak into the video image
+    ctx.shadowColor = "transparent";
+
+    // Setup circular clip path for the video
+    ctx.beginPath();
+    // 3px inset to create the white border ring
+    ctx.arc(cx, cy, Math.max(0, radius - 3), 0, Math.PI * 2);
+    ctx.clip();
+
+    // Source coordinates for a center-square crop of the raw webcam feed
+    const srcSize = Math.min(webcamWidth, webcamHeight);
+    const srcX = (webcamWidth - srcSize) / 2;
+    const srcY = (webcamHeight - srcSize) / 2;
 
     ctx.drawImage(
       webcamBitmap,
-      webcamX,
-      webcamY,
-      webcamDisplayWidth,
-      webcamDisplayHeight,
+      srcX, srcY, srcSize, srcSize, // Source crop
+      cx - radius, cy - radius, radius * 2, radius * 2 // Destination
     );
+
+    ctx.restore();
   } catch (err) {
     console.warn("Webcam worker draw error:", err);
   }

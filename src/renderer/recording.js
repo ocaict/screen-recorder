@@ -429,6 +429,18 @@ class RecordingManager {
       this.compositorWorker = null;
     }
 
+    // Dispose compositor video helpers to release GPU memory and media tracks
+    if (this.compositorScreenVideo) {
+      this.compositorScreenVideo.pause();
+      this.compositorScreenVideo.srcObject = null;
+      this.compositorScreenVideo = null;
+    }
+    if (this.compositorWebcamVideo) {
+      this.compositorWebcamVideo.pause();
+      this.compositorWebcamVideo.srcObject = null;
+      this.compositorWebcamVideo = null;
+    }
+
     this.canvasStream = null;
     this.compositorCanvasElement = null;
 
@@ -492,22 +504,21 @@ class RecordingManager {
     const offscreenCanvas = canvas.transferControlToOffscreen();
 
     const screenStream = new MediaStream([screenTrack]);
-    const screenVideo = document.createElement("video");
-    screenVideo.srcObject = screenStream;
-    screenVideo.muted = true;
-    screenVideo.playsInline = true;
-    await screenVideo.play();
+    this.compositorScreenVideo = document.createElement("video");
+    this.compositorScreenVideo.srcObject = screenStream;
+    this.compositorScreenVideo.muted = true;
+    this.compositorScreenVideo.playsInline = true;
+    await this.compositorScreenVideo.play();
 
     // Set up webcam video if enabled
-    let webcamVideo = null;
     if (this.webcamStream) {
       const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
       const webcamStream = new MediaStream([webcamTrack]);
-      webcamVideo = document.createElement("video");
-      webcamVideo.srcObject = webcamStream;
-      webcamVideo.muted = true;
-      webcamVideo.playsInline = true;
-      await webcamVideo.play();
+      this.compositorWebcamVideo = document.createElement("video");
+      this.compositorWebcamVideo.srcObject = webcamStream;
+      this.compositorWebcamVideo.muted = true;
+      this.compositorWebcamVideo.playsInline = true;
+      await this.compositorWebcamVideo.play();
     }
 
     // Initialize dedicated Offscreen Worker
@@ -529,22 +540,56 @@ class RecordingManager {
       }
     }, [offscreenCanvas]);
 
+    let useRVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+    let hasNewScreenFrame = !useRVFC;
+    let hasNewWebcamFrame = !useRVFC;
+
+    const onScreenFrame = () => {
+      hasNewScreenFrame = true;
+      if (this.compositorScreenVideo) this.compositorScreenVideo.requestVideoFrameCallback(onScreenFrame);
+    };
+    if (useRVFC && this.compositorScreenVideo) this.compositorScreenVideo.requestVideoFrameCallback(onScreenFrame);
+
+    const onWebcamFrame = () => {
+      hasNewWebcamFrame = true;
+      if (this.compositorWebcamVideo) this.compositorWebcamVideo.requestVideoFrameCallback(onWebcamFrame);
+    };
+    if (useRVFC && this.compositorWebcamVideo) this.compositorWebcamVideo.requestVideoFrameCallback(onWebcamFrame);
+
     const drawFrame = async (timestamp) => {
       try {
         if (!this.compositorDrawId) return;
+
+        let annotationsChanged = false;
+        let annotationBitmap, tempAnnotationBitmap;
+        if (includeAnnotations && this.app.annotationManager?.isActive) {
+          annotationsChanged = this.app.annotationManager.checkAndResetDirty();
+        }
+
+        if (!hasNewScreenFrame && !hasNewWebcamFrame && !annotationsChanged) {
+          if (this.compositorDrawId) {
+            this.compositorDrawId = requestAnimationFrame(drawFrame);
+          }
+          return;
+        }
+
+        if (useRVFC) {
+          hasNewScreenFrame = false;
+          hasNewWebcamFrame = false;
+        }
 
         if (this.monitor) {
           this.monitor.recordFrame();
         }
 
         let screenBitmap;
-        if (screenVideo.readyState >= 2 && screenVideo.currentTime > 0) {
-          screenBitmap = await createImageBitmap(screenVideo);
+        if (this.compositorScreenVideo && this.compositorScreenVideo.readyState >= 2 && this.compositorScreenVideo.currentTime > 0) {
+          screenBitmap = await createImageBitmap(this.compositorScreenVideo);
         }
 
         let webcamBitmap;
-        if (webcamVideo && webcamVideo.readyState >= 2 && webcamVideo.currentTime > 0) {
-          webcamBitmap = await createImageBitmap(webcamVideo);
+        if (this.compositorWebcamVideo && this.compositorWebcamVideo.readyState >= 2 && this.compositorWebcamVideo.currentTime > 0) {
+          webcamBitmap = await createImageBitmap(this.compositorWebcamVideo);
         }
 
         if (!screenBitmap && !webcamBitmap) {
@@ -554,8 +599,7 @@ class RecordingManager {
           return;
         }
 
-        let annotationBitmap, tempAnnotationBitmap;
-        if (includeAnnotations && this.app.annotationManager?.isActive && this.app.annotationManager.checkAndResetDirty()) {
+        if (annotationsChanged) {
           const annCanvas = this.app.annotationManager.getCanvas();
           const tempCanvas = this.app.annotationManager.getTempCanvas();
           annotationBitmap = await createImageBitmap(annCanvas);
@@ -1018,10 +1062,81 @@ class RecordingManager {
 
     const countdownSeconds = this.app.settings.countdown || 0;
 
+    // ── Pre-warm expensive async operations CONCURRENTLY during countdown ─────
+    // getUserMedia and enumerateDevices take 500ms-2s on cold start.
+    // By kicking these off BEFORE the countdown finishes, the user never waits
+    // after the "3-2-1" completes.
+
+    const audioPromise = this.app.settings.recordAudio
+      ? this.setupAudioStream().catch(err => { console.warn("Audio pre-warm failed:", err); return null; })
+      : Promise.resolve(null);
+
+    const systemAudioPromise = this.app.settings.recordSystemAudio
+      ? this.setupSystemAudioStream().catch(err => { console.warn("System audio pre-warm failed:", err); return null; })
+      : Promise.resolve(null);
+
+    // Pre-warm webcam during countdown if enabled
+    const webcamEnabled = this.app.settings.webcamEnabled || document.getElementById("settingsWebcam")?.checked;
+    const webcamPrewarmPromise = webcamEnabled
+      ? (async () => {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter((d) => d.kind === "videoinput");
+          if (videoDevices.length > 0) {
+            const cameraId = this.app.settings.selectedCamera || "default";
+            const constraints = {
+              audio: false,
+              video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                frameRate: { ideal: this.app.settings.frameRate || 30 }
+              }
+            };
+            if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
+            return await navigator.mediaDevices.getUserMedia(constraints);
+          }
+        } catch (e) {
+          console.warn("Webcam pre-warm failed:", e);
+        }
+        return null;
+      })()
+      : Promise.resolve(null);
+
+    // Also pre-warm the region desktop capture during countdown if needed
+    let regionStreamPromise = Promise.resolve(null);
+    if (this.selectedRegion) {
+      const frameRate = this.app.settings.frameRate || 30;
+      regionStreamPromise = navigator.mediaDevices.getUserMedia({
+        video: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: this.selectedSource.id,
+            minWidth: 1920, maxWidth: 3840,
+            minHeight: 1080, maxHeight: 2160,
+            minFrameRate: frameRate, maxFrameRate: frameRate,
+          },
+        },
+        audio: false,
+      }).catch(err => { console.warn("Region stream pre-warm failed:", err); return null; });
+    }
+
     if (countdownSeconds > 0) {
       const cancelled = await this.app.runCountdown(countdownSeconds);
-      if (cancelled) return;
+      if (cancelled) {
+        // Discard pre-warmed streams on cancel
+        Promise.all([audioPromise, systemAudioPromise, webcamPrewarmPromise, regionStreamPromise]).then(([, , wc, rs]) => {
+          wc?.getTracks().forEach(t => t.stop());
+          rs?.getTracks().forEach(t => t.stop());
+        });
+        return;
+      }
     }
+
+    // Collect all pre-warmed streams (they should already be resolved by now)
+    const [, prewarmSystemAudio, prewarmWebcamStream, prewarmRegionStream] = await Promise.all([
+      audioPromise, systemAudioPromise, webcamPrewarmPromise, regionStreamPromise
+    ]);
+    this.systemAudioStream = prewarmSystemAudio || null;
 
     try {
       this.recordedChunks = [];
@@ -1034,13 +1149,10 @@ class RecordingManager {
       this.app.stopBtn.disabled = true;
       this.app.startBtn.textContent = "Starting...";
 
-      if (this.app.settings.recordAudio) {
-        await this.setupAudioStream();
-      }
-
-      this.systemAudioStream = null;
-      if (this.app.settings.recordSystemAudio) {
-        this.systemAudioStream = await this.setupSystemAudioStream();
+      // Audio stream was pre-warmed before countdown; no await needed here
+      // (setupAudioStream idempotently sets this.audioStream if not already set)
+      if (!this.audioStream && this.app.settings.recordAudio) {
+        await this.setupAudioStream().catch(e => console.warn("Audio fallback setup failed:", e));
       }
 
       let videoTracks = [];
@@ -1048,33 +1160,33 @@ class RecordingManager {
       let finalAudioStream = null;
 
       try {
-        // 1. Get RAW Video Tracks
+        // 1. Get RAW Video Tracks — use pre-warmed stream if available
         if (this.selectedRegion) {
-          // CAPTURE RAW FULL SCREEN FOR REGION CROP
-          const frameRate = this.app.settings.frameRate || 30;
-          const fullStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              mandatory: {
-                chromeMediaSource: "desktop",
-                chromeMediaSourceId: this.selectedSource.id,
-                minWidth: 1920,
-                maxWidth: 3840,
-                minHeight: 1080,
-                maxHeight: 2160,
-                minFrameRate: frameRate,
-                maxFrameRate: frameRate,
+          if (prewarmRegionStream) {
+            videoTracks = prewarmRegionStream.getVideoTracks();
+          } else {
+            // Fallback: fetch now (only if pre-warm failed)
+            const frameRate = this.app.settings.frameRate || 30;
+            const fullStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                mandatory: {
+                  chromeMediaSource: "desktop",
+                  chromeMediaSourceId: this.selectedSource.id,
+                  minWidth: 1920, maxWidth: 3840,
+                  minHeight: 1080, maxHeight: 2160,
+                  minFrameRate: frameRate, maxFrameRate: frameRate,
+                },
               },
-            },
-            audio: false,
-          });
-          videoTracks = fullStream.getVideoTracks();
+              audio: false,
+            });
+            videoTracks = fullStream.getVideoTracks();
+          }
         } else if (this.videoStream) {
           // CRITICAL: Clone the tracks BEFORE they are stopped by stopCurrentStream()
-          // This keeps the hardware capture alive for the new recording compositor.
           videoTracks = this.videoStream.getTracks().map(t => t.clone());
         }
 
-        // 2. Prepare Audio
+        // 2. Prepare Audio — use already-initialized this.audioStream
         if (this.audioStream && this.systemAudioStream) {
           finalAudioStream = await this.mixAudioStreams(this.audioStream, this.systemAudioStream);
         } else if (this.audioStream) {
@@ -1100,23 +1212,8 @@ class RecordingManager {
         throw new Error("No video tracks available");
       }
 
-      // 3. Handle Webcam
-      const webcamEnabled = this.app.settings.webcamEnabled || document.getElementById("settingsWebcam")?.checked;
-      let newWebcamStream = null;
-      if (webcamEnabled) {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevices = devices.filter((d) => d.kind === "videoinput");
-          if (videoDevices.length > 0) {
-            const cameraId = this.app.settings.selectedCamera || "default";
-            let constraints = { audio: false, video: {} };
-            if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
-            newWebcamStream = await navigator.mediaDevices.getUserMedia(constraints);
-          }
-        } catch (webcamErr) {
-          console.warn("Webcam failing, continuing with screen only:", webcamErr);
-        }
-      }
+      // 3. Handle Webcam — use pre-warmed stream
+      const newWebcamStream = prewarmWebcamStream || null;
 
       // 4. Create Unified Composited Stream (ONE WORKER)
       try {

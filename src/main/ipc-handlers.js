@@ -51,6 +51,7 @@ let mainWindow = null;
 let overlayWindow = null;
 let miniControlsWindow = null;
 let regionIndicatorWindow = null;
+let cameraWindow = null;
 let ICON_PATH = null;
 let clickHighlightHookRunning = false;
 
@@ -145,6 +146,10 @@ function setOverlayWindowRef(win) {
 
 function setMiniControlsWindowRef(win) {
   miniControlsWindow = win;
+}
+
+function setCameraWindowRef(win) {
+  cameraWindow = win;
 }
 
 async function getCaptureSources() {
@@ -1809,11 +1814,44 @@ function setupIpcHandlers() {
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle("camera-window-toggle", (_, show) => {
+    if (!cameraWindow || cameraWindow.isDestroyed()) return;
+    if (show) {
+      cameraWindow.showInactive();
+      cameraWindow.setAlwaysOnTop(true, "screen-saver");
+      cameraWindow.webContents.send("camera-status", true); // Send start signal
+    } else {
+      cameraWindow.webContents.send("camera-status", false); // Send stop signal
+      cameraWindow.hide();
+    }
+  });
+
+  ipcMain.handle("update-camera-settings", (_, settings) => {
+    if (!cameraWindow || cameraWindow.isDestroyed()) return;
+
+    let newSize = 200; // medium
+    if (settings.webcamSize === "small") newSize = 150;
+    else if (settings.webcamSize === "large") newSize = 300;
+
+    // Maintain square constraint and resize based on settings
+    cameraWindow.setSize(newSize, newSize);
+
+    // Forward the desired deviceId to the floating window
+    cameraWindow.webContents.send("update-camera", settings.selectedCamera);
+  });
+
+  ipcMain.handle("get-camera-window-bounds", () => {
+
+    if (!cameraWindow || cameraWindow.isDestroyed()) return null;
+    return cameraWindow.getBounds();
+  });
 }
 
 module.exports = {
   setMainWindowRef,
   setOverlayWindowRef,
   setMiniControlsWindowRef,
+  setCameraWindowRef,
   setupIpcHandlers,
 };

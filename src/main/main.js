@@ -10,6 +10,7 @@ const {
   setMainWindowRef,
   setOverlayWindowRef,
   setMiniControlsWindowRef,
+  setCameraWindowRef,
 } = require("./ipc-handlers");
 
 // We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE)
@@ -21,6 +22,7 @@ const {
 let mainWindow = null;
 let overlayWindow = null;
 let miniControlsWindow = null;
+let cameraWindow = null;
 
 // Register thumb:// as a privileged scheme for Electron 40+ compatibility
 protocol.registerSchemesAsPrivileged([
@@ -163,8 +165,10 @@ app.whenReady().then(async () => {
   createWindow();
   createOverlayWindow();
   createMiniControlsWindow();
+  createCameraWindow();
   setOverlayWindowRef(overlayWindow);
   setMiniControlsWindowRef(miniControlsWindow);
+  setCameraWindowRef(cameraWindow);
   tray.createTray();
   shortcuts.registerGlobalShortcut();
 
@@ -191,7 +195,49 @@ module.exports = {
   getMainWindow: () => mainWindow,
   getOverlayWindow: () => overlayWindow,
   getMiniControlsWindow: () => miniControlsWindow,
+  getCameraWindow: () => cameraWindow,
 };
+
+function createCameraWindow() {
+  cameraWindow = new BrowserWindow({
+    width: 200,
+    height: 200,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    focusable: false,
+    show: false,
+    backgroundColor: "#00000000",
+    hasShadow: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false, // Set to false to allow direct camera access if needed, though preload is safer
+      sandbox: false,
+    },
+  });
+
+  cameraWindow.setAspectRatio(1); // Force perfect square/circle resizes
+
+
+  // Exclude from capture
+  if (process.platform === "win32") {
+    if (typeof cameraWindow.setExcludeFromCapture === "function") {
+      cameraWindow.setExcludeFromCapture(true);
+    }
+    if (typeof cameraWindow.setContentProtection === "function") {
+      cameraWindow.setContentProtection(true);
+    }
+  }
+
+  cameraWindow.setAlwaysOnTop(true, "screen-saver");
+  cameraWindow.loadFile(path.join(__dirname, "..", "renderer", "camera.html"));
+
+  cameraWindow.on("closed", () => {
+    cameraWindow = null;
+  });
+}
 
 function createOverlayWindow() {
   overlayWindow = new BrowserWindow({

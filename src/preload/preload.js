@@ -133,4 +133,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("mini-command", (_, data) => callback(data)),
   onWindowMinimized: (callback) => ipcRenderer.on("window-minimized", () => callback()),
   onWindowRestored: (callback) => ipcRenderer.on("window-restored", () => callback()),
+
+  // Floating Camera Window
+  toggleCameraWindow: (show) => ipcRenderer.invoke("camera-window-toggle", show),
+  updateCameraSettings: (settings) => ipcRenderer.invoke("update-camera-settings", settings),
+  getCameraWindowBounds: () => ipcRenderer.invoke("get-camera-window-bounds"),
 });
+

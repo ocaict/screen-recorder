@@ -181,8 +181,6 @@ class RecordingManager {
         if (this.webcamStream && this.webcamStream.active) {
           if (this.app.webcamPreviewVideo) {
             this.app.webcamPreviewVideo.srcObject = this.webcamStream;
-            this.app.webcamDragHandle?.classList.remove("hidden");
-            this.app.updateWebcamHandlePosition();
           }
           return this.webcamStream;
         }
@@ -206,14 +204,14 @@ class RecordingManager {
         if (cameraId !== "default") constraints.video.deviceId = { exact: cameraId };
 
         console.log("[Webcam Debug] Requesting camera access...");
-        
+
         // Add timeout wrapper to handle stuck getUserMedia
         const timeoutMs = 10000;
         let timeoutId;
         const timeoutPromise = new Promise((_, reject) => {
           timeoutId = setTimeout(() => reject(new Error("Timeout starting video source")), timeoutMs);
         });
-        
+
         let stream;
         try {
           stream = await Promise.race([
@@ -223,7 +221,7 @@ class RecordingManager {
         } finally {
           clearTimeout(timeoutId);
         }
-        
+
         this.webcamStream = stream;
 
         const videoTracks = stream.getVideoTracks();
@@ -234,8 +232,6 @@ class RecordingManager {
 
         if (this.app.webcamPreviewVideo) {
           this.app.webcamPreviewVideo.srcObject = stream;
-          this.app.webcamDragHandle?.classList.remove("hidden");
-          this.app.updateWebcamHandlePosition();
         }
 
         return stream;
@@ -1463,11 +1459,6 @@ class RecordingManager {
         if (this.app.webcamPreviewVideo) {
           this.app.webcamPreviewVideo.style.opacity = "0";
         }
-        if (this.app.webcamDragHandle) {
-          this.app.webcamDragHandle.style.background = "transparent";
-          this.app.webcamDragHandle.style.borderColor = "transparent";
-          this.app.webcamDragHandle.style.boxShadow = "none";
-        }
       }
 
       this.startRecordingTimer();
@@ -1537,11 +1528,6 @@ class RecordingManager {
       // Restore DOM preview video visibility
       if (this.app.webcamPreviewVideo) {
         this.app.webcamPreviewVideo.style.opacity = "1";
-      }
-      if (this.app.webcamDragHandle) {
-        this.app.webcamDragHandle.style.background = "#000";
-        this.app.webcamDragHandle.style.borderColor = "rgba(255, 255, 255, 1)";
-        this.app.webcamDragHandle.style.boxShadow = "0 4px 20px rgba(0, 0, 0, 0.4)";
       }
 
       if (this.recordingTimer) {

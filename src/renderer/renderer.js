@@ -609,8 +609,7 @@ class ScreenRecorder {
       });
     }
 
-    // Initialize Webcam Drag
-    this.setupWebcamDraggable();
+    // Initialize Webcam
     this.setupWebcamSettingsListeners();
   }
 
@@ -1139,50 +1138,20 @@ class ScreenRecorder {
       });
 
       // Update actual UI components based on webcam setting
-      if (this.webcamDragHandle) {
-        const webcamEnabled = this.settings.webcamEnabled === true;
-        const hasStream = !!this.recordingManager?.webcamStream;
-        console.log(
-          `[Webcam] applySettings: enabled=${webcamEnabled}, hasStream=${hasStream}`,
-        );
+      const webcamEnabled = this.settings.webcamEnabled === true;
+      const hasStream = !!this.recordingManager?.webcamStream;
+      console.log(
+        `[Webcam] applySettings: enabled=${webcamEnabled}, hasStream=${hasStream}`,
+      );
 
-        if (webcamEnabled) {
-          // If enabled, we show it ONLY if we are not recording (recording has its own UI flow)
-          if (!this.recordingManager?.isRecording) {
-            // If stream already exists, show everything
-            if (hasStream) {
-              console.log(
-                "[Webcam] applySettings: removing hidden from handle",
-              );
-              this.webcamDragHandle.classList.remove("hidden");
-
-              // Ensure video is playing
-              if (
-                this.webcamPreviewVideo &&
-                !this.webcamPreviewVideo.srcObject
-              ) {
-                this.webcamPreviewVideo.srcObject =
-                  this.recordingManager.webcamStream;
-              }
-            } else if (this.recordingManager?.selectedSource) {
-              console.log("[Webcam] applySettings: starting stream");
-              // If it should be on but stream is missing, start it
-              this.recordingManager.setupWebcamStream(true);
-            }
-          }
-        } else {
-          console.log("[Webcam] applySettings: hiding handle");
-          this.webcamDragHandle.classList.add("hidden");
-
-          // Ensure we stop any active stream if just disabled
-          if (this.recordingManager?.webcamStream) {
-            this.recordingManager.webcamStream
-              .getTracks()
-              .forEach((t) => t.stop());
-            this.recordingManager.webcamStream = null;
-            if (this.webcamPreviewVideo)
-              this.webcamPreviewVideo.srcObject = null;
-          }
+      // Handle Floating Camera Window
+      if (window.electronAPI.toggleCameraWindow) {
+        window.electronAPI.toggleCameraWindow(webcamEnabled);
+        if (webcamEnabled && window.electronAPI.updateCameraSettings) {
+          window.electronAPI.updateCameraSettings({
+            webcamSize: this.settings.webcamSize,
+            selectedCamera: this.settings.selectedCamera
+          });
         }
       }
     }
@@ -1330,24 +1299,105 @@ class ScreenRecorder {
 
     // Show/Update Webcam Controls
     if (this.settings.webcamEnabled && this.recordingManager.webcamStream) {
-      this.webcamDragHandle?.classList.remove("hidden");
+      if (window.electronAPI.toggleCameraWindow) {
+        window.electronAPI.toggleCameraWindow(true);
+      }
 
-      // Ensure stream is piped
+      // Start syncing floating camera position to compositor
+      this.startCameraSyncTask();
+
+      // Ensure stream is piped for local recording compositor
       if (
         this.webcamPreviewVideo &&
         this.webcamPreviewVideo.srcObject !== this.recordingManager.webcamStream
       ) {
         this.webcamPreviewVideo.srcObject = this.recordingManager.webcamStream;
       }
-
-      this.updateWebcamHandlePosition();
     } else {
-      this.webcamDragHandle?.classList.add("hidden");
+      if (window.electronAPI.toggleCameraWindow) {
+        window.electronAPI.toggleCameraWindow(false);
+      }
+      this.stopCameraSyncTask();
       if (this.webcamPreviewVideo) this.webcamPreviewVideo.srcObject = null;
     }
   }
 
+  startCameraSyncTask() {
+    this.stopCameraSyncTask();
+    this.cameraSyncInterval = setInterval(async () => {
+      await this.syncFloatingCameraPosition();
+    }, 100); // 10fps sync for position is enough
+  }
+
+  stopCameraSyncTask() {
+    if (this.cameraSyncInterval) {
+      clearInterval(this.cameraSyncInterval);
+      this.cameraSyncInterval = null;
+    }
+  }
+
+  async syncFloatingCameraPosition() {
+    if (!this.recordingManager?.isRecording || !this.settings.webcamEnabled) return;
+
+    try {
+      const bounds = await window.electronAPI.getCameraWindowBounds();
+      if (!bounds) return;
+
+      // Determine the bounds of the surface being recorded
+      let surfaceWidth, surfaceHeight, offsetX = 0, offsetY = 0;
+
+      const recordingRegion = this.recordingManager.selectedRegion;
+      const selectedSource = this.recordingManager.selectedSource;
+
+      if (recordingRegion) {
+        surfaceWidth = recordingRegion.width;
+        surfaceHeight = recordingRegion.height;
+        offsetX = recordingRegion.x;
+        offsetY = recordingRegion.y;
+      } else if (selectedSource?.id?.startsWith("screen:")) {
+        // Try to get display bounds from Electron instead of window.screen
+        const displays = await window.electronAPI.getDisplays();
+        const screenIdMatch = selectedSource.id.match(/screen:(\d+):/);
+        const displayIndex = screenIdMatch ? parseInt(screenIdMatch[1], 10) : 0;
+        const display = displays[displayIndex] || displays[0];
+
+        surfaceWidth = display.bounds.width;
+        surfaceHeight = display.bounds.height;
+        offsetX = display.bounds.x;
+        offsetY = display.bounds.y;
+      } else {
+        // Fallback to primary screen
+        surfaceWidth = window.screen.width;
+        surfaceHeight = window.screen.height;
+      }
+
+      // Normalize coordinates for the compositor (0 to 1)
+      // We map the desktop position specifically to the recorded surface area
+      let normX = (bounds.x - offsetX) / (surfaceWidth - bounds.width);
+      let normY = (bounds.y - offsetY) / (surfaceHeight - bounds.height);
+
+      // Clamp to 0-1
+      normX = Math.max(0, Math.min(1, normX));
+      normY = Math.max(0, Math.min(1, normY));
+
+      // Update compositor worker settings
+      if (this.recordingManager.compositorWorker) {
+        this.recordingManager.compositorWorker.postMessage({
+          type: "updateSettings",
+          payload: {
+            webcamCustomX: normX,
+            webcamCustomY: normY,
+            includeWebcam: true
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to sync floating camera position:", err);
+    }
+  }
+
   updateUIForStopped() {
+    this.stopCameraSyncTask();
     this.recordingManager.stopCurrentStream();
     this.recordingManager.selectedRegion = null;
 
@@ -1404,7 +1454,6 @@ class ScreenRecorder {
     this.recordingStats?.classList.add("hidden");
     this.recordingManager.stopAudioMeter();
     this.hotkeyOverlay.classList.add("hidden");
-    this.webcamDragHandle?.classList.add("hidden");
     if (this.webcamPreviewVideo) this.webcamPreviewVideo.srcObject = null;
 
     // Hide the transparent overlay and clean up old in-app canvas too
@@ -2248,160 +2297,6 @@ class ScreenRecorder {
 
   // ── Webcam Interaction Logic ───────────────────────────────────────────────
 
-  setupWebcamDraggable() {
-    if (!this.webcamDragHandle || !this.previewContainer) return;
-
-    let isDragging = false;
-    let startX, startY;
-    let startElemX, startElemY;
-
-    const onMouseDown = (e) => {
-      // Only drag if webcam is active
-      const webcamEnabled =
-        this.settings.webcamEnabled ||
-        document.getElementById("settingsWebcam")?.checked;
-      if (!webcamEnabled) return;
-
-      isDragging = true;
-      this.webcamDragHandle.classList.add("dragging");
-
-      const rect = this.webcamDragHandle.getBoundingClientRect();
-      const parentRect = this.previewContainer.getBoundingClientRect();
-      const videoRect = this.getVideoContentRect(this.previewVideo);
-
-      startX = e.clientX || e.touches?.[0].clientX;
-      startY = e.clientY || e.touches?.[0].clientY;
-
-      // Calculate initial position relative to the video content area
-      startElemX = rect.left - parentRect.left;
-      startElemY = rect.top - parentRect.top;
-
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-      document.addEventListener("touchmove", onMouseMove, { passive: false });
-      document.addEventListener("touchend", onMouseUp);
-    };
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      e.preventDefault();
-
-      const clientX = e.clientX || e.touches?.[0].clientX;
-      const clientY = e.clientY || e.touches?.[0].clientY;
-
-      const dx = clientX - startX;
-      const dy = clientY - startY;
-
-      let newX = startElemX + dx;
-      let newY = startElemY + dy;
-
-      const parentRect = this.previewContainer.getBoundingClientRect();
-      const videoRect = this.getVideoContentRect(this.previewVideo);
-      const handleRect = this.webcamDragHandle.getBoundingClientRect();
-
-      // Constrain to VIDEO CONTENT area (not the container) to ensure perfect alignment
-      // VideoRect coordinates are relative to the container center
-      const minX = videoRect.x;
-      const maxX = videoRect.x + videoRect.width - handleRect.width;
-      const minY = videoRect.y;
-      const maxY = videoRect.y + videoRect.height - handleRect.height;
-
-      newX = Math.max(minX, Math.min(newX, maxX));
-      newY = Math.max(minY, Math.min(newY, maxY));
-
-      this.webcamDragHandle.style.left = `${newX}px`;
-      this.webcamDragHandle.style.top = `${newY}px`;
-      this.webcamDragHandle.style.bottom = "auto";
-      this.webcamDragHandle.style.right = "auto";
-
-      // Normalize coordinates for the compositor relative to the VIDEO area
-      const normX =
-        (newX - videoRect.x) / (videoRect.width - handleRect.width || 1);
-      const normY =
-        (newY - videoRect.y) / (videoRect.height - handleRect.height || 1);
-
-      this.settings.webcamCustomX = normX;
-      this.settings.webcamCustomY = normY;
-
-      // Real-time update to compositor worker
-      if (this.recordingManager?.compositorWorker) {
-        this.recordingManager.compositorWorker.postMessage({
-          type: "updateSettings",
-          payload: {
-            webcamCustomX: normX,
-            webcamCustomY: normY,
-          },
-        });
-      }
-    };
-
-    const onMouseUp = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      this.webcamDragHandle.classList.remove("dragging");
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-      document.removeEventListener("touchmove", onMouseMove);
-      document.removeEventListener("touchend", onMouseUp);
-
-      this.saveSettings();
-    };
-
-    this.webcamDragHandle.addEventListener("mousedown", onMouseDown);
-    this.webcamDragHandle.addEventListener("touchstart", onMouseDown, {
-      passive: false,
-    });
-  }
-
-
-  updateWebcamHandlePosition() {
-    if (!this.webcamDragHandle || !this.previewVideo) return;
-
-    const videoRect = this.getVideoContentRect(this.previewVideo);
-
-    // Exact ratios used in compositor-worker.js
-    let ratio = 0.09375; // Medium (180/1920)
-    const sizeSetting = this.settings.webcamSize || "medium";
-    if (sizeSetting === "small")
-      ratio = 0.0625; // (120/1920)
-    else if (sizeSetting === "large") ratio = 0.125; // (240/1920)
-
-    const size = ratio * videoRect.width;
-
-    this.webcamDragHandle.style.width = `${size}px`;
-    this.webcamDragHandle.style.height = `${size}px`;
-
-    const handleWidth = size;
-    const handleHeight = size;
-
-    if (
-      this.settings.webcamCustomX !== undefined &&
-      this.settings.webcamCustomY !== undefined
-    ) {
-      // Map normalized coordinates back to the VIDEO CONTENT area
-      const x =
-        videoRect.x +
-        this.settings.webcamCustomX * (videoRect.width - handleWidth);
-      const y =
-        videoRect.y +
-        this.settings.webcamCustomY * (videoRect.height - handleHeight);
-
-      this.webcamDragHandle.style.left = `${x}px`;
-      this.webcamDragHandle.style.top = `${y}px`;
-      this.webcamDragHandle.style.bottom = "auto";
-      this.webcamDragHandle.style.right = "auto";
-    } else {
-      // Default to bottom-right (matching compositor's relative 20px padding)
-      const padding = (20 / 1920) * videoRect.width;
-      const x = videoRect.x + videoRect.width - handleWidth - padding;
-      const y = videoRect.y + videoRect.height - handleHeight - padding;
-      this.webcamDragHandle.style.left = `${x}px`;
-      this.webcamDragHandle.style.top = `${y}px`;
-      this.webcamDragHandle.style.bottom = "auto";
-      this.webcamDragHandle.style.right = "auto";
-    }
-  }
-
   getVideoContentRect(videoEl) {
     if (!videoEl) return { x: 0, y: 0, width: 0, height: 0 };
 
@@ -2447,6 +2342,8 @@ class ScreenRecorder {
   }
 
   setupWebcamSettingsListeners() {
+    this.hotkeyOverlay = document.getElementById("hotkeyOverlay");
+
     const webcamCheckbox = document.getElementById("settingsWebcam");
     const webcamSizeSelect = document.getElementById("settingsWebcamSize");
     const webcamPosSelect = document.getElementById("settingsWebcamPosition");
@@ -2457,29 +2354,23 @@ class ScreenRecorder {
         if (webcamCheckbox.checked) {
           this.recordingManager.setupWebcamStream(true);
         } else {
-          this.webcamDragHandle?.classList.add("hidden");
           if (!this.recordingManager.isRecording) {
             this.recordingManager.webcamStream
               ?.getTracks()
               .forEach((t) => t.stop());
             this.recordingManager.webcamStream = null;
-            if (this.webcamPreviewVideo)
-              this.webcamPreviewVideo.srcObject = null;
           }
         }
+        this.applySettings(); // Re-syncs floating window
+        this.saveSettings();
       });
     }
 
     if (webcamSizeSelect) {
       webcamSizeSelect.addEventListener("change", () => {
         this.settings.webcamSize = webcamSizeSelect.value;
-        this.updateWebcamHandlePosition();
-        if (this.recordingManager?.compositorWorker) {
-          this.recordingManager.compositorWorker.postMessage({
-            type: "updateSettings",
-            payload: { webcamSize: webcamSizeSelect.value },
-          });
-        }
+        this.applySettings();
+        this.saveSettings();
       });
     }
 

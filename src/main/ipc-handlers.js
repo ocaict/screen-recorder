@@ -52,6 +52,7 @@ let overlayWindow = null;
 let miniControlsWindow = null;
 let regionIndicatorWindow = null;
 let cameraWindow = null;
+let dimmerWindow = null;
 let ICON_PATH = null;
 let clickHighlightHookRunning = false;
 
@@ -150,6 +151,10 @@ function setMiniControlsWindowRef(win) {
 
 function setCameraWindowRef(win) {
   cameraWindow = win;
+}
+
+function setDimmerWindowRef(win) {
+  dimmerWindow = win;
 }
 
 async function getCaptureSources() {
@@ -713,6 +718,7 @@ function setupIpcHandlers() {
           }
         };
         processQueue();
+
       } else if (sess.ws) {
         sess.ws.write(buf);
       }
@@ -1818,55 +1824,206 @@ function setupIpcHandlers() {
 
   ipcMain.handle("camera-window-toggle", (_, show) => {
     if (!cameraWindow || cameraWindow.isDestroyed()) return;
+    const visible = cameraWindow.isVisible();
+    console.log(`[CamToggle] show=${show}, currentlyVisible=${visible}`);
     if (show) {
-      cameraWindow.showInactive();
-      cameraWindow.setAlwaysOnTop(true, "screen-saver");
-      cameraWindow.webContents.send("camera-status", true); // Send start signal
+      // Only showInactive if actually hidden, to avoid Windows resetting position during tweens
+      if (!visible) {
+        console.log('[CamToggle] Window was hidden → calling showInactive()');
+        cameraWindow.showInactive();
+        cameraWindow.setAlwaysOnTop(true, "screen-saver");
+      } else {
+        console.log('[CamToggle] Window already visible → skipping showInactive()');
+      }
+      cameraWindow.webContents.send("camera-status", true);
     } else {
-      cameraWindow.webContents.send("camera-status", false); // Send stop signal
+      cameraWindow.webContents.send("camera-status", false);
       cameraWindow.hide();
+      // Reset presenter mode when camera is hidden
+      preFullscreenBounds = null;
+      if (dimmerWindow && !dimmerWindow.isDestroyed()) {
+        dimmerWindow.hide();
+      }
+      console.log('[CamToggle] Window hidden, preFullscreenBounds + Dimmer cleared');
     }
   });
 
   let preFullscreenBounds = null;
+  let tweenInterval = null;
 
-  ipcMain.handle("update-camera-settings", (_, settings) => {
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function animateCameraWindow(fromBounds, toBounds, durationMs, onDone) {
+    if (tweenInterval) clearInterval(tweenInterval);
+
     if (!cameraWindow || cameraWindow.isDestroyed()) return;
 
-    if (settings.cameraMode === "center") {
-      // Presentation Mode!
-      if (!preFullscreenBounds) {
-        // Save the current bounds where the user dragged it
-        preFullscreenBounds = cameraWindow.getBounds();
+    const startTime = Date.now();
+
+    tweenInterval = setInterval(() => {
+      if (!cameraWindow || cameraWindow.isDestroyed()) {
+        clearInterval(tweenInterval);
+        tweenInterval = null;
+        return;
       }
 
-      const { screen } = require("electron");
-      const primaryDisplay = screen.getPrimaryDisplay();
-      const hw = primaryDisplay.workAreaSize;
+      const elapsed = Date.now() - startTime;
+      const rawT = Math.min(elapsed / durationMs, 1);
+      const t = easeInOutCubic(rawT);
+
+      const x = Math.round(fromBounds.x + (toBounds.x - fromBounds.x) * t);
+      const y = Math.round(fromBounds.y + (toBounds.y - fromBounds.y) * t);
+      const w = Math.round(fromBounds.width + (toBounds.width - fromBounds.width) * t);
+      const h = Math.round(fromBounds.height + (toBounds.height - fromBounds.height) * t);
+
+      try {
+        cameraWindow.setBounds({ x, y, width: w, height: h });
+      } catch (e) { /* window may have been destroyed */ }
+
+      if (rawT >= 1) {
+        clearInterval(tweenInterval);
+        tweenInterval = null;
+        if (onDone) onDone();
+      }
+    }, 16); // ~60fps
+  }
+
+  ipcMain.handle("update-camera-settings", (_, settings) => {
+    if (!cameraWindow || cameraWindow.isDestroyed()) {
+      console.warn('[CamSettings] cameraWindow missing/destroyed');
+      return;
+    }
+
+    const { screen } = require("electron");
+    const fromBounds = cameraWindow.getBounds();
+    const currentDisplay = screen.getDisplayMatching(fromBounds);
+    const hw = currentDisplay.workAreaSize;
+    
+    console.log(`[CamSettings] IN: mode=${settings.cameraMode}, curBounds=${JSON.stringify(fromBounds)}, preFull=${JSON.stringify(preFullscreenBounds)}, displayX=${currentDisplay.bounds.x}`);
+
+    if (settings.cameraMode === "center") {
+      // Transition to Presenter Mode
+      if (!preFullscreenBounds) {
+          preFullscreenBounds = fromBounds;
+          console.log('[CamSettings] SAVED preFullscreenBounds:', JSON.stringify(preFullscreenBounds));
+      }
+      console.log(`[CamSettings] Presenter Mode Toggle: fromBounds=${JSON.stringify(fromBounds)}`);
 
       const bigSize = Math.round(Math.min(hw.width, hw.height) * 0.45);
+      const toBounds = {
+        x: Math.round((hw.width - bigSize) / 2) + currentDisplay.bounds.x,
+        y: Math.round((hw.height - bigSize) / 2) + currentDisplay.bounds.y,
+        width: bigSize,
+        height: bigSize,
+      };
 
-      cameraWindow.setSize(bigSize, bigSize);
-      cameraWindow.setPosition(
-        Math.round((hw.width - bigSize) / 2) + primaryDisplay.bounds.x,
-        Math.round((hw.height - bigSize) / 2) + primaryDisplay.bounds.y
-      );
+      console.log('[CamSettings] Animating to center:', JSON.stringify(toBounds));
+      animateCameraWindow(fromBounds, toBounds, 400);
+
+      // Send display dimensions to compositor for presenter mode center calculation
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("presenter-mode-display", {
+          width: hw.width,
+          height: hw.height
+        });
+      }
+
+      // Show dimmer overlay in UX - Move to the correct display first
+      if (dimmerWindow && !dimmerWindow.isDestroyed()) {
+        const display = screen.getDisplayMatching(fromBounds);
+        console.log(`[CamSettings] Showing Dimmer on display at ${display.bounds.x}, ${display.bounds.y}. Camera currently at ${fromBounds.x}, ${fromBounds.y}`);
+        dimmerWindow.setBounds(display.bounds);
+        dimmerWindow.setOpacity(0.6); // 60% dim
+        dimmerWindow.showInactive();
+        
+        // Re-assert protection upon show for extra reliability
+        if (process.platform === "win32") {
+          if (typeof dimmerWindow.setExcludeFromCapture === "function") {
+            dimmerWindow.setExcludeFromCapture(true);
+          }
+          if (typeof dimmerWindow.setContentProtection === "function") {
+            dimmerWindow.setContentProtection(true);
+          }
+        }
+
+        // Ensure camera is still on top of the dimmer
+        // Use a 150ms delay to ensure the OS has finished processing the show
+        setTimeout(() => {
+          if (cameraWindow && !cameraWindow.isDestroyed()) {
+             cameraWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+             cameraWindow.moveTop();
+             console.log('[CamSettings] Z-Order: Camera moved above Dimmer');
+          }
+        }, 150);
+      }
+
+      // Tell camera bubble to potentially update its own UI
+      if (cameraWindow && !cameraWindow.isDestroyed()) {
+        cameraWindow.webContents.send("presenter-mode", true);
+      }
+    } else if (settings.cameraMode === "corner") {
+      // Transition back to Corner Mode
+      const savedBounds = preFullscreenBounds;
+      console.log(`[CamSettings] EXIT Presenter Mode: currentBounds=${JSON.stringify(fromBounds)}, savedBounds=${JSON.stringify(savedBounds)}`);
+
+      let targetWidth = 200;
+      let targetHeight = 200;
+
+      if (savedBounds) {
+        targetWidth = savedBounds.width;
+        targetHeight = savedBounds.height;
+      } else {
+        if (settings.webcamSize === "small") targetWidth = targetHeight = 150;
+        else if (settings.webcamSize === "large") targetWidth = targetHeight = 300;
+      }
+
+      console.log('[CamSettings] Animating back to corner. targetSize=', targetWidth, 'savedBounds=', JSON.stringify(savedBounds));
+
+      const restoreBounds = savedBounds ? {
+        x: savedBounds.x,
+        y: savedBounds.y,
+        width: targetWidth,
+        height: targetHeight,
+      } : {
+        x: fromBounds.x,
+        y: fromBounds.y,
+        width: targetWidth,
+        height: targetHeight,
+      };
+
+      preFullscreenBounds = null; // Clear now
+
+      console.log(`[CamSettings] Target restoreBounds:`, JSON.stringify(restoreBounds));
+
+      animateCameraWindow(fromBounds, restoreBounds, 400);
+
+      // Hide dimmer overlay in UX
+      if (dimmerWindow && !dimmerWindow.isDestroyed()) {
+        dimmerWindow.hide();
+      }
+
+      if (cameraWindow && !cameraWindow.isDestroyed()) {
+        cameraWindow.webContents.send("presenter-mode", false);
+      }
     } else {
-      // Corner Mode!
-      let newSize = 200; // medium
-      if (settings.webcamSize === "small") newSize = 150;
-      else if (settings.webcamSize === "large") newSize = 300;
+      // Standard static setting update (size/device) - no animation
+      // CRITICAL: DO NOT touch size/position if a tween is running or we're in presenter mode.
+      // applySettings() from renderer often fires and would otherwise "fight" the animation.
+      if (tweenInterval || preFullscreenBounds) {
+        console.log('[CamSettings] Skipping static resize - animation active or in presenter mode');
+      } else {
+        let newSize = 200;
+        if (settings.webcamSize === "small") newSize = 150;
+        else if (settings.webcamSize === "large") newSize = 300;
 
-      cameraWindow.setSize(newSize, newSize);
-
-      // If we have saved bounds, restore them (adjusting size automatically)
-      if (preFullscreenBounds) {
-        cameraWindow.setPosition(preFullscreenBounds.x, preFullscreenBounds.y);
-        preFullscreenBounds = null;
+        try {
+          cameraWindow.setSize(newSize, newSize);
+        } catch (e) { /* IGNORE */ }
       }
     }
 
-    // Forward the desired deviceId to the floating window
     cameraWindow.webContents.send("update-camera", settings.selectedCamera);
   });
 
@@ -1882,5 +2039,6 @@ module.exports = {
   setOverlayWindowRef,
   setMiniControlsWindowRef,
   setCameraWindowRef,
+  setDimmerWindowRef,
   setupIpcHandlers,
 };

@@ -1078,6 +1078,11 @@ class ScreenRecorder {
   }
 
   applySettings() {
+    // cameraMode is a runtime-only field (not persisted through save-settings IPC round-trip).
+    // Always restore from our in-memory value so disk reads don't overwrite it.
+    const preservedCameraMode = this._runtimeCameraMode || this.settings.cameraMode || "corner";
+    this.settings.cameraMode = preservedCameraMode;
+
     document.getElementById("settingsQuality").value =
       this.settings.videoQuality || "high";
     document.getElementById("settingsFrameRate").value =
@@ -1143,11 +1148,12 @@ class ScreenRecorder {
       // Handle Floating Camera Window
       if (window.electronAPI.toggleCameraWindow) {
         window.electronAPI.toggleCameraWindow(webcamEnabled);
+        // Only send size/device here, NEVER cameraMode - that's managed by togglePresenterMode
         if (webcamEnabled && window.electronAPI.updateCameraSettings) {
           window.electronAPI.updateCameraSettings({
             webcamSize: this.settings.webcamSize,
             selectedCamera: this.settings.selectedCamera,
-            cameraMode: this.settings.cameraMode
+            // cameraMode intentionally omitted - controlled only by togglePresenterMode
           });
         }
       }
@@ -1336,6 +1342,9 @@ class ScreenRecorder {
   async syncFloatingCameraPosition() {
     if (!this.recordingManager?.isRecording || !this.settings.webcamEnabled) return;
 
+    // Don't override compositor coordinates during presenter mode animation
+    if (this.settings.cameraMode === "center") return;
+
     try {
       const bounds = await window.electronAPI.getCameraWindowBounds();
       if (!bounds) return;
@@ -1352,7 +1361,6 @@ class ScreenRecorder {
         offsetX = recordingRegion.x;
         offsetY = recordingRegion.y;
       } else if (selectedSource?.id?.startsWith("screen:")) {
-        // Try to get display bounds from Electron instead of window.screen
         const displays = await window.electronAPI.getDisplays();
         const screenIdMatch = selectedSource.id.match(/screen:(\d+):/);
         const displayIndex = screenIdMatch ? parseInt(screenIdMatch[1], 10) : 0;
@@ -1363,21 +1371,71 @@ class ScreenRecorder {
         offsetX = display.bounds.x;
         offsetY = display.bounds.y;
       } else {
-        // Fallback to primary screen
         surfaceWidth = window.screen.width;
         surfaceHeight = window.screen.height;
       }
 
-      // Normalize coordinates for the compositor (0 to 1)
-      // We map the desktop position specifically to the recorded surface area
-      let normX = (bounds.x - offsetX) / (surfaceWidth - bounds.width);
-      let normY = (bounds.y - offsetY) / (surfaceHeight - bounds.height);
+      // Use the CENTER of the camera window for mapping, then normalize
+      // relative to the recording surface's coordinate space.
+      // webcamCustomX/Y are the normalized top-left corner of the webcam overlay
+      // in the compositor's canvas.
+      
+      // IMPORTANT: Use the SAME proportional sizing as compositor-worker.js
+      // The compositor uses: config.width * 0.0625/0.09375/0.125
+      // We need canvas resolution, not surface resolution
+      const sizeMap = { small: 0.0625, medium: 0.09375, large: 0.125 };
+      const sizeRatio = sizeMap[this.settings.webcamSize || "medium"];
+      
+      // Get canvas dimensions from the compositor
+      let canvasWidth = surfaceWidth;
+      let canvasHeight = surfaceHeight;
+      if (this.recordingManager.compositorCanvasElement) {
+        canvasWidth = this.recordingManager.compositorCanvasElement.width;
+        canvasHeight = this.recordingManager.compositorCanvasElement.height;
+      }
+      
+      const webcamPixelSize = canvasWidth * sizeRatio;
+
+      // FIX: The camera window is positioned on screen, but we need to map it to the canvas.
+      // The key insight: the canvas represents the captured screen area.
+      // 
+      // NEW APPROACH: Find which display the camera window is on, and map its position
+      // to the canvas coordinates. The canvas already represents the captured area.
+      let cameraRelX, cameraRelY;
+      
+      const displays = await window.electronAPI.getDisplays();
+      
+      // Find which display contains the camera window center
+      const camCenterX = bounds.x + bounds.width / 2;
+      const camCenterY = bounds.y + bounds.height / 2;
+      
+      let cameraDisplay = displays[0]; // default to primary
+      for (const display of displays) {
+        const d = display.bounds;
+        if (camCenterX >= d.x && camCenterX < d.x + d.width &&
+            camCenterY >= d.y && camCenterY < d.y + d.height) {
+          cameraDisplay = display;
+          break;
+        }
+      }
+      
+      // Camera position relative to its own display
+      cameraRelX = bounds.x - cameraDisplay.bounds.x;
+      cameraRelY = bounds.y - cameraDisplay.bounds.y;
+
+      // Now normalize to the camera's display dimensions (not canvas)
+      // This gives us the relative position (0-1) within the display
+      // The compositor will apply this same relative position to the canvas
+      const camDisplayWidth = cameraDisplay.bounds.width;
+      const camDisplayHeight = cameraDisplay.bounds.height;
+      
+      let normX = cameraRelX / (camDisplayWidth - webcamPixelSize || 1);
+      let normY = cameraRelY / (camDisplayHeight - webcamPixelSize || 1);
 
       // Clamp to 0-1
       normX = Math.max(0, Math.min(1, normX));
       normY = Math.max(0, Math.min(1, normY));
 
-      // Update compositor worker settings
       if (this.recordingManager.compositorWorker) {
         this.recordingManager.compositorWorker.postMessage({
           type: "updateSettings",
@@ -1387,6 +1445,9 @@ class ScreenRecorder {
             includeWebcam: true
           }
         });
+
+        // Detailed logging for debugging coordinate shifts
+        console.log(`[CamSync] camWin=(${bounds.x},${bounds.y}) camDisplay=${cameraDisplay.bounds.x},${cameraDisplay.bounds.y} camRel=(${cameraRelX},${cameraRelY}) canvas=${canvasWidth}x${canvasHeight} => norm=(${normX.toFixed(3)},${normY.toFixed(3)})`);
       }
     } catch (err) {
       console.warn("Failed to sync floating camera position:", err);

@@ -16,7 +16,9 @@ let settings = {
   includeAnnotations: false,
   webcamPosition: "bottom-right",
   webcamSize: "medium",
-  cameraMode: "corner" // "corner" or "center"
+  cameraMode: "corner", // "corner" or "center"
+  displayWidth: null,   // Display dimensions for presenter mode calculation
+  displayHeight: null
 };
 
 // Animation state
@@ -31,8 +33,16 @@ self.onmessage = (event) => {
       handleInit(payload);
       break;
     case "updateSettings":
-      settings = { ...settings, ...payload };
+      // Merge and explicitly delete any keys set to undefined
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v === undefined) {
+          delete settings[k];
+        } else {
+          settings[k] = v;
+        }
+      });
       break;
+
     case "renderFrame":
       handleRenderFrame(payload);
       break;
@@ -207,8 +217,8 @@ function drawWebcamOverlay(webcamBitmap) {
   // If the user has dragged to a custom position, use it (normalized 0-1 coords)
   if (settings.webcamCustomX !== undefined && settings.webcamCustomY !== undefined) {
     // Map normalized coordinates (0-1) to the actual available movement range
-    webcamX = Math.round(settings.webcamCustomX * (config.width - webcamDisplayWidth));
-    webcamY = Math.round(settings.webcamCustomY * (config.height - webcamDisplayHeight));
+    targetX = Math.round(settings.webcamCustomX * (config.width - webcamDisplayWidth));
+    targetY = Math.round(settings.webcamCustomY * (config.height - webcamDisplayHeight));
   } else {
     switch (position) {
       case "top-left":
@@ -235,8 +245,10 @@ function drawWebcamOverlay(webcamBitmap) {
   // Apply easeInOutCubic for a cinematic sweep
   const ease = animProgress < 0.5 ? 4 * animProgress * animProgress * animProgress : 1 - Math.pow(-2 * animProgress + 2, 3) / 2;
 
-  // Center values
-  const centerDisplayWidth = Math.min(config.width, config.height) * 0.45; // Huge center circle
+  // Center values - use display dimensions if available (presenter mode), otherwise canvas
+  const centerRefWidth = settings.displayWidth || config.width;
+  const centerRefHeight = settings.displayHeight || config.height;
+  const centerDisplayWidth = Math.min(centerRefWidth, centerRefHeight) * 0.45; // Match native window calculation
   const centerX = (config.width - centerDisplayWidth) / 2;
   const centerY = (config.height - centerDisplayWidth) / 2;
 

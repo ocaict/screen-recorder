@@ -34,6 +34,17 @@ ipcRenderer.on("update-camera", (event, deviceId) => {
     startCamera(deviceId);
 });
 
+ipcRenderer.on("presenter-mode", (event, active) => {
+    const container = document.querySelector('.camera-container');
+    if (active) {
+        container.style.borderColor = "#c084fc"; // Lighter purple
+        container.style.boxShadow = "0 0 30px rgba(139, 92, 246, 0.8)";
+    } else {
+        container.style.borderColor = "#8b5cf6";
+        container.style.boxShadow = "0 0 20px rgba(0, 0, 0, 0.5)";
+    }
+});
+
 ipcRenderer.on("camera-status", (event, enabled) => {
     if (!enabled && currentStream) {
         currentStream.getTracks().forEach(t => t.stop());

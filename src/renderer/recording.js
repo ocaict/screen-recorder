@@ -28,6 +28,20 @@ class RecordingManager {
       window.electronAPI.onMiniCommand?.((data) => {
         this.handleMiniCommand(data);
       });
+      
+      // Listen for display dimensions from main process (used for presenter mode center calculation)
+      window.electronAPI.onPresenterModeDisplay?.((dims) => {
+        if (this.compositorWorker && dims) {
+          this.compositorWorker.postMessage({
+            type: "updateSettings",
+            payload: { 
+              displayWidth: dims.width, 
+              displayHeight: dims.height 
+            }
+          });
+          console.log('[Presenter] Updated compositor with display dims:', dims);
+        }
+      });
     }
   }
 
@@ -1893,22 +1907,58 @@ class RecordingManager {
   }
 
   togglePresenterMode() {
-    if (!this.compositorWorker) return;
+    if (!this.compositorWorker) {
+      console.warn('[Presenter] No compositorWorker, aborting');
+      return;
+    }
 
-    // Toggle logic
-    const isPresenter = this.app.settings.cameraMode === "center";
-    this.app.settings.cameraMode = isPresenter ? "corner" : "center";
+    const isInPresenter = this.app.settings.cameraMode === "center";
+    const newMode = isInPresenter ? "corner" : "center";
+    this.app.settings.cameraMode = newMode;
+    // Also store in _runtimeCameraMode so applySettings never loses it
+    this.app._runtimeCameraMode = newMode;
+    console.log(`[Presenter] Toggling to mode: ${newMode}`);
 
-    // Update worker state to trigger animation
+
+    // 1. Animate compositor
     this.compositorWorker.postMessage({
       type: "updateSettings",
-      payload: { cameraMode: this.app.settings.cameraMode }
+      payload: { cameraMode: newMode }
     });
+    console.log(`[Presenter] Sent cameraMode=${newMode} to compositor worker`);
 
-    // Save state so minicontrols knows
+    // When returning to corner clear stale custom coords and display dims
+    if (newMode === "corner") {
+      this.compositorWorker.postMessage({
+        type: "updateSettings",
+        payload: { 
+          webcamCustomX: undefined, 
+          webcamCustomY: undefined,
+          displayWidth: null,
+          displayHeight: null
+        }
+      });
+      console.log('[Presenter] Cleared webcamCustomX/Y and display dims in compositor');
+    }
+
+    // 2. Animate native window - bypass applySettings to avoid showInactive fighting tween
+    if (window.electronAPI.updateCameraSettings) {
+      console.log('[Presenter] Calling updateCameraSettings IPC...');
+      window.electronAPI.updateCameraSettings({
+        webcamSize: this.app.settings.webcamSize,
+        selectedCamera: this.app.settings.selectedCamera,
+        cameraMode: newMode
+      }).then(() => {
+        console.log('[Presenter] updateCameraSettings IPC resolved');
+      }).catch(e => console.error('[Presenter] updateCameraSettings IPC error:', e));
+    } else {
+      console.warn('[Presenter] updateCameraSettings not available in electronAPI!');
+    }
+
+    // 3. Save + update mini button state
     this.app.saveSettings();
-    this.app.applySettings();
     window.electronAPI.setRecordingState(true, this.isPaused);
+    console.log('[Presenter] Done - isPaused:', this.isPaused);
   }
 }
 

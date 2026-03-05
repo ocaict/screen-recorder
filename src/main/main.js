@@ -11,6 +11,7 @@ const {
   setOverlayWindowRef,
   setMiniControlsWindowRef,
   setCameraWindowRef,
+  setDimmerWindowRef,
 } = require("./ipc-handlers");
 
 // We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE)
@@ -23,6 +24,7 @@ let mainWindow = null;
 let overlayWindow = null;
 let miniControlsWindow = null;
 let cameraWindow = null;
+let dimmerWindow = null;
 
 // Register thumb:// as a privileged scheme for Electron 40+ compatibility
 protocol.registerSchemesAsPrivileged([
@@ -169,6 +171,8 @@ app.whenReady().then(async () => {
   setOverlayWindowRef(overlayWindow);
   setMiniControlsWindowRef(miniControlsWindow);
   setCameraWindowRef(cameraWindow);
+  createDimmerWindow();
+  setDimmerWindowRef(dimmerWindow);
   tray.createTray();
   shortcuts.registerGlobalShortcut();
 
@@ -218,7 +222,8 @@ function createCameraWindow() {
     },
   });
 
-  cameraWindow.setAspectRatio(1); // Force perfect square/circle resizes
+
+
 
 
   // Exclude from capture
@@ -232,10 +237,74 @@ function createCameraWindow() {
   }
 
   cameraWindow.setAlwaysOnTop(true, "screen-saver");
+
+  // Set initial position to bottom-right of primary display
+  const { screen } = require("electron");
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+  cameraWindow.setBounds({
+    x: primaryDisplay.bounds.x + width - 220,
+    y: primaryDisplay.bounds.y + height - 220,
+    width: 200,
+    height: 200
+  });
+
   cameraWindow.loadFile(path.join(__dirname, "..", "renderer", "camera.html"));
 
   cameraWindow.on("closed", () => {
     cameraWindow = null;
+  });
+}
+
+function createDimmerWindow() {
+  const { screen } = require("electron");
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+
+  dimmerWindow = new BrowserWindow({
+    x: primaryDisplay.bounds.x,
+    y: primaryDisplay.bounds.y,
+    width: width,
+    height: height,
+    frame: false,
+    transparent: false, // Opaque window + setOpacity is more reliable on Windows
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,
+    backgroundColor: "#000000",
+    hasShadow: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  dimmerWindow.setIgnoreMouseEvents(true);
+  dimmerWindow.setOpacity(0.0); // Start hidden
+
+  // Use a simple HTML blob - solid black
+  const dimHtml = `
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0; padding:0; background: #000000; width: 100vw; height: 100vh; overflow:hidden;">
+    </body>
+    </html>
+  `;
+  dimmerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(dimHtml)}`);
+
+  if (process.platform === "win32") {
+    dimmerWindow.setExcludeFromCapture(true);
+    if (typeof dimmerWindow.setContentProtection === "function") {
+      dimmerWindow.setContentProtection(true);
+    }
+  }
+
+  // Position it at screen-saver level so it covers all other windows
+  dimmerWindow.setAlwaysOnTop(true, "screen-saver");
+
+  dimmerWindow.on("closed", () => {
+    dimmerWindow = null;
   });
 }
 

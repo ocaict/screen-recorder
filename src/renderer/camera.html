@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: transparent;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-app-region: drag;
+            /* Make the whole window draggable */
+        }
+
+        .camera-container {
+            width: 90%;
+            height: 90%;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 4px solid #8b5cf6;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            /* Mirror camera */
+            border-radius: 50%;
+            clip-path: circle(50% at 50% 50%);
+            /* Force hardware layer masking */
+        }
+
+        .drag-handle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            cursor: move;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="camera-container">
+        <video id="cameraVideo" autoplay muted playsinline></video>
+        <div class="drag-handle"></div>
+    </div>
+    <script src="camera.js"></script>
+</body>
+
+</html>

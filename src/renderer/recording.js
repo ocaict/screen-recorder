@@ -1886,7 +1886,29 @@ class RecordingManager {
       case "toggle-draw":
         this.app.toggleAnnotation();
         break;
+      case "toggle-presenter":
+        this.togglePresenterMode();
+        break;
     }
+  }
+
+  togglePresenterMode() {
+    if (!this.compositorWorker) return;
+
+    // Toggle logic
+    const isPresenter = this.app.settings.cameraMode === "center";
+    this.app.settings.cameraMode = isPresenter ? "corner" : "center";
+
+    // Update worker state to trigger animation
+    this.compositorWorker.postMessage({
+      type: "updateSettings",
+      payload: { cameraMode: this.app.settings.cameraMode }
+    });
+
+    // Save state so minicontrols knows
+    this.app.saveSettings();
+    this.app.applySettings();
+    window.electronAPI.setRecordingState(true, this.isPaused);
   }
 }
 

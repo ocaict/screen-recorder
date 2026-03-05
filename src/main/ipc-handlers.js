@@ -1735,6 +1735,7 @@ function setupIpcHandlers() {
           isRecording: recording,
           recordAudio: getSettings().recordAudio,
           isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
+          isPresenterMode: getSettings().cameraMode === "center",
         });
       }
 
@@ -1827,15 +1828,43 @@ function setupIpcHandlers() {
     }
   });
 
+  let preFullscreenBounds = null;
+
   ipcMain.handle("update-camera-settings", (_, settings) => {
     if (!cameraWindow || cameraWindow.isDestroyed()) return;
 
-    let newSize = 200; // medium
-    if (settings.webcamSize === "small") newSize = 150;
-    else if (settings.webcamSize === "large") newSize = 300;
+    if (settings.cameraMode === "center") {
+      // Presentation Mode!
+      if (!preFullscreenBounds) {
+        // Save the current bounds where the user dragged it
+        preFullscreenBounds = cameraWindow.getBounds();
+      }
 
-    // Maintain square constraint and resize based on settings
-    cameraWindow.setSize(newSize, newSize);
+      const { screen } = require("electron");
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const hw = primaryDisplay.workAreaSize;
+
+      const bigSize = Math.round(Math.min(hw.width, hw.height) * 0.45);
+
+      cameraWindow.setSize(bigSize, bigSize);
+      cameraWindow.setPosition(
+        Math.round((hw.width - bigSize) / 2) + primaryDisplay.bounds.x,
+        Math.round((hw.height - bigSize) / 2) + primaryDisplay.bounds.y
+      );
+    } else {
+      // Corner Mode!
+      let newSize = 200; // medium
+      if (settings.webcamSize === "small") newSize = 150;
+      else if (settings.webcamSize === "large") newSize = 300;
+
+      cameraWindow.setSize(newSize, newSize);
+
+      // If we have saved bounds, restore them (adjusting size automatically)
+      if (preFullscreenBounds) {
+        cameraWindow.setPosition(preFullscreenBounds.x, preFullscreenBounds.y);
+        preFullscreenBounds = null;
+      }
+    }
 
     // Forward the desired deviceId to the floating window
     cameraWindow.webContents.send("update-camera", settings.selectedCamera);

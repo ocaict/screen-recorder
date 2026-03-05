@@ -10,6 +10,7 @@ class MiniControls {
         this.stopBtn = document.getElementById("miniStopBtn");
         this.micBtn = document.getElementById("miniMicBtn");
         this.drawBtn = document.getElementById("miniDrawBtn");
+        this.presenterBtn = document.getElementById("miniPresenterBtn");
         this.closeBtn = document.getElementById("miniCloseBtn");
         this.recordingStatus = document.getElementById("recordingStatus");
 
@@ -26,6 +27,7 @@ class MiniControls {
         this.stopBtn.addEventListener("click", () => this.stopRecording());
         this.micBtn.addEventListener("click", () => this.toggleMic());
         this.drawBtn.addEventListener("click", () => this.toggleDraw());
+        this.presenterBtn.addEventListener("click", () => this.togglePresenter());
         this.closeBtn.addEventListener("click", () => this.closeMiniWindow());
 
         // Listen for state updates from the Main Process
@@ -46,6 +48,7 @@ class MiniControls {
                 case "s": this.stopRecording(); break;
                 case "m": this.toggleMic(); break;
                 case "d": this.toggleDraw(); break;
+                case "c": this.togglePresenter(); break;
                 case "escape": this.closeMiniWindow(); break;
             }
         });
@@ -69,6 +72,7 @@ class MiniControls {
 
         this.micBtn.classList.toggle("active", this.isMicEnabled);
         this.drawBtn.classList.toggle("active", state.isDrawingActive);
+        this.presenterBtn.classList.toggle("active", state.isPresenterMode);
     }
 
     togglePause() {
@@ -85,6 +89,10 @@ class MiniControls {
 
     toggleDraw() {
         window.electronAPI.sendMiniCommand({ action: "toggle-draw" });
+    }
+
+    togglePresenter() {
+        window.electronAPI.sendMiniCommand({ action: "toggle-presenter" });
     }
 
     closeMiniWindow() {

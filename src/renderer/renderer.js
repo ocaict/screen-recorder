@@ -1146,7 +1146,8 @@ class ScreenRecorder {
         if (webcamEnabled && window.electronAPI.updateCameraSettings) {
           window.electronAPI.updateCameraSettings({
             webcamSize: this.settings.webcamSize,
-            selectedCamera: this.settings.selectedCamera
+            selectedCamera: this.settings.selectedCamera,
+            cameraMode: this.settings.cameraMode
           });
         }
       }

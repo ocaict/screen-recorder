@@ -16,7 +16,12 @@ let settings = {
   includeAnnotations: false,
   webcamPosition: "bottom-right",
   webcamSize: "medium",
+  cameraMode: "corner" // "corner" or "center"
 };
+
+// Animation state
+let animProgress = 0; // 0 = corner, 1 = center
+let lastFrameTime = performance.now();
 
 self.onmessage = (event) => {
   const { type, payload } = event.data;
@@ -92,6 +97,13 @@ function handleRenderFrame(payload) {
       ctx.fillRect(0, 0, config.width, config.height);
     }
 
+    // DIM Background if animating to Presentation Mode
+    if (animProgress > 0) {
+      // Background dims up to 80% opacity when in Full Camera mode
+      ctx.fillStyle = `rgba(0, 0, 0, ${animProgress * 0.8})`;
+      ctx.fillRect(0, 0, config.width, config.height);
+    }
+
     // 2. Draw Webcam Overlay Frame if enabled
     if (settings.includeWebcam) {
       if (webcamBitmap) {
@@ -151,10 +163,28 @@ function handleRenderFrame(payload) {
 }
 
 function drawWebcamOverlay(webcamBitmap) {
+  const now = performance.now();
+  const dt = Math.min(now - lastFrameTime, 100) / 1000; // Delta time in seconds (capped to 100ms)
+  lastFrameTime = now;
+
+  // Update animation progress
+  const targetProgress = settings.cameraMode === "center" ? 1 : 0;
+  if (animProgress !== targetProgress) {
+    // Animate over ~0.4 seconds
+    const speed = 2.5;
+    if (targetProgress === 1) {
+      animProgress = Math.min(1, animProgress + speed * dt);
+    } else {
+      animProgress = Math.max(0, animProgress - speed * dt);
+    }
+    // Easing function (easeOutCirc) for a snappy but smooth POP effect
+    // We'll apply it later when calculating actual values to keep internal state linear
+  }
+
   const webcamWidth = webcamBitmap.width;
   const webcamHeight = webcamBitmap.height;
-  let webcamX = 0;
-  let webcamY = 0;
+  let targetX = 0;
+  let targetY = 0;
 
   const size = settings.webcamSize || "medium";
   let webcamDisplayWidth;
@@ -182,29 +212,43 @@ function drawWebcamOverlay(webcamBitmap) {
   } else {
     switch (position) {
       case "top-left":
-        webcamX = 20;
-        webcamY = 20;
+        targetX = 20;
+        targetY = 20;
         break;
       case "top-right":
-        webcamX = config.width - webcamDisplayWidth - 20;
-        webcamY = 20;
+        targetX = config.width - webcamDisplayWidth - 20;
+        targetY = 20;
         break;
       case "bottom-left":
-        webcamX = 20;
-        webcamY = config.height - webcamDisplayHeight - 20;
+        targetX = 20;
+        targetY = config.height - webcamDisplayHeight - 20;
         break;
       case "bottom-right":
       default:
-        webcamX = config.width - webcamDisplayWidth - 20;
-        webcamY = config.height - webcamDisplayHeight - 20;
+        targetX = config.width - webcamDisplayWidth - 20;
+        targetY = config.height - webcamDisplayHeight - 20;
         break;
     }
   }
 
+  // Calculate actual position and size using interpolation
+  // Apply easeInOutCubic for a cinematic sweep
+  const ease = animProgress < 0.5 ? 4 * animProgress * animProgress * animProgress : 1 - Math.pow(-2 * animProgress + 2, 3) / 2;
+
+  // Center values
+  const centerDisplayWidth = Math.min(config.width, config.height) * 0.45; // Huge center circle
+  const centerX = (config.width - centerDisplayWidth) / 2;
+  const centerY = (config.height - centerDisplayWidth) / 2;
+
+  // Lerp between corner (0) and center (1)
+  const currentWidth = webcamDisplayWidth + ((centerDisplayWidth - webcamDisplayWidth) * ease);
+  const currentX = targetX + ((centerX - targetX) * ease);
+  const currentY = targetY + ((centerY - targetY) * ease);
+
   try {
-    const cx = webcamX + webcamDisplayWidth / 2;
-    const cy = webcamY + webcamDisplayHeight / 2;
-    const radius = webcamDisplayWidth / 2;
+    const cx = currentX + currentWidth / 2;
+    const cy = currentY + currentWidth / 2;
+    const radius = currentWidth / 2;
 
     ctx.save();
 

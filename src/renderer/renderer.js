@@ -135,6 +135,7 @@ class ScreenRecorder {
       this.toggleAnnotation(),
     );
 
+
     // ── Live-relay annotation toolbar selections into the overlay ────────────
     // Tool selector buttons
     document.querySelectorAll(".annotation-btn[data-tool]").forEach((btn) => {
@@ -203,7 +204,7 @@ class ScreenRecorder {
       }
     };
     document.addEventListener("keydown", this.keydownHandler);
-    this.saveSettingsBtn.addEventListener("click", () => this.saveSettings());
+    this.saveSettingsBtn.addEventListener("click", () => this.settingsHandler.saveSettings());
 
     document
       .getElementById("browseOutputDir")
@@ -230,73 +231,8 @@ class ScreenRecorder {
 
     document
       .getElementById("resetSettingsBtn")
-      ?.addEventListener("click", async () => {
-        if (!confirm("Reset all settings to defaults?")) return;
-        document.getElementById("settingsQuality").value = "high";
-        document.getElementById("settingsFrameRate").value = "24";
-        document.getElementById("settingsResolution").value = "1920x1080";
-        document.getElementById("settingsRecordAudio").checked = true;
-        document.getElementById("settingsMicrophone").value = "default";
-        document.getElementById("settingsCountdown").value = "3";
-        document.getElementById("settingsOutputDir").value = "";
-        document.getElementById("settingsFilenamePattern").value =
-          "Recording_{date}_{time}";
-        document.getElementById("settingsCompression").value = "balanced";
-        document.getElementById("settingsHardwareAcceleration").value = "none";
-        document.getElementById("settingsFormat").value = "mp4";
-        if (document.getElementById("settingsRecordDirectToMp4")) {
-          document.getElementById("settingsRecordDirectToMp4").checked = true;
-        }
-        document.getElementById("settingsAutoSave").checked = true;
-        document.getElementById("settingsAutoOpen").checked = true;
-        document.getElementById("settingsHideWindow").checked = true;
-        document.getElementById("settingsShortcut").checked = true;
-        document.getElementById("settingsShortcutKey").value = "F9";
-        document.getElementById("settingsShortcutKey").disabled = false;
-        document.getElementById("settingsShowNotifications").checked = true;
-        if (document.getElementById("settingsShowMiniControls")) {
-          document.getElementById("settingsShowMiniControls").checked = true;
-        }
-        if (document.getElementById("settingsShowClickHighlights")) {
-          document.getElementById("settingsShowClickHighlights").checked =
-            false;
-        }
-        if (document.getElementById("settingsIdleDetection")) {
-          document.getElementById("settingsIdleDetection").checked = false;
-          if (document.getElementById("idleTimeoutGroup")) {
-            document.getElementById("idleTimeoutGroup").style.display = "none";
-          }
-        }
-        if (document.getElementById("settingsIdleTimeout")) {
-          document.getElementById("settingsIdleTimeout").value = "5";
-        }
+      ?.addEventListener("click", () => this.settingsHandler.resetSettings());
 
-        if (document.getElementById("settingsVideoCodec")) {
-          document.getElementById("settingsVideoCodec").value = "libx264";
-          document.getElementById("settingsQualityControl").value = "crf";
-          document.getElementById("settingsCrfValue").value = 23;
-          if (document.getElementById("crfValueDisplay"))
-            document.getElementById("crfValueDisplay").textContent = "23";
-          document.getElementById("settingsVideoBitrate").value = 5;
-          if (document.getElementById("vbrValueDisplay"))
-            document.getElementById("vbrValueDisplay").textContent = "5";
-          document.getElementById("settingsColorFormat").value = "yuv420p";
-
-          if (document.getElementById("crfControlGroup"))
-            document.getElementById("crfControlGroup").style.display = "block";
-          if (document.getElementById("vbrControlGroup"))
-            document.getElementById("vbrControlGroup").style.display = "none";
-        }
-
-        this.updateFileSizeEstimate();
-
-        try {
-          await this.saveSettings(true);
-          this.showToast("Settings reset to defaults", "success");
-        } catch (err) {
-          this.showToast("Failed to reset settings", "error");
-        }
-      });
 
     document
       .getElementById("settingsQuality")
@@ -324,6 +260,26 @@ class ScreenRecorder {
           el.style.display = e.target.checked ? "block" : "none";
         });
       });
+
+    document
+      .getElementById("settingsTimerPreset")
+      ?.addEventListener("change", (e) => {
+        const customTimerGroup = document.getElementById("customTimerGroup");
+        if (customTimerGroup) {
+          customTimerGroup.style.display =
+            e.target.value === "custom" ? "block" : "none";
+        }
+      });
+
+    document
+      .getElementById("settingsScheduledRecording")
+      ?.addEventListener("change", (e) => {
+        const scheduleTimeGroup = document.getElementById("scheduleTimeGroup");
+        if (scheduleTimeGroup) {
+          scheduleTimeGroup.style.display = e.target.checked ? "block" : "none";
+        }
+      });
+
 
     document
       .getElementById("settingsIdleDetection")
@@ -1346,13 +1302,13 @@ class ScreenRecorder {
       // relative to the recording surface's coordinate space.
       // webcamCustomX/Y are the normalized top-left corner of the webcam overlay
       // in the compositor's canvas.
-      
+
       // IMPORTANT: Use the SAME proportional sizing as compositor-worker.js
       // The compositor uses: config.width * 0.0625/0.09375/0.125
       // We need canvas resolution, not surface resolution
       const sizeMap = { small: 0.0625, medium: 0.09375, large: 0.125 };
       const sizeRatio = sizeMap[this.settings.webcamSize || "medium"];
-      
+
       // Get canvas dimensions from the compositor
       let canvasWidth = surfaceWidth;
       let canvasHeight = surfaceHeight;
@@ -1360,7 +1316,7 @@ class ScreenRecorder {
         canvasWidth = this.recordingManager.compositorCanvasElement.width;
         canvasHeight = this.recordingManager.compositorCanvasElement.height;
       }
-      
+
       const webcamPixelSize = canvasWidth * sizeRatio;
 
       // FIX: The camera window is positioned on screen, but we need to map it to the canvas.
@@ -1369,23 +1325,23 @@ class ScreenRecorder {
       // NEW APPROACH: Find which display the camera window is on, and map its position
       // to the canvas coordinates. The canvas already represents the captured area.
       let cameraRelX, cameraRelY;
-      
+
       const displays = await window.electronAPI.getDisplays();
-      
+
       // Find which display contains the camera window center
       const camCenterX = bounds.x + bounds.width / 2;
       const camCenterY = bounds.y + bounds.height / 2;
-      
+
       let cameraDisplay = displays[0]; // default to primary
       for (const display of displays) {
         const d = display.bounds;
         if (camCenterX >= d.x && camCenterX < d.x + d.width &&
-            camCenterY >= d.y && camCenterY < d.y + d.height) {
+          camCenterY >= d.y && camCenterY < d.y + d.height) {
           cameraDisplay = display;
           break;
         }
       }
-      
+
       // Camera position relative to its own display
       cameraRelX = bounds.x - cameraDisplay.bounds.x;
       cameraRelY = bounds.y - cameraDisplay.bounds.y;
@@ -1395,7 +1351,7 @@ class ScreenRecorder {
       // The compositor will apply this same relative position to the canvas
       const camDisplayWidth = cameraDisplay.bounds.width;
       const camDisplayHeight = cameraDisplay.bounds.height;
-      
+
       let normX = cameraRelX / (camDisplayWidth - webcamPixelSize || 1);
       let normY = cameraRelY / (camDisplayHeight - webcamPixelSize || 1);
 
@@ -1663,10 +1619,6 @@ class ScreenRecorder {
         this.settings.countdownSound !== false;
     }
 
-    if (document.getElementById("settingsAutoHideUI")) {
-      document.getElementById("settingsAutoHideUI").checked =
-        this.settings.autoHideUI !== false;
-    }
 
     if (document.getElementById("settingsShowMiniControls")) {
       document.getElementById("settingsShowMiniControls").checked =

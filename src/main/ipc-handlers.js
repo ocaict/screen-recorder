@@ -19,8 +19,10 @@ const {
   addRecentRecording,
   removeRecentRecording,
   clearRecentRecordings,
+  resetSettings,
   generateFilename,
 } = require("../utils/settings");
+
 const {
   convertVideo,
   trimVideo,
@@ -1108,7 +1110,12 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle("reset-settings", () => {
+    return resetSettings();
+  });
+
   ipcMain.handle("save-settings", (_, newSettings) => {
+
     if (!newSettings) {
       return getSettings();
     }
@@ -1200,7 +1207,11 @@ function setupIpcHandlers() {
       highlightRippleSpeed: Number.isInteger(newSettings.highlightRippleSpeed) ? newSettings.highlightRippleSpeed : 400,
       highlightGlowSize: Number.isInteger(newSettings.highlightGlowSize) ? newSettings.highlightGlowSize : 25,
       highlightGlowIntensity: Number.isInteger(newSettings.highlightGlowIntensity) ? newSettings.highlightGlowIntensity : 30,
+      timerPreset: Number.isInteger(newSettings.timerPreset) ? newSettings.timerPreset : 0,
+      scheduledRecording: Boolean(newSettings.scheduledRecording),
+      scheduleTime: typeof newSettings.scheduleTime === 'string' ? newSettings.scheduleTime : "09:00",
     };
+
 
     saveSettings(validatedSettings);
     shortcuts.registerGlobalShortcut();
@@ -1344,7 +1355,10 @@ function setupIpcHandlers() {
           regionWindow.moveTop();
 
           // Prevent the selection UI itself from being captured if recording starts early
-          regionWindow.setContentProtection(true);
+          if (typeof regionWindow.setContentProtection === "function") {
+            regionWindow.setContentProtection(true);
+          }
+
 
           // Send initial data immediately
           regionWindow.webContents.send("region-init", {
@@ -1584,7 +1598,10 @@ function setupIpcHandlers() {
       // Use higher alwaysOnTop priority
       regionIndicatorWindow.setAlwaysOnTop(true, "screen-saver", 1);
       // CRITICAL: Prevent the red border from being recorded in the output video
-      regionIndicatorWindow.setContentProtection(true);
+      if (typeof regionIndicatorWindow.setContentProtection === "function") {
+        regionIndicatorWindow.setContentProtection(true);
+      }
+
 
       regionIndicatorWindow.loadFile(
         path.join(__dirname, "..", "renderer", "region-indicator.html")
@@ -1900,14 +1917,14 @@ function setupIpcHandlers() {
     const fromBounds = cameraWindow.getBounds();
     const currentDisplay = screen.getDisplayMatching(fromBounds);
     const hw = currentDisplay.workAreaSize;
-    
+
     console.log(`[CamSettings] IN: mode=${settings.cameraMode}, curBounds=${JSON.stringify(fromBounds)}, preFull=${JSON.stringify(preFullscreenBounds)}, displayX=${currentDisplay.bounds.x}`);
 
     if (settings.cameraMode === "center") {
       // Transition to Presenter Mode
       if (!preFullscreenBounds) {
-          preFullscreenBounds = fromBounds;
-          console.log('[CamSettings] SAVED preFullscreenBounds:', JSON.stringify(preFullscreenBounds));
+        preFullscreenBounds = fromBounds;
+        console.log('[CamSettings] SAVED preFullscreenBounds:', JSON.stringify(preFullscreenBounds));
       }
       console.log(`[CamSettings] Presenter Mode Toggle: fromBounds=${JSON.stringify(fromBounds)}`);
 
@@ -1937,7 +1954,7 @@ function setupIpcHandlers() {
         dimmerWindow.setBounds(display.bounds);
         dimmerWindow.setOpacity(0.6); // 60% dim
         dimmerWindow.showInactive();
-        
+
         // Re-assert protection upon show for extra reliability
         if (process.platform === "win32") {
           if (typeof dimmerWindow.setExcludeFromCapture === "function") {
@@ -1952,9 +1969,9 @@ function setupIpcHandlers() {
         // Use a 150ms delay to ensure the OS has finished processing the show
         setTimeout(() => {
           if (cameraWindow && !cameraWindow.isDestroyed()) {
-             cameraWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-             cameraWindow.moveTop();
-             console.log('[CamSettings] Z-Order: Camera moved above Dimmer');
+            cameraWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+            cameraWindow.moveTop();
+            console.log('[CamSettings] Z-Order: Camera moved above Dimmer');
           }
         }, 150);
       }

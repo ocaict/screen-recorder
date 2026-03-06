@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   windowIsMaximized: () => ipcRenderer.invoke("window-is-maximized"),
 
   getCaptureSources: () => ipcRenderer.invoke("get-capture-sources"),
-  saveRecording: (streamData) =>
-    ipcRenderer.invoke("save-recording", streamData),
+  saveRecording: (streamData, chunkFiles, options) =>
+    ipcRenderer.invoke("save-recording", streamData, chunkFiles, options),
   openFileLocation: (filePath) =>
     ipcRenderer.invoke("open-file-location", filePath),
   openFile: (filePath) => ipcRenderer.invoke("open-file", filePath),
@@ -18,11 +18,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("trim-to-gif", filePath, startTime, endTime),
   mergeVideos: (filePaths) => ipcRenderer.invoke("merge-videos", filePaths),
 
-  setRecordingState: (recording, isPaused = false) =>
-    ipcRenderer.invoke("set-recording-state", recording, isPaused),
-
   getSettings: () => ipcRenderer.invoke("get-settings"),
   saveSettings: (settings) => ipcRenderer.invoke("save-settings", settings),
+  resetSettings: () => ipcRenderer.invoke("reset-settings"),
   getRecentRecordings: () => ipcRenderer.invoke("get-recent-recordings"),
   addRecentRecording: (filePath) =>
     ipcRenderer.invoke("add-recent-recording", filePath),
@@ -133,12 +131,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("mini-command", (_, data) => callback(data)),
   onWindowMinimized: (callback) => ipcRenderer.on("window-minimized", () => callback()),
   onWindowRestored: (callback) => ipcRenderer.on("window-restored", () => callback()),
-  onPresenterModeDisplay: (callback) => 
+  onPresenterModeDisplay: (callback) =>
     ipcRenderer.on("presenter-mode-display", (_, dims) => callback(dims)),
 
   // Floating Camera Window
   toggleCameraWindow: (show) => ipcRenderer.invoke("camera-window-toggle", show),
   updateCameraSettings: (settings) => ipcRenderer.invoke("update-camera-settings", settings),
   getCameraWindowBounds: () => ipcRenderer.invoke("get-camera-window-bounds"),
+  setRecordingState: (recording, isPaused = false) =>
+    ipcRenderer.invoke("set-recording-state", recording, isPaused),
 });
 

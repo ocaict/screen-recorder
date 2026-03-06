@@ -25,6 +25,7 @@ class SettingsHandler {
       }
     };
 
+    // Apply to main UI elements if they exist
     setEl("frameRateSelect", s.frameRate);
     setEl("resolutionSelect", s.resolution);
     setEl("countdownSelect", s.countdown);
@@ -71,7 +72,7 @@ class SettingsHandler {
 
     setEl("settingsQuality", s.videoQuality || "high");
     setEl("settingsFrameRate", s.frameRate || "24");
-    setEl("settingsResolution", s.resolution || "1920x1080");
+    setEl("settingsResolution", s.resolution || "native");
     setEl("settingsOutputDir", s.outputDirectory || "");
     setEl("settingsRecordAudio", s.recordAudio !== false, true);
     setEl("settingsCountdown", s.countdown || 3);
@@ -85,10 +86,12 @@ class SettingsHandler {
       getEl("settingsRecordDirectToMp4").checked = s.recordDirectToMp4 !== false;
     }
 
+    setEl("settingsFormat", s.defaultFormat || "mp4");
     setEl("settingsHideWindow", s.hideWindowDuringRecording || false, true);
     setEl("settingsShortcut", s.shortcutEnabled !== false, true);
     setEl("settingsShortcutKey", s.shortcutKey || "F9");
     setEl("settingsShowNotifications", s.showNotifications !== false, true);
+    setEl("settingsCountdownSound", s.countdownSound !== false, true);
 
     if (getEl("settingsShowMiniControls")) {
       getEl("settingsShowMiniControls").checked = s.showMiniControls !== false;
@@ -149,6 +152,27 @@ class SettingsHandler {
       getEl("settingsColorFormat").value = s.colorFormat || "yuv420p";
     }
 
+    // Webcam Settings
+    setEl("settingsWebcam", s.webcamEnabled || false, true);
+    setEl("settingsWebcamPosition", s.webcamPosition || "bottom-right");
+    setEl("settingsWebcamSize", s.webcamSize || "medium");
+
+    // Timer & Schedule Settings
+    const presetValue = s.timerPreset === 0 ? "0" : ([5, 10, 15, 30, 60, 120].includes(s.timerPreset) ? s.timerPreset.toString() : "custom");
+    setEl("settingsTimerPreset", presetValue);
+    if (presetValue === "custom") {
+      setEl("settingsCustomTimer", s.timerPreset);
+      if (getEl("customTimerGroup")) getEl("customTimerGroup").style.display = "block";
+    } else {
+      if (getEl("customTimerGroup")) getEl("customTimerGroup").style.display = "none";
+    }
+
+    setEl("settingsScheduledRecording", s.scheduledRecording || false, true);
+    setEl("settingsScheduleTime", s.scheduleTime || "09:00");
+    if (getEl("scheduleTimeGroup")) {
+      getEl("scheduleTimeGroup").style.display = s.scheduledRecording ? "block" : "none";
+    }
+
     this.updateAdvancedSettings();
     this.loadRecordingStats();
     this.updateTimerPresetFromSettings();
@@ -156,6 +180,7 @@ class SettingsHandler {
 
     this.app.openModal(this.app.settingsModal);
   }
+
 
   updateAdvancedSettings() {
     const hwSelect = this.app.document.getElementById("settingsHardwareAcceleration");
@@ -252,6 +277,8 @@ class SettingsHandler {
       shortcutEnabled: shortcutEnabled,
       shortcutKey: shortcutEnabled ? getEl("settingsShortcutKey")?.value : this.app.settings.shortcutKey || "F9",
       showNotifications: getEl("settingsShowNotifications")?.checked,
+      countdownSound: getEl("settingsCountdownSound")?.checked,
+      showMiniControls: getEl("settingsShowMiniControls")?.checked,
       countdown: parseInt(getEl("settingsCountdown")?.value),
       filenamePattern: getEl("settingsFilenamePattern")?.value,
       compression: getEl("settingsCompression")?.value,
@@ -263,8 +290,6 @@ class SettingsHandler {
       timerPreset: timerPreset,
       scheduledRecording: getEl("settingsScheduledRecording")?.checked,
       scheduleTime: getEl("settingsScheduleTime")?.value,
-      countdownSound: getEl("settingsCountdownSound")?.checked,
-      autoHideUI: getEl("settingsAutoHideUI")?.checked,
       webcamEnabled: getEl("settingsWebcam")?.checked,
       selectedCamera: getEl("settingsCamera")?.value || "default",
       webcamPosition: getEl("settingsWebcamPosition")?.value,
@@ -272,19 +297,18 @@ class SettingsHandler {
       videoCodec: getEl("settingsVideoCodec")?.value || "libx264",
       qualityControl: getEl("settingsQualityControl")?.value || "crf",
       crfValue: parseInt(getEl("settingsCrfValue")?.value) || 23,
-      videoBitrate: parseInt(getEl("settingsVideoBitrate")?.value) || 5,
+      videoBitrate: parseFloat(getEl("settingsVideoBitrate")?.value) || 5,
       colorFormat: getEl("settingsColorFormat")?.value || "yuv420p",
-      showMiniControls: getEl("settingsShowMiniControls")?.checked ?? this.app.settings.showMiniControls !== false,
-      showClickHighlights: getEl("settingsShowClickHighlights")?.checked ?? this.app.settings.showClickHighlights !== false,
-      highlightLeftColor: getEl("highlightLeftColor")?.value || "#FFEB3B",
-      highlightRightColor: getEl("highlightRightColor")?.value || "#2196F3",
-      highlightRippleSize: parseInt(getEl("highlightRippleSize")?.value) || 50,
-      highlightRippleSpeed: parseInt(getEl("highlightRippleSpeed")?.value) || 400,
-      highlightGlowSize: parseInt(getEl("highlightGlowSize")?.value) || 25,
-      highlightGlowIntensity: parseInt(getEl("highlightGlowIntensity")?.value) || 30,
-      idleDetectionEnabled: getEl("settingsIdleDetection")?.checked || false,
-      idleTimeoutMinutes: parseInt(getEl("settingsIdleTimeout")?.value) || 5,
-      memoryThresholdMB: parseInt(getEl("settingsMemoryThreshold")?.value) || 500,
+      showClickHighlights: getEl("settingsShowClickHighlights")?.checked,
+      highlightLeftColor: getEl("highlightLeftColor")?.value,
+      highlightRightColor: getEl("highlightRightColor")?.value,
+      highlightRippleSize: parseInt(getEl("highlightRippleSize")?.value),
+      highlightRippleSpeed: parseInt(getEl("highlightRippleSpeed")?.value),
+      highlightGlowSize: parseInt(getEl("highlightGlowSize")?.value),
+      highlightGlowIntensity: parseInt(getEl("highlightGlowIntensity")?.value),
+      idleDetectionEnabled: getEl("settingsIdleDetection")?.checked,
+      idleTimeoutMinutes: parseInt(getEl("settingsIdleTimeout")?.value),
+      memoryThresholdMB: parseInt(getEl("settingsMemoryThreshold")?.value)
     };
 
     try {
@@ -297,6 +321,22 @@ class SettingsHandler {
     } catch (err) {
       this.app.showToast("Failed to save settings", "error");
       console.error(err);
+    }
+  }
+
+  async resetSettings() {
+    if (confirm("Are you sure you want to reset all settings to their default values? Recently recorded files will be kept.")) {
+      try {
+        this.app.settings = await window.electronAPI.resetSettings();
+        // Refresh the UI with new settings
+        this.openSettingsModal();
+        this.applySettings();
+        this.updateQuickSettings();
+        this.app.showToast("Settings reset to defaults", "success");
+      } catch (err) {
+        this.app.showToast("Failed to reset settings", "error");
+        console.error(err);
+      }
     }
   }
 

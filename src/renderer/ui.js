@@ -23,6 +23,7 @@ class UIManager {
     this.app.closeSettingsModal = document.getElementById("closeSettingsModal");
     this.app.settingsBtn = document.getElementById("settingsBtn");
     this.app.saveSettingsBtn = document.getElementById("saveSettingsBtn");
+    this.app.resetSettingsBtn = document.getElementById("resetSettingsBtn");
     this.app.toastContainer = document.getElementById("toastContainer");
     this.app.processingOverlay = document.getElementById("processingOverlay");
     this.app.progressFill = document.getElementById("progressFill");

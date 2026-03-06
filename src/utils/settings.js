@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
 
-let settings = {
+const DEFAULT_SETTINGS = {
   videoQuality: "high",
   frameRate: 24,
   resolution: "native",
@@ -44,62 +44,65 @@ let settings = {
   idleDetectionEnabled: false,
   idleTimeoutMinutes: 5,
   memoryThresholdMB: 500,
+  nvencPromptDismissed: false,
+  countdownSound: true,
+  timerPreset: 0,
+
+  scheduledRecording: false,
+  scheduleTime: "09:00"
 };
+
+
+
+let settings = { ...DEFAULT_SETTINGS };
 
 let settingsFile = null;
 
 function getSettingsPath() {
-  return app.isPackaged
-    ? path.join(app.getPath("userData"), "settings.json")
-    : path.join(__dirname, "..", "..", "settings.json");
+  if (settingsFile) return settingsFile;
+  const userDataPath = app.getPath("userData");
+  settingsFile = path.join(userDataPath, "settings.json");
+  return settingsFile;
 }
 
 async function loadSettings() {
+  const filePath = getSettingsPath();
   try {
-    settingsFile = getSettingsPath();
-
-    if (fs.existsSync(settingsFile)) {
-      const data = fs.readFileSync(settingsFile, "utf8");
-      const loaded = JSON.parse(data);
-      settings = { ...settings, ...loaded };
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, "utf-8");
+      const loadedSettings = JSON.parse(data);
+      // Merge with defaults to handle new settings
+      settings = { ...DEFAULT_SETTINGS, ...loadedSettings };
     }
-
-    if (!settings.outputDirectory) {
-      settings.outputDirectory = app.getPath("videos");
-    }
-
-    if (
-      settings.recentRecordings &&
-      settings.recentRecordings.length > settings.maxRecentRecordings
-    ) {
-      settings.recentRecordings = settings.recentRecordings.slice(
-        0,
-        settings.maxRecentRecordings,
-      );
-      saveSettings(settings);
-    }
-
-    // hardwareAcceleration remains as configured or uses the default 'none'
-
-    console.log("Settings loaded:", settings);
-    return settings;
   } catch (err) {
     console.error("Failed to load settings:", err);
-    return settings;
+    settings = { ...DEFAULT_SETTINGS };
   }
+
+  // Ensure output directory exists or set to default
+  if (!settings.outputDirectory) {
+    settings.outputDirectory = app.getPath("videos");
+  }
+
+  return settings;
+}
+
+function getSettings() {
+  return settings;
 }
 
 function saveSettings(newSettings) {
-  try {
+  if (newSettings) {
     settings = { ...settings, ...newSettings };
+  }
 
-    const dir = path.dirname(settingsFile);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  const filePath = getSettingsPath();
+  try {
+    const dirPath = path.dirname(filePath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
     }
-
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
-    console.log("Settings saved:", settings);
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2));
     return settings;
   } catch (err) {
     console.error("Failed to save settings:", err);
@@ -107,44 +110,11 @@ function saveSettings(newSettings) {
   }
 }
 
-function getSettings() {
-  return { ...settings };
-}
-
 function resetSettings() {
+  const recentRecordings = settings.recentRecordings || [];
   settings = {
-    videoQuality: "high",
-    frameRate: 24,
-    resolution: "native",
-    recordAudio: true,
-    recordSystemAudio: false,
-    selectedMicrophone: "default",
-    outputDirectory: "",
-    shortcutEnabled: true,
-    shortcutKey: "F9",
-    hideWindowDuringRecording: true,
-    showNotifications: true,
-    autoOpenAfterRecording: true,
-    recordDirectToMp4: true,
-    defaultFormat: "mp4",
-    countdown: 3,
-    recentRecordings: settings.recentRecordings || [],
-    maxRecentRecordings: 10,
-    filenamePattern: "Recording_{date}_{time}",
-    autoSave: true,
-    compression: "balanced",
-    hardwareAcceleration: "none",
-    videoCodec: "libx264",
-    qualityControl: "crf",
-    crfValue: 23,
-    videoBitrate: 5,
-    colorFormat: "yuv420p",
-    showMiniControls: true,
-    showClickHighlights: false,
-    nvencPromptDismissed: false,
-    idleDetectionEnabled: false,
-    idleTimeoutMinutes: 5,
-    memoryThresholdMB: 500,
+    ...DEFAULT_SETTINGS,
+    recentRecordings: recentRecordings
   };
   saveSettings(settings);
   return settings;

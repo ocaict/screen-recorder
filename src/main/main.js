@@ -294,7 +294,10 @@ function createDimmerWindow() {
   dimmerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(dimHtml)}`);
 
   if (process.platform === "win32") {
-    dimmerWindow.setExcludeFromCapture(true);
+    if (typeof dimmerWindow.setExcludeFromCapture === "function") {
+      dimmerWindow.setExcludeFromCapture(true);
+    }
+
     if (typeof dimmerWindow.setContentProtection === "function") {
       dimmerWindow.setContentProtection(true);
     }

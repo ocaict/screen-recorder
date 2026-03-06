@@ -526,14 +526,20 @@ function setupIpcHandlers() {
             const isHevc = preferredCodec === "libx265";
             // Each branch checks encoder availability explicitly so "auto" can fall through the chain
             if (hwAccel === "nvenc" || (hwAccel === "auto" && encoders.nvenc?.h264)) {
-              v_codec = isHevc && encoders.nvenc?.hevc ? "hevc_nvenc" : "h264_nvenc";
-              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString()];
+              const isH264 = !isHevc || !encoders.nvenc?.hevc;
+              v_codec = isH264 ? "h264_nvenc" : "hevc_nvenc";
+              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString(), "-pix_fmt", "yuv420p"];
+              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
             } else if (hwAccel === "qsv" || (hwAccel === "auto" && encoders.qsv?.h264)) {
-              v_codec = isHevc && encoders.qsv?.hevc ? "hevc_qsv" : "h264_qsv";
-              v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString()];
+              const isH264 = !isHevc || !encoders.qsv?.hevc;
+              v_codec = isH264 ? "h264_qsv" : "hevc_qsv";
+              v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString(), "-pix_fmt", "yuv420p"];
+              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
             } else if (hwAccel === "amf" || (hwAccel === "auto" && encoders.amf?.h264)) {
-              v_codec = isHevc && encoders.amf?.hevc ? "hevc_amf" : "h264_amf";
-              v_options = ["-quality", "balanced", "-rc", "vbr_latency"];
+              const isH264 = !isHevc || !encoders.amf?.hevc;
+              v_codec = isH264 ? "h264_amf" : "hevc_amf";
+              v_options = ["-quality", "balanced", "-rc", "vbr_latency", "-pix_fmt", "yuv420p"];
+              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
             }
           }
         } catch (encErr) {
@@ -633,6 +639,7 @@ function setupIpcHandlers() {
                 "-pix_fmt", "yuv420p",
                 "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
                 "-flush_packets", "1",
+                "-vtag", "hvc1", // Safety for QuickTime compat if fallback is 265
                 "-y", finalPath
               ];
               ffmpegProcess = spawn(ffmpegPath, swArgs);

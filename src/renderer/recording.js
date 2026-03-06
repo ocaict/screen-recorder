@@ -1669,6 +1669,12 @@ class RecordingManager {
         // Toggle Mic setting
         this.app.settings.recordAudio = !this.app.settings.recordAudio;
         this.app.saveSettings();
+
+        // LIVE MUTE: Actually disable the tracks in the stream if it exists
+        if (this.audioStream) {
+          this.audioStream.getAudioTracks().forEach(t => t.enabled = this.app.settings.recordAudio);
+        }
+
         this.app.showToast(`Microphone ${this.app.settings.recordAudio ? "Enabled" : "Disabled"}`, "info");
         // Update mini control state to reflect mic toggle
         window.electronAPI.setRecordingState(true, this.isPaused);
@@ -1677,6 +1683,12 @@ class RecordingManager {
         // Toggle System Audio setting
         this.app.settings.recordSystemAudio = !this.app.settings.recordSystemAudio;
         this.app.saveSettings();
+
+        // LIVE MUTE: Actually disable the tracks in the stream if it exists
+        if (this.systemAudioStream) {
+          this.systemAudioStream.getAudioTracks().forEach(t => t.enabled = this.app.settings.recordSystemAudio);
+        }
+
         this.app.showToast(`System Audio ${this.app.settings.recordSystemAudio ? "Enabled" : "Disabled"}`, "info");
         window.electronAPI.setRecordingState(true, this.isPaused);
         break;

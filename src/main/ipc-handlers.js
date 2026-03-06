@@ -1535,6 +1535,13 @@ function setupIpcHandlers() {
       overlayMoveTopInterval = setInterval(() => {
         if (overlayWindow && !overlayWindow.isDestroyed()) {
           overlayWindow.moveTop();
+          
+          // Keep Mini Controls above the drawing surface
+          if (miniControlsWindow && !miniControlsWindow.isDestroyed() && miniControlsWindow.isVisible()) {
+            miniControlsWindow.moveTop();
+          }
+
+          // Keep Main Window (Tools) above the drawing surface
           if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
             mainWindow.moveTop();
           }

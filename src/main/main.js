@@ -374,7 +374,7 @@ function createMiniControlsWindow() {
   }
 
   miniControlsWindow = new BrowserWindow({
-    width: 480,
+    width: 600,
     height: 100,
     x,
     y,

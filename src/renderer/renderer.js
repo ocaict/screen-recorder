@@ -5,10 +5,15 @@ class ScreenRecorder {
     this.sourceManager = null;
     this.uiManager = null;
     this.annotationManager = null;
-    this.overlayAnnotationActive = false; // Tracks whether the fullscreen overlay is shown
+    this.settingsHandler = null;
+    this.recentRecordingsManager = null;
+    this.timerControls = null;
+    this.overlayAnnotationActive = false;
     this.selectionMode = false;
     this.selectedPaths = new Set();
     this.isQuitting = false;
+    this.timerPreset = 0;
+    this.document = document;
 
     this.initialize();
   }
@@ -17,7 +22,10 @@ class ScreenRecorder {
     this.uiManager = new UIManager(this);
     this.uiManager.initializeElements();
 
-    // Create performance monitor for tracking metrics
+    this.settingsHandler = new SettingsHandler(this);
+    this.recentRecordingsManager = new RecentRecordingsManager(this);
+    this.timerControls = new TimerControls(this);
+
     let monitor = null;
     if (window.PerformanceMonitor) {
       monitor = new window.PerformanceMonitor();
@@ -30,7 +38,7 @@ class ScreenRecorder {
 
     await this.recordingManager.init();
 
-    await this.loadSettings();
+    await this.settingsHandler.loadSettings();
     this.initializeEventListeners();
     this.initializeIPCListeners();
     this.loadAudioDevices();
@@ -789,26 +797,30 @@ class ScreenRecorder {
   }
 
   async loadSettings() {
-    try {
-      this.settings = await window.electronAPI.getSettings();
-      this.applySettings();
-      this.updateQuickSettings();
-      await this.loadRecentRecordings();
-    } catch (err) {
-      console.error("Failed to load settings:", err);
-    }
+    return this.settingsHandler.loadSettings();
   }
 
   async loadRecentRecordings() {
-    try {
-      const recordings = await window.electronAPI.getRecentRecordings();
-      this.displayRecentRecordings(recordings);
-    } catch (err) {
-      console.error("Failed to load recent recordings:", err);
-    }
+    return this.recentRecordingsManager.loadRecentRecordings();
   }
 
   displayRecentRecordings(recordings) {
+    return this.recentRecordingsManager.displayRecentRecordings(recordings);
+  }
+
+  formatFileSize(bytes) {
+    return this.uiManager.formatFileSize(bytes);
+  }
+
+  async loadRecentRecordings() {
+    return this.recentRecordingsManager.loadRecentRecordings();
+  }
+
+  displayRecentRecordings(recordings) {
+    return this.recentRecordingsManager.displayRecentRecordings(recordings);
+  }
+
+  updateQuickSettings() {
     if (!recordings || recordings.length === 0) {
       this.recentRecordingsList.innerHTML =
         '<div class="no-recordings" role="status"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="5,3 19,12 5,21" /></svg><p class="no-recordings-text">No recordings yet</p><p class="no-recordings-hint">Your recorded videos will appear here</p></div>';
@@ -992,52 +1004,7 @@ class ScreenRecorder {
   }
 
   updateFileSizeEstimate() {
-    const quality = document.getElementById("settingsQuality")?.value || "high";
-    const resolution =
-      document.getElementById("settingsResolution")?.value || "1920x1080";
-    const frameRate = parseInt(
-      document.getElementById("settingsFrameRate")?.value || "30",
-    );
-    const recordAudio =
-      document.getElementById("settingsRecordAudio")?.checked !== false;
-
-    const parseRes = resolution === "native" ? "1920x1080" : resolution;
-    const [width, height] = parseRes.split("x").map(Number);
-    const pixels = width * height;
-    const pixelsPerSecond = pixels * frameRate;
-
-    let bitrateMultiplier;
-    switch (quality) {
-      case "low":
-        bitrateMultiplier = 0.1;
-        break;
-      case "medium":
-        bitrateMultiplier = 0.25;
-        break;
-      case "high":
-        bitrateMultiplier = 0.5;
-        break;
-      case "ultra":
-        bitrateMultiplier = 1.0;
-        break;
-      default:
-        bitrateMultiplier = 0.5;
-    }
-
-    let videoBitrate = (pixelsPerSecond * bitrateMultiplier) / 8;
-    const recordSystemAudio = document.getElementById(
-      "settingsRecordSystemAudio",
-    )?.checked;
-    let audioBitrate = recordAudio || recordSystemAudio ? (128 * 1024) / 8 : 0;
-
-    const totalBitratePerSecond = videoBitrate + audioBitrate;
-    const durationSeconds = 60;
-    const estimatedBytes = totalBitratePerSecond * durationSeconds;
-
-    const sizeValue = this.fileSizePreview?.querySelector(".size-value");
-    if (sizeValue) {
-      sizeValue.textContent = `~${this.formatFileSize(estimatedBytes)}`;
-    }
+    return this.timerControls.updateFileSizeEstimate();
   }
 
   updateQuickSettings() {
@@ -1544,32 +1511,10 @@ class ScreenRecorder {
   }
 
   openSettingsModal() {
-    document.getElementById("settingsQuality").value =
-      this.settings.videoQuality || "high";
-    document.getElementById("settingsFrameRate").value =
-      this.settings.frameRate || "24";
-    document.getElementById("settingsResolution").value =
-      this.settings.resolution || "1920x1080";
-    document.getElementById("settingsOutputDir").value =
-      this.settings.outputDirectory || "";
-    document.getElementById("settingsRecordAudio").checked =
-      this.settings.recordAudio !== false;
-    document.getElementById("settingsCountdown").value =
-      this.settings.countdown || 3;
-    document.getElementById("settingsFilenamePattern").value =
-      this.settings.filenamePattern || "Recording_{date}_{time}";
-    document.getElementById("settingsCompression").value =
-      this.settings.compression || "balanced";
-    document.getElementById("settingsHardwareAcceleration").value =
-      this.settings.hardwareAcceleration || "none";
-    document.getElementById("settingsAutoSave").checked =
-      this.settings.autoSave || false;
-    document.getElementById("settingsAutoOpen").checked =
-      this.settings.autoOpenAfterRecording !== false;
-    if (document.getElementById("settingsRecordDirectToMp4")) {
-      document.getElementById("settingsRecordDirectToMp4").checked =
-        this.settings.recordDirectToMp4 !== false;
-    }
+    return this.settingsHandler.openSettingsModal();
+  }
+
+  populateSettingsUI() {
     document.getElementById("settingsHideWindow").checked =
       this.settings.hideWindowDuringRecording || false;
     document.getElementById("settingsShortcut").checked =
@@ -1890,121 +1835,11 @@ class ScreenRecorder {
   }
 
   async saveSettings() {
-    const shortcutEnabled = document.getElementById("settingsShortcut").checked;
-    const timerPresetValue = document.getElementById(
-      "settingsTimerPreset",
-    ).value;
-    const timerPreset =
-      timerPresetValue === "custom"
-        ? parseInt(document.getElementById("settingsCustomTimer").value) || 45
-        : parseInt(timerPresetValue) || 0;
-
-    const newSettings = {
-      videoQuality: document.getElementById("settingsQuality").value,
-      frameRate: parseInt(document.getElementById("settingsFrameRate").value),
-      resolution: document.getElementById("settingsResolution").value,
-      outputDirectory: document.getElementById("settingsOutputDir").value,
-      recordAudio: document.getElementById("settingsRecordAudio").checked,
-      recordSystemAudio: document.getElementById("settingsRecordSystemAudio")
-        .checked,
-      selectedMicrophone: document.getElementById("settingsMicrophone").value,
-      hideWindowDuringRecording:
-        document.getElementById("settingsHideWindow").checked,
-      shortcutEnabled: shortcutEnabled,
-      shortcutKey: shortcutEnabled
-        ? document.getElementById("settingsShortcutKey").value
-        : this.settings.shortcutKey || "F9",
-      showNotifications: document.getElementById("settingsShowNotifications")
-        .checked,
-      countdown: parseInt(document.getElementById("settingsCountdown").value),
-      filenamePattern: document.getElementById("settingsFilenamePattern").value,
-      compression: document.getElementById("settingsCompression").value,
-      hardwareAcceleration: document.getElementById(
-        "settingsHardwareAcceleration",
-      ).value,
-      recordDirectToMp4: document.getElementById("settingsRecordDirectToMp4")
-        ?.checked,
-      defaultFormat: document.getElementById("settingsFormat").value,
-      autoSave: document.getElementById("settingsAutoSave").checked,
-      autoOpenAfterRecording:
-        document.getElementById("settingsAutoOpen").checked,
-      timerPreset: timerPreset,
-      scheduledRecording: document.getElementById("settingsScheduledRecording")
-        .checked,
-      scheduleTime: document.getElementById("settingsScheduleTime").value,
-      countdownSound: document.getElementById("settingsCountdownSound").checked,
-      autoHideUI: document.getElementById("settingsAutoHideUI").checked,
-      webcamEnabled: document.getElementById("settingsWebcam").checked,
-      selectedCamera:
-        document.getElementById("settingsCamera")?.value || "default",
-      webcamPosition: document.getElementById("settingsWebcamPosition").value,
-      webcamSize: document.getElementById("settingsWebcamSize").value,
-      videoCodec:
-        document.getElementById("settingsVideoCodec")?.value || "libx264",
-      qualityControl:
-        document.getElementById("settingsQualityControl")?.value || "crf",
-      crfValue:
-        parseInt(document.getElementById("settingsCrfValue")?.value) || 23,
-      videoBitrate:
-        parseInt(document.getElementById("settingsVideoBitrate")?.value) || 5,
-      colorFormat:
-        document.getElementById("settingsColorFormat")?.value || "yuv420p",
-      showMiniControls: document.getElementById("settingsShowMiniControls")
-        ? document.getElementById("settingsShowMiniControls").checked
-        : this.settings.showMiniControls !== false,
-      showClickHighlights: document.getElementById(
-        "settingsShowClickHighlights",
-      )
-        ? document.getElementById("settingsShowClickHighlights").checked
-        : this.settings.showClickHighlights !== false,
-      highlightLeftColor:
-        document.getElementById("highlightLeftColor")?.value || "#FFEB3B",
-      highlightRightColor:
-        document.getElementById("highlightRightColor")?.value || "#2196F3",
-      highlightRippleSize:
-        parseInt(document.getElementById("highlightRippleSize")?.value) || 50,
-      highlightRippleSpeed:
-        parseInt(document.getElementById("highlightRippleSpeed")?.value) || 400,
-      highlightGlowSize:
-        parseInt(document.getElementById("highlightGlowSize")?.value) || 25,
-      highlightGlowIntensity:
-        parseInt(document.getElementById("highlightGlowIntensity")?.value) ||
-        30,
-      idleDetectionEnabled:
-        document.getElementById("settingsIdleDetection")?.checked || false,
-      idleTimeoutMinutes:
-        parseInt(document.getElementById("settingsIdleTimeout")?.value) || 5,
-      memoryThresholdMB:
-        parseInt(document.getElementById("settingsMemoryThreshold")?.value) ||
-        500,
-    };
-
-    try {
-      this.settings = await window.electronAPI.saveSettings(newSettings);
-      this.applySettings();
-      this.updateQuickSettings();
-      this.updateTimerPresetFromSettings();
-      this.closeModal(this.settingsModal);
-      this.showToast("Settings saved", "success");
-    } catch (err) {
-      this.showToast("Failed to save settings", "error");
-      console.error(err);
-    }
+    return this.settingsHandler.saveSettings();
   }
 
   updateTimerPresetFromSettings() {
-    this.timerPreset = this.settings.timerPreset || 0;
-    if (this.timerPreset > 0 && this.timerPreset !== this.recordingTimeout) {
-      const presetBtn = document.querySelector(
-        `.timer-preset[data-minutes="${Math.min(this.timerPreset, 30)}"]`,
-      );
-      if (presetBtn) {
-        document
-          .querySelectorAll(".timer-preset")
-          .forEach((b) => b.classList.remove("active"));
-        presetBtn.classList.add("active");
-      }
-    }
+    return this.settingsHandler.updateTimerPresetFromSettings();
   }
 
   closeModal(modal) {
@@ -2280,77 +2115,19 @@ class ScreenRecorder {
   }
 
   toggleSelectionMode() {
-    this.selectionMode = !this.selectionMode;
-    this.selectedPaths.clear();
-
-    const sidebar = document.querySelector(".sidebar");
-    if (this.selectionMode) {
-      sidebar.classList.add("selection-mode");
-      this.toggleSelectBtn.textContent = "Cancel";
-      this.mergeRecordingsBtn.classList.remove("hidden");
-      this.mergeRecordingsBtn.textContent = "Merge";
-      this.mergeRecordingsBtn.disabled = true;
-    } else {
-      sidebar.classList.remove("selection-mode");
-      this.toggleSelectBtn.textContent = "Select";
-      this.mergeRecordingsBtn.classList.add("hidden");
-      // Unselect everything when canceling
-      this.recentRecordingsList
-        .querySelectorAll(".recent-recording-item")
-        .forEach((item) => {
-          item.classList.remove("selected");
-          const cb = item.querySelector(".recording-checkbox");
-          if (cb) cb.checked = false;
-        });
-    }
+    return this.recentRecordingsManager.toggleSelectionMode();
   }
 
   async handleMerge() {
-    if (this.selectedPaths.size < 2) {
-      this.showToast("Select at least 2 videos to merge", "warn");
-      return;
-    }
-
-    if (!confirm(`Merge ${this.selectedPaths.size} videos into one?`)) return;
-
-    this.processingTitle.textContent = "Merging Videos";
-    const filePaths = Array.from(this.selectedPaths);
-    this.mergeRecordingsBtn.disabled = true;
-
-    try {
-      const result = await window.electronAPI.mergeVideos(filePaths);
-
-      if (result.success) {
-        this.showToast("Videos merged successfully", "success");
-        this.toggleSelectionMode();
-        await this.loadRecentRecordings();
-      } else {
-        this.showToast(`Merge failed: ${result.error}`, "error");
-      }
-    } catch (err) {
-      console.error("Merge error:", err);
-      this.showToast("An error occurred during merging", "error");
-    } finally {
-      this.mergeRecordingsBtn.disabled = false;
-    }
+    return this.recentRecordingsManager.handleMerge();
   }
 
   formatSeconds(seconds) {
-    if (isNaN(seconds)) return "00:00:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return [h, m, s].map((v) => v.toString().padStart(2, "0")).join(":");
+    return this.timerControls.formatSeconds(seconds);
   }
 
   timeToSeconds(timeStr) {
-    const parts = timeStr.split(":").map(parseFloat);
-    if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else if (parts.length === 2) {
-      return parts[0] * 60 + parts[1];
-    }
-    return parseFloat(timeStr) || 0;
+    return this.timerControls.timeToSeconds(timeStr);
   }
 
   // ── Webcam Interaction Logic ───────────────────────────────────────────────

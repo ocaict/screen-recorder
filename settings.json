@@ -6,15 +6,43 @@
   "recordSystemAudio": true,
   "selectedMicrophone": "default",
   "outputDirectory": "C:\\Users\\oluegwuc\\Videos",
-  "shortcutEnabled": true,
+  "shortcutEnabled": false,
   "shortcutKey": "F9",
   "hideWindowDuringRecording": false,
-  "showNotifications": true,
+  "showNotifications": false,
   "autoOpenAfterRecording": false,
   "recordDirectToMp4": true,
   "defaultFormat": "mp4",
   "countdown": 3,
   "recentRecordings": [
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_08-29-27.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772782319212.png",
+      "fileName": "Recording_2026-03-06_08-29-27.mp4",
+      "recordedAt": "2026-03-06T07:31:59.544Z",
+      "size": 11525681
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_08-22-16.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772781801427.png",
+      "fileName": "Recording_2026-03-06_08-22-16.mp4",
+      "recordedAt": "2026-03-06T07:23:21.670Z",
+      "size": 10356500
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_08-19-53.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772781607227.png",
+      "fileName": "Recording_2026-03-06_08-19-53.mp4",
+      "recordedAt": "2026-03-06T07:20:07.599Z",
+      "size": 1862201
+    },
+    {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_07-58-10.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772780321934.png",
+      "fileName": "Recording_2026-03-06_07-58-10.mp4",
+      "recordedAt": "2026-03-06T06:58:42.365Z",
+      "size": 2850778
+    },
     {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-05_07-58-47.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772694362454.png",
@@ -56,30 +84,23 @@
       "fileName": "Recording_2026-03-05_04-37-56.mp4",
       "recordedAt": "2026-03-05T03:40:17.392Z",
       "size": 17627619
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-05_04-33-10.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772681644106.png",
-      "fileName": "Recording_2026-03-05_04-33-10.mp4",
-      "recordedAt": "2026-03-05T03:34:04.594Z",
-      "size": 6422110
     }
   ],
   "maxRecentRecordings": 10,
   "filenamePattern": "Recording_{date}_{time}",
   "autoSave": true,
-  "compression": "maximum",
+  "compression": "balanced",
   "hardwareAcceleration": "none",
-  "webcamEnabled": true,
+  "webcamEnabled": false,
   "selectedCamera": "default",
-  "webcamPosition": "bottom-left",
-  "webcamSize": "medium",
+  "webcamPosition": "bottom-right",
+  "webcamSize": "small",
   "videoCodec": "libx264",
   "qualityControl": "crf",
   "crfValue": 23,
   "videoBitrate": 5,
   "colorFormat": "yuv420p",
-  "showMiniControls": true,
+  "showMiniControls": false,
   "showClickHighlights": false,
   "highlightLeftColor": "#ffeb3b",
   "highlightRightColor": "#2196f3",

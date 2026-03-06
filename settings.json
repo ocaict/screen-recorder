@@ -16,6 +16,13 @@
   "countdown": 3,
   "recentRecordings": [
     {
+      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_08-44-45.mp4",
+      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772783222020.png",
+      "fileName": "Recording_2026-03-06_08-44-45.mp4",
+      "recordedAt": "2026-03-06T07:47:02.647Z",
+      "size": 16610886
+    },
+    {
       "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-06_08-29-27.mp4",
       "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772782319212.png",
       "fileName": "Recording_2026-03-06_08-29-27.mp4",
@@ -77,13 +84,6 @@
       "fileName": "Recording_2026-03-05_04-57-20.mp4",
       "recordedAt": "2026-03-05T03:58:43.422Z",
       "size": 10784978
-    },
-    {
-      "filePath": "C:\\Users\\oluegwuc\\Videos\\Recording_2026-03-05_04-37-56.mp4",
-      "thumbnailPath": "C:\\Users\\oluegwuc\\AppData\\Roaming\\OcaTech-MakeVideo\\thumbnails\\thumb_1772682016639.png",
-      "fileName": "Recording_2026-03-05_04-37-56.mp4",
-      "recordedAt": "2026-03-05T03:40:17.392Z",
-      "size": 17627619
     }
   ],
   "maxRecentRecordings": 10,

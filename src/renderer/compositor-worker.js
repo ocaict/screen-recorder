@@ -21,9 +21,16 @@ let settings = {
   displayHeight: null
 };
 
+// Frame Buffers
+let latestScreenFrame = null;
+let latestWebcamFrame = null;
+let latestAnnotationBitmap = null;
+let latestTempAnnotationBitmap = null;
+
 // Animation state
 let animProgress = 0; // 0 = corner, 1 = center
 let lastFrameTime = performance.now();
+let isRunning = false;
 
 self.onmessage = (event) => {
   const { type, payload } = event.data;
@@ -31,6 +38,10 @@ self.onmessage = (event) => {
   switch (type) {
     case "init":
       handleInit(payload);
+      break;
+    case "initStreams":
+      if (payload.screenStream) startStreamReader("screen", payload.screenStream);
+      if (payload.webcamStream) startStreamReader("webcam", payload.webcamStream);
       break;
     case "updateSettings":
       // Merge and explicitly delete any keys set to undefined
@@ -44,25 +55,55 @@ self.onmessage = (event) => {
       break;
 
     case "renderFrame":
-      handleRenderFrame(payload);
+      // Now primarily used for Annotations (Sparse updates)
+      if (payload.annotationBitmap) {
+        if (latestAnnotationBitmap) latestAnnotationBitmap.close();
+        latestAnnotationBitmap = payload.annotationBitmap;
+      }
+      if (payload.tempAnnotationBitmap) {
+        if (latestTempAnnotationBitmap) latestTempAnnotationBitmap.close();
+        latestTempAnnotationBitmap = payload.tempAnnotationBitmap;
+      }
       break;
     case "stop":
-      canvas = null;
-      ctx = null;
+      isRunning = false;
+      cleanup();
       break;
     default:
       console.warn(`Unknown message type: ${type}`);
   }
 };
 
+async function startStreamReader(type, stream) {
+  const reader = stream.getReader();
+  while (isRunning) {
+    try {
+      const { value: frame, done } = await reader.read();
+      if (done) break;
+      
+      if (type === "screen") {
+        if (latestScreenFrame) latestScreenFrame.close();
+        latestScreenFrame = frame;
+      } else if (type === "webcam") {
+        if (latestWebcamFrame) latestWebcamFrame.close();
+        latestWebcamFrame = frame;
+      }
+    } catch (e) {
+      console.error(`Worker stream reader error (${type}):`, e);
+      break;
+    }
+  }
+}
+
 function handleInit(payload) {
   try {
     const { offscreenCanvas, width, height, frameRate, settings: initialSettings } = payload;
     canvas = offscreenCanvas;
-    ctx = canvas.getContext("2d");
+    ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
-    // High-performance hint for rendering images at full speed
-    ctx.imageSmoothingEnabled = false;
+    // Enable smoothing for better quality scale/rotation
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     config.width = width;
     config.height = height;
@@ -72,6 +113,8 @@ function handleInit(payload) {
       settings = { ...settings, ...initialSettings };
     }
 
+    isRunning = true;
+    requestAnimationFrame(compositionLoop);
     self.postMessage({ type: "ready" });
   } catch (err) {
     console.error("Compositor worker init failed:", err);
@@ -79,70 +122,48 @@ function handleInit(payload) {
   }
 }
 
-let cachedWebcamBitmap = null;
-let cachedAnnotationBitmap = null;
-let cachedTempAnnotationBitmap = null;
+function compositionLoop(timestamp) {
+  if (!isRunning) return;
 
-function handleRenderFrame(payload) {
+  renderEverything();
+  
+  // Heartbeat back to main thread for stats/monitoring
+  self.postMessage({ type: "frameRendered" });
+  
+  requestAnimationFrame(compositionLoop);
+}
+
+function renderEverything() {
   if (!ctx) return;
-  const { screenBitmap, webcamBitmap, annotationBitmap, tempAnnotationBitmap } = payload;
 
   try {
-    // 1. Draw Screen Video Frame (with cropping if needed)
-    if (screenBitmap) {
+    // 1. Draw Screen (Background)
+    if (latestScreenFrame) {
       if (settings.cropRegion) {
         const { x, y, width, height } = settings.cropRegion;
-        ctx.drawImage(
-          screenBitmap,
-          x, y, width, height, // Source rect
-          0, 0, config.width, config.height // Dest rect
-        );
+        ctx.drawImage(latestScreenFrame, x, y, width, height, 0, 0, config.width, config.height);
       } else {
-        ctx.drawImage(screenBitmap, 0, 0, config.width, config.height);
+        ctx.drawImage(latestScreenFrame, 0, 0, config.width, config.height);
       }
-      screenBitmap.close();
     } else {
-      // Clear to black if no screen bitmap
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, config.width, config.height);
     }
 
-    // DIM Background if animating to Presentation Mode
+    // DIM Background if in Presentation Mode
     if (animProgress > 0) {
-      // Background dims up to 80% opacity when in Full Camera mode
       ctx.fillStyle = `rgba(0, 0, 0, ${animProgress * 0.8})`;
       ctx.fillRect(0, 0, config.width, config.height);
     }
 
-    // 2. Draw Webcam Overlay Frame if enabled
-    if (settings.includeWebcam) {
-      if (webcamBitmap) {
-        if (cachedWebcamBitmap) cachedWebcamBitmap.close();
-        cachedWebcamBitmap = webcamBitmap;
-      }
-      if (cachedWebcamBitmap) {
-        drawWebcamOverlay(cachedWebcamBitmap);
-      }
-    } else {
-      if (cachedWebcamBitmap) {
-        cachedWebcamBitmap.close();
-        cachedWebcamBitmap = null;
-      }
-      if (webcamBitmap) webcamBitmap.close();
+    // 2. Draw Webcam Overlay
+    if (settings.includeWebcam && latestWebcamFrame) {
+      drawWebcamOverlay(latestWebcamFrame);
     }
 
-    // 3. Draw Annotation Overlays if enabled
+    // 3. Draw Annotations
     if (settings.includeAnnotations) {
-      if (annotationBitmap) {
-        if (cachedAnnotationBitmap) cachedAnnotationBitmap.close();
-        cachedAnnotationBitmap = annotationBitmap;
-      }
-      if (tempAnnotationBitmap) {
-        if (cachedTempAnnotationBitmap) cachedTempAnnotationBitmap.close();
-        cachedTempAnnotationBitmap = tempAnnotationBitmap;
-      }
-
-      const drawCached = (bmp) => {
+      const drawLayer = (bmp) => {
         if (!bmp) return;
         if (settings.cropRegion) {
           const { x, y, width, height } = settings.cropRegion;
@@ -151,153 +172,97 @@ function handleRenderFrame(payload) {
           ctx.drawImage(bmp, 0, 0, config.width, config.height);
         }
       };
-
-      drawCached(cachedAnnotationBitmap);
-      drawCached(cachedTempAnnotationBitmap);
-
-    } else {
-      if (cachedAnnotationBitmap) {
-        cachedAnnotationBitmap.close();
-        cachedAnnotationBitmap = null;
-      }
-      if (cachedTempAnnotationBitmap) {
-        cachedTempAnnotationBitmap.close();
-        cachedTempAnnotationBitmap = null;
-      }
-      if (annotationBitmap) annotationBitmap.close();
-      if (tempAnnotationBitmap) tempAnnotationBitmap.close();
+      drawLayer(latestAnnotationBitmap);
+      drawLayer(latestTempAnnotationBitmap);
     }
   } catch (err) {
-    console.error("Frame draw error in worker:", err);
+    console.error("Worker Render Error:", err);
   }
 }
 
-function drawWebcamOverlay(webcamBitmap) {
+function drawWebcamOverlay(webcamFrame) {
   const now = performance.now();
-  const dt = Math.min(now - lastFrameTime, 100) / 1000; // Delta time in seconds (capped to 100ms)
+  const dt = Math.min(now - lastFrameTime, 100) / 1000;
   lastFrameTime = now;
 
-  // Update animation progress
   const targetProgress = settings.cameraMode === "center" ? 1 : 0;
   if (animProgress !== targetProgress) {
-    // Animate over ~0.4 seconds
     const speed = 2.5;
-    if (targetProgress === 1) {
-      animProgress = Math.min(1, animProgress + speed * dt);
-    } else {
-      animProgress = Math.max(0, animProgress - speed * dt);
-    }
-    // Easing function (easeOutCirc) for a snappy but smooth POP effect
-    // We'll apply it later when calculating actual values to keep internal state linear
+    if (targetProgress === 1) animProgress = Math.min(1, animProgress + speed * dt);
+    else animProgress = Math.max(0, animProgress - speed * dt);
   }
 
-  const webcamWidth = webcamBitmap.width;
-  const webcamHeight = webcamBitmap.height;
-  let targetX = 0;
-  let targetY = 0;
+  const ease = animProgress < 0.5 ? 4 * animProgress * animProgress * animProgress : 1 - Math.pow(-2 * animProgress + 2, 3) / 2;
 
-  const size = settings.webcamSize || "medium";
   let webcamDisplayWidth;
-
-  // Use proportional sizing based on canvas width (normalized to a 1920px baseline)
-  switch (size) {
-    case "small":
-      webcamDisplayWidth = config.width * 0.0625; // 120/1920
-      break;
-    case "large":
-      webcamDisplayWidth = config.width * 0.125;  // 240/1920
-      break;
-    default:
-      webcamDisplayWidth = config.width * 0.09375; // 180/1920
+  switch (settings.webcamSize) {
+    case "small": webcamDisplayWidth = config.width * 0.0625; break;
+    case "large": webcamDisplayWidth = config.width * 0.125; break;
+    default: webcamDisplayWidth = config.width * 0.09375;
   }
 
-  const webcamDisplayHeight = webcamDisplayWidth; // Perfect circle
-  const position = settings.webcamPosition || "bottom-right";
+  const webcamDisplayHeight = webcamDisplayWidth;
+  let targetX, targetY;
 
-  // If the user has dragged to a custom position, use it (normalized 0-1 coords)
   if (settings.webcamCustomX !== undefined && settings.webcamCustomY !== undefined) {
-    // Map normalized coordinates (0-1) to the actual available movement range
     targetX = Math.round(settings.webcamCustomX * (config.width - webcamDisplayWidth));
     targetY = Math.round(settings.webcamCustomY * (config.height - webcamDisplayHeight));
   } else {
-    switch (position) {
-      case "top-left":
-        targetX = 20;
-        targetY = 20;
-        break;
-      case "top-right":
-        targetX = config.width - webcamDisplayWidth - 20;
-        targetY = 20;
-        break;
-      case "bottom-left":
-        targetX = 20;
-        targetY = config.height - webcamDisplayHeight - 20;
-        break;
-      case "bottom-right":
-      default:
-        targetX = config.width - webcamDisplayWidth - 20;
-        targetY = config.height - webcamDisplayHeight - 20;
-        break;
+    const margin = 20;
+    switch (settings.webcamPosition) {
+      case "top-left": targetX = margin; targetY = margin; break;
+      case "top-right": targetX = config.width - webcamDisplayWidth - margin; targetY = margin; break;
+      case "bottom-left": targetX = margin; targetY = config.height - webcamDisplayHeight - margin; break;
+      default: targetX = config.width - webcamDisplayWidth - margin; targetY = config.height - webcamDisplayHeight - margin;
     }
   }
 
-  // Calculate actual position and size using interpolation
-  // Apply easeInOutCubic for a cinematic sweep
-  const ease = animProgress < 0.5 ? 4 * animProgress * animProgress * animProgress : 1 - Math.pow(-2 * animProgress + 2, 3) / 2;
-
-  // Center values - use display dimensions if available (presenter mode), otherwise canvas
   const centerRefWidth = settings.displayWidth || config.width;
   const centerRefHeight = settings.displayHeight || config.height;
-  const centerDisplayWidth = Math.min(centerRefWidth, centerRefHeight) * 0.45; // Match native window calculation
+  const centerDisplayWidth = Math.min(centerRefWidth, centerRefHeight) * 0.45;
   const centerX = (config.width - centerDisplayWidth) / 2;
   const centerY = (config.height - centerDisplayWidth) / 2;
 
-  // Lerp between corner (0) and center (1)
   const currentWidth = webcamDisplayWidth + ((centerDisplayWidth - webcamDisplayWidth) * ease);
   const currentX = targetX + ((centerX - targetX) * ease);
   const currentY = targetY + ((centerY - targetY) * ease);
 
-  try {
-    const cx = currentX + currentWidth / 2;
-    const cy = currentY + currentWidth / 2;
-    const radius = currentWidth / 2;
+  const cx = currentX + currentWidth / 2;
+  const cy = currentY + currentWidth / 2;
+  const radius = currentWidth / 2;
 
-    ctx.save();
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+  ctx.shadowBlur = 15;
+  ctx.shadowOffsetY = 5;
+  // Remove shadow offset on x for symmetrical look
+  ctx.shadowOffsetX = 0;
+  
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
 
-    // Draw outer white rim and drop shadow
-    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-    ctx.shadowBlur = 15;
-    ctx.shadowOffsetY = 5;
-    // Remove shadow offset on x for symmetrical look
-    ctx.shadowOffsetX = 0;
+  ctx.shadowColor = "transparent";
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(0, radius - 3), 0, Math.PI * 2);
+  ctx.clip();
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
+  // VideoFrames provide displayWidth/displayHeight
+  const srcSize = Math.min(webcamFrame.displayWidth, webcamFrame.displayHeight);
+  const srcX = (webcamFrame.displayWidth - srcSize) / 2;
+  const srcY = (webcamFrame.displayHeight - srcSize) / 2;
 
-    // Reset shadow internally so it doesn't leak into the video image
-    ctx.shadowColor = "transparent";
+  ctx.drawImage(webcamFrame, srcX, srcY, srcSize, srcSize, cx - radius, cy - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
 
-    // Setup circular clip path for the video
-    ctx.beginPath();
-    // 3px inset to create the white border ring
-    ctx.arc(cx, cy, Math.max(0, radius - 3), 0, Math.PI * 2);
-    ctx.clip();
-
-    // Source coordinates for a center-square crop of the raw webcam feed
-    const srcSize = Math.min(webcamWidth, webcamHeight);
-    const srcX = (webcamWidth - srcSize) / 2;
-    const srcY = (webcamHeight - srcSize) / 2;
-
-    ctx.drawImage(
-      webcamBitmap,
-      srcX, srcY, srcSize, srcSize, // Source crop
-      cx - radius, cy - radius, radius * 2, radius * 2 // Destination
-    );
-
-    ctx.restore();
-  } catch (err) {
-    console.warn("Webcam worker draw error:", err);
-  }
+function cleanup() {
+  isRunning = false;
+  if (latestScreenFrame) latestScreenFrame.close();
+  if (latestWebcamFrame) latestWebcamFrame.close();
+  if (latestAnnotationBitmap) latestAnnotationBitmap.close();
+  if (latestTempAnnotationBitmap) latestTempAnnotationBitmap.close();
+  latestScreenFrame = latestWebcamFrame = latestAnnotationBitmap = latestTempAnnotationBitmap = null;
+  canvas = ctx = null;
 }

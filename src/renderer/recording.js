@@ -28,15 +28,15 @@ class RecordingManager {
       window.electronAPI.onMiniCommand?.((data) => {
         this.handleMiniCommand(data);
       });
-      
+
       // Listen for display dimensions from main process (used for presenter mode center calculation)
       window.electronAPI.onPresenterModeDisplay?.((dims) => {
         if (this.compositorWorker && dims) {
           this.compositorWorker.postMessage({
             type: "updateSettings",
-            payload: { 
-              displayWidth: dims.width, 
-              displayHeight: dims.height 
+            payload: {
+              displayWidth: dims.width,
+              displayHeight: dims.height
             }
           });
           console.log('[Presenter] Updated compositor with display dims:', dims);
@@ -609,24 +609,6 @@ class RecordingManager {
     const captureStream = canvas.captureStream(frameRate);
     const offscreenCanvas = canvas.transferControlToOffscreen();
 
-    const screenStream = new MediaStream([screenTrack]);
-    this.compositorScreenVideo = document.createElement("video");
-    this.compositorScreenVideo.srcObject = screenStream;
-    this.compositorScreenVideo.muted = true;
-    this.compositorScreenVideo.playsInline = true;
-    await this.compositorScreenVideo.play();
-
-    // Set up webcam video if enabled
-    if (this.webcamStream) {
-      const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
-      const webcamStream = new MediaStream([webcamTrack]);
-      this.compositorWebcamVideo = document.createElement("video");
-      this.compositorWebcamVideo.srcObject = webcamStream;
-      this.compositorWebcamVideo.muted = true;
-      this.compositorWebcamVideo.playsInline = true;
-      await this.compositorWebcamVideo.play();
-    }
-
     // Initialize dedicated Offscreen Worker
     this.compositorWorker = new Worker("compositor-worker.js");
     this.compositorWorker.postMessage({
@@ -648,91 +630,64 @@ class RecordingManager {
       }
     }, [offscreenCanvas]);
 
-    let useRVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
-    let hasNewScreenFrame = !useRVFC;
-    let hasNewWebcamFrame = !useRVFC;
+    // Stream Transfer Optimization: Use MediaStreamTrackProcessor to offload video frames
+    // This allows the worker to pull frames directly from the tracks without main thread CPU usage.
+    const screenProcessor = new MediaStreamTrackProcessor({ track: screenTrack });
+    const screenReadable = screenProcessor.readable;
 
-    const onScreenFrame = () => {
-      hasNewScreenFrame = true;
-      if (this.compositorScreenVideo) this.compositorScreenVideo.requestVideoFrameCallback(onScreenFrame);
+    let webcamReadable = null;
+    if (this.webcamStream) {
+      const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
+      const webcamProcessor = new MediaStreamTrackProcessor({ track: webcamTrack });
+      webcamReadable = webcamProcessor.readable;
+    }
+
+    this.compositorWorker.postMessage({
+      type: "initStreams",
+      payload: {
+        screenStream: screenReadable,
+        webcamStream: webcamReadable
+      }
+    }, [screenReadable, webcamReadable].filter(Boolean));
+
+    // Handle performance monitoring heartbeats from the worker
+    this.compositorWorker.onmessage = (e) => {
+      if (e.data.type === "frameRendered" && this.monitor) {
+        this.monitor.recordFrame();
+      }
     };
-    if (useRVFC && this.compositorScreenVideo) this.compositorScreenVideo.requestVideoFrameCallback(onScreenFrame);
 
-    const onWebcamFrame = () => {
-      hasNewWebcamFrame = true;
-      if (this.compositorWebcamVideo) this.compositorWebcamVideo.requestVideoFrameCallback(onWebcamFrame);
-    };
-    if (useRVFC && this.compositorWebcamVideo) this.compositorWebcamVideo.requestVideoFrameCallback(onWebcamFrame);
-
-    const drawFrame = async (timestamp) => {
+    const drawFrame = async () => {
       try {
         if (!this.compositorDrawId) return;
 
+        // Annotations are still sparse/main-thread based
         let annotationsChanged = false;
-        let annotationBitmap, tempAnnotationBitmap;
         if (includeAnnotations && this.app.annotationManager?.isActive) {
           annotationsChanged = this.app.annotationManager.checkAndResetDirty();
         }
 
-        if (!hasNewScreenFrame && !hasNewWebcamFrame && !annotationsChanged) {
-          if (this.compositorDrawId) {
-            this.compositorDrawId = requestAnimationFrame(drawFrame);
-          }
-          return;
-        }
-
-        if (useRVFC) {
-          hasNewScreenFrame = false;
-          hasNewWebcamFrame = false;
-        }
-
-        if (this.monitor) {
-          this.monitor.recordFrame();
-        }
-
-        let screenBitmap;
-        if (this.compositorScreenVideo && this.compositorScreenVideo.readyState >= 2 && this.compositorScreenVideo.currentTime > 0) {
-          screenBitmap = await createImageBitmap(this.compositorScreenVideo);
-        }
-
-        let webcamBitmap;
-        if (this.compositorWebcamVideo && this.compositorWebcamVideo.readyState >= 2 && this.compositorWebcamVideo.currentTime > 0) {
-          webcamBitmap = await createImageBitmap(this.compositorWebcamVideo);
-        }
-
-        if (!screenBitmap && !webcamBitmap) {
-          if (this.compositorDrawId) {
-            this.compositorDrawId = requestAnimationFrame(drawFrame);
-          }
-          return;
-        }
-
+        // Only send updates if annotations actually changed
+        // The worker runs its own loop for video frames and animations
         if (annotationsChanged) {
           const annCanvas = this.app.annotationManager.getCanvas();
           const tempCanvas = this.app.annotationManager.getTempCanvas();
-          annotationBitmap = await createImageBitmap(annCanvas);
-          tempAnnotationBitmap = await createImageBitmap(tempCanvas);
-        }
 
-        const transferables = [];
-        if (screenBitmap) transferables.push(screenBitmap);
-        if (webcamBitmap) transferables.push(webcamBitmap);
-        if (annotationBitmap) transferables.push(annotationBitmap);
-        if (tempAnnotationBitmap) transferables.push(tempAnnotationBitmap);
+          const [annotationBitmap, tempAnnotationBitmap] = await Promise.all([
+            createImageBitmap(annCanvas),
+            createImageBitmap(tempCanvas)
+          ]);
 
-        if (this.compositorWorker) {
           this.compositorWorker.postMessage({
             type: "renderFrame",
             payload: {
-              screenBitmap,
-              webcamBitmap,
               annotationBitmap,
               tempAnnotationBitmap
             }
-          }, transferables);
+          }, [annotationBitmap, tempAnnotationBitmap]);
         }
       } catch (err) {
-        console.error("Main thread frame dispatch error:", err);
+        console.warn("Annotation sync error:", err);
       }
 
       if (this.compositorDrawId) {
@@ -740,8 +695,9 @@ class RecordingManager {
       }
     };
 
-    // Start dispatching loop
+    // Start annotation dispatching loop
     this.compositorDrawId = requestAnimationFrame(drawFrame);
+
 
     const finalStream = new MediaStream([
       ...captureStream.getVideoTracks(),
@@ -1931,8 +1887,8 @@ class RecordingManager {
     if (newMode === "corner") {
       this.compositorWorker.postMessage({
         type: "updateSettings",
-        payload: { 
-          webcamCustomX: undefined, 
+        payload: {
+          webcamCustomX: undefined,
           webcamCustomY: undefined,
           displayWidth: null,
           displayHeight: null

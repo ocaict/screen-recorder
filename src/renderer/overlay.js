@@ -276,8 +276,8 @@ function handleMouseMove(e) {
     // Clear only the dirty rectangle instead of the whole screen
     tempCtx.clearRect(dirtyRect.minX, dirtyRect.minY, dirtyRect.maxX - dirtyRect.minX, dirtyRect.maxY - dirtyRect.minY);
 
-    // Update dirty rect with new bounds
-    const padding = (currentTool === "highlighter" ? 20 : strokeWidth) * 2;
+    // Use a larger padding to ensure arrow heads and thick strokes are fully cleared
+    const padding = (currentTool === "highlighter" ? 30 : Math.max(strokeWidth * 4, 40)); // Increased padding for arrow wings
     dirtyRect.minX = Math.min(dirtyRect.minX, x - padding);
     dirtyRect.minY = Math.min(dirtyRect.minY, y - padding);
     dirtyRect.maxX = Math.max(dirtyRect.maxX, x + padding);
@@ -386,16 +386,25 @@ function applyStyle(c) {
     c.lineJoin = "round";
 }
 
-function drawArrow(c, fx, fy, tx, ty) {
-    const headLen = 15;
-    const angle = Math.atan2(ty - fy, tx - fx);
-    c.beginPath(); c.moveTo(fx, fy); c.lineTo(tx, ty); c.stroke();
-    c.beginPath();
-    c.moveTo(tx, ty);
-    c.lineTo(tx - headLen * Math.cos(angle - Math.PI / 6), ty - headLen * Math.sin(angle - Math.PI / 6));
-    c.moveTo(tx, ty);
-    c.lineTo(tx - headLen * Math.cos(angle + Math.PI / 6), ty - headLen * Math.sin(angle + Math.PI / 6));
-    c.stroke();
+function drawArrow(ctx, fromX, fromY, toX, toY) {
+    const headLength = 20;
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+
+    // Combined path for arrow head
+    ctx.lineTo(
+        toX - headLength * Math.cos(angle - Math.PI / 6),
+        toY - headLength * Math.sin(angle - Math.PI / 6),
+    );
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(
+        toX - headLength * Math.cos(angle + Math.PI / 6),
+        toY - headLength * Math.sin(angle + Math.PI / 6),
+    );
+    ctx.stroke();
 }
 
 function drawEllipse(c, x, y, w, h) {

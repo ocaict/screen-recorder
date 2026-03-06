@@ -262,7 +262,7 @@ class AnnotationManager {
     const y = e.clientY;
 
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
-    this.redrawHistory();
+    // REMOVED: redrawHistory() here was causing performance lag
 
     this.tempCtx.strokeStyle = this.currentColor;
     this.tempCtx.lineWidth =
@@ -377,16 +377,14 @@ class AnnotationManager {
   }
 
   drawArrow(ctx, fromX, fromY, toX, toY) {
-    const headLength = 15;
+    const headLength = 20; // Improved arrow head visibility
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
     ctx.beginPath();
     ctx.moveTo(fromX, fromY);
     ctx.lineTo(toX, toY);
-    ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(toX, toY);
+    // Draw the arrow head as a single continuous path from the tip
     ctx.lineTo(
       toX - headLength * Math.cos(angle - Math.PI / 6),
       toY - headLength * Math.sin(angle - Math.PI / 6),

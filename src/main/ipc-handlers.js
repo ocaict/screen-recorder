@@ -58,6 +58,11 @@ let dimmerWindow = null;
 let ICON_PATH = null;
 let clickHighlightHookRunning = false;
 let preFullscreenBounds = null;
+let annotationPaletteWindow = null;
+
+function setAnnotationPaletteWindowRef(ref) {
+  annotationPaletteWindow = ref;
+}
 
 function setupClickHighlightHook(enabled) {
   if (!uIOhook) {
@@ -158,6 +163,34 @@ function setCameraWindowRef(win) {
 
 function setDimmerWindowRef(win) {
   dimmerWindow = win;
+}
+
+function applyExclusionSettings() {
+  if (process.platform !== "win32") return;
+  const { getSettings } = require("../utils/settings");
+  const settings = getSettings();
+
+  if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+    const exclude = settings.recordMiniControls === false || settings.recordMiniControls === undefined;
+    log("info", `[Capture] MiniControls exclude from capture set to: ${exclude} (Setting: ${settings.recordMiniControls})`);
+    if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
+      miniControlsWindow.setExcludeFromCapture(exclude);
+    }
+    if (typeof miniControlsWindow.setContentProtection === "function") {
+      miniControlsWindow.setContentProtection(exclude);
+    }
+  }
+
+  if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+    const exclude = settings.recordAnnotationPalette === false || settings.recordAnnotationPalette === undefined;
+    log("info", `[Capture] AnnotationPalette exclude from capture set to: ${exclude} (Setting: ${settings.recordAnnotationPalette})`);
+    if (typeof annotationPaletteWindow.setExcludeFromCapture === "function") {
+      annotationPaletteWindow.setExcludeFromCapture(exclude);
+    }
+    if (typeof annotationPaletteWindow.setContentProtection === "function") {
+      annotationPaletteWindow.setContentProtection(exclude);
+    }
+  }
 }
 
 async function getCaptureSources() {
@@ -1214,10 +1247,14 @@ function setupIpcHandlers() {
       timerPreset: Number.isInteger(newSettings.timerPreset) ? newSettings.timerPreset : 0,
       scheduledRecording: Boolean(newSettings.scheduledRecording),
       scheduleTime: typeof newSettings.scheduleTime === 'string' ? newSettings.scheduleTime : "09:00",
+      recordMiniControls: Boolean(newSettings.recordMiniControls),
+      recordAnnotationPalette: Boolean(newSettings.recordAnnotationPalette),
+      idleTimeoutMinutes: Number.isInteger(newSettings.idleTimeoutMinutes) ? newSettings.idleTimeoutMinutes : 5,
+      memoryThresholdMB: Number.isInteger(newSettings.memoryThresholdMB) ? newSettings.memoryThresholdMB : 500,
     };
 
-
     saveSettings(validatedSettings);
+    applyExclusionSettings();
     shortcuts.registerGlobalShortcut();
     return getSettings();
   });
@@ -1530,12 +1567,18 @@ function setupIpcHandlers() {
 
       ov.setFocusable(false);
 
+      // Show the palette
+      if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+        annotationPaletteWindow.showInactive();
+        annotationPaletteWindow.moveTop();
+      }
+
       // Periodically re-assert overlay position above the Windows taskbar
       if (overlayMoveTopInterval) clearInterval(overlayMoveTopInterval);
       overlayMoveTopInterval = setInterval(() => {
         if (overlayWindow && !overlayWindow.isDestroyed()) {
           overlayWindow.moveTop();
-          
+
           // Keep Mini Controls above the drawing surface
           if (miniControlsWindow && !miniControlsWindow.isDestroyed() && miniControlsWindow.isVisible()) {
             miniControlsWindow.moveTop();
@@ -1544,6 +1587,11 @@ function setupIpcHandlers() {
           // Keep Main Window (Tools) above the drawing surface
           if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
             mainWindow.moveTop();
+          }
+
+          // Keep Annotation Palette above the drawing surface
+          if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed() && annotationPaletteWindow.isVisible()) {
+            annotationPaletteWindow.moveTop();
           }
         } else {
           clearInterval(overlayMoveTopInterval);
@@ -1564,6 +1612,11 @@ function setupIpcHandlers() {
         // Reset main window's alwaysOnTop state
         mainWindow.setAlwaysOnTop(false);
         mainWindow.focus();
+      }
+
+      // Hide the palette
+      if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+        annotationPaletteWindow.hide();
       }
     }
 
@@ -1742,6 +1795,75 @@ function setupIpcHandlers() {
     }
   });
 
+  // Annotation Palette Handlers
+  let paletteTopInterval = null;
+  ipcMain.handle("annotation-palette-toggle", async (_, show) => {
+    if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+      if (show) {
+        annotationPaletteWindow.show();
+        annotationPaletteWindow.setAlwaysOnTop(true, "screen-saver");
+        // Ensure it stays above overlay and taskbar
+        if (!paletteTopInterval) {
+          paletteTopInterval = setInterval(() => {
+            if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed() && annotationPaletteWindow.isVisible()) {
+              annotationPaletteWindow.setAlwaysOnTop(true, "screen-saver");
+              annotationPaletteWindow.moveTop();
+            } else {
+              clearInterval(paletteTopInterval);
+              paletteTopInterval = null;
+            }
+          }, 1000);
+        }
+      } else {
+        annotationPaletteWindow.hide();
+        if (paletteTopInterval) {
+          clearInterval(paletteTopInterval);
+          paletteTopInterval = null;
+        }
+      }
+    }
+  });
+
+  ipcMain.on("get-palette-window-position", (event) => {
+    if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+      const [x, y] = annotationPaletteWindow.getPosition();
+      event.returnValue = { x, y };
+    } else {
+      event.returnValue = { x: 0, y: 0 };
+    }
+  });
+
+  ipcMain.on("move-palette-window", (_, x, y) => {
+    if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+      annotationPaletteWindow.setPosition(Math.round(x), Math.round(y));
+    }
+  });
+
+  ipcMain.on("annotation-palette-command", (event, data) => {
+    // Forward command to the overlay window
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      if (data.action === "set-tool") {
+        overlayWindow.webContents.send("overlay-settings", { tool: data.value });
+      } else if (data.action === "set-color") {
+        overlayWindow.webContents.send("overlay-settings", { color: data.value });
+      } else if (data.action === "undo" || data.action === "clear") {
+        overlayWindow.webContents.send("overlay-command", data.action);
+      } else if (data.action === "close") {
+        // Toggle off drawing mode globally
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("toggle-annotation-external");
+        }
+      }
+    }
+  });
+
+  ipcMain.on("annotation-settings-sync", (event, settings) => {
+    // Forward from main window to palette window
+    if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+      annotationPaletteWindow.webContents.send("annotation-settings-update", settings);
+    }
+  });
+
   // We add to set-recording-state to keep mini window in sync
   ipcMain.handle("set-recording-state", async (_, recording, isPaused = false) => {
     try {
@@ -1785,15 +1907,8 @@ function setupIpcHandlers() {
           miniControlsWindow.focus(); // Ensure it takes top focus
           miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
 
-          // Re-assert protection upon show for extra reliability
-          if (process.platform === "win32") {
-            if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
-              miniControlsWindow.setExcludeFromCapture(true);
-            }
-            if (typeof miniControlsWindow.setContentProtection === "function") {
-              miniControlsWindow.setContentProtection(true);
-            }
-          }
+          // Apply capture exclusion based on user settings
+          applyExclusionSettings();
         } else {
           miniControlsWindow.hide();
         }
@@ -2106,5 +2221,7 @@ module.exports = {
   setMiniControlsWindowRef,
   setCameraWindowRef,
   setDimmerWindowRef,
+  setAnnotationPaletteWindowRef,
+  applyExclusionSettings,
   setupIpcHandlers,
 };

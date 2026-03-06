@@ -12,6 +12,8 @@ const {
   setMiniControlsWindowRef,
   setCameraWindowRef,
   setDimmerWindowRef,
+  setAnnotationPaletteWindowRef,
+  applyExclusionSettings,
 } = require("./ipc-handlers");
 
 // We've commented these out because setExcludeFromCapture (WDA_EXCLUDEFROMCAPTURE)
@@ -25,6 +27,7 @@ let overlayWindow = null;
 let miniControlsWindow = null;
 let cameraWindow = null;
 let dimmerWindow = null;
+let annotationPaletteWindow = null;
 
 // Register thumb:// as a privileged scheme for Electron 40+ compatibility
 protocol.registerSchemesAsPrivileged([
@@ -168,6 +171,7 @@ app.whenReady().then(async () => {
   createOverlayWindow();
   createMiniControlsWindow();
   createCameraWindow();
+  createAnnotationPaletteWindow();
   setOverlayWindowRef(overlayWindow);
   setMiniControlsWindowRef(miniControlsWindow);
   setCameraWindowRef(cameraWindow);
@@ -419,14 +423,65 @@ function createMiniControlsWindow() {
     miniControlsWindow = null;
   });
 
-  // CRITICAL: Hide this window from screen capture/recordings
-  if (process.platform === "win32") {
-    if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
-      miniControlsWindow.setExcludeFromCapture(true);
-    }
-    if (typeof miniControlsWindow.setContentProtection === "function") {
-      miniControlsWindow.setContentProtection(true);
-    }
+  // Apply capture exclusion based on user settings
+  applyExclusionSettings();
+}
+
+function createAnnotationPaletteWindow() {
+  const { getSettings } = require("../utils/settings");
+  const settings = getSettings();
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { x: pX, y: pY, width: pW, height: pH } = primaryDisplay.bounds;
+
+  // Position it top-center or at saved position
+  let x = settings.palettePosition?.x;
+  let y = settings.palettePosition?.y;
+
+  if (x === undefined || y === undefined) {
+    x = Math.round(pX + (pW - 350) / 2);
+    y = Math.round(pY + 100);
   }
 
+  if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
+    annotationPaletteWindow.destroy();
+  }
+
+  annotationPaletteWindow = new BrowserWindow({
+    width: 700,
+    height: 80,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    resizable: false,
+    movable: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload", "annotation-palette-preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+  });
+
+  setAnnotationPaletteWindowRef(annotationPaletteWindow);
+
+  annotationPaletteWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  annotationPaletteWindow.setAlwaysOnTop(true, "screen-saver");
+
+  annotationPaletteWindow.loadFile(path.join(__dirname, "..", "renderer", "annotation-palette.html"));
+
+  annotationPaletteWindow.on("moved", () => {
+    const [nx, ny] = annotationPaletteWindow.getPosition();
+    const currentSettings = getSettings();
+    currentSettings.palettePosition = { x: nx, y: ny };
+    const { saveSettings } = require("../utils/settings");
+    saveSettings(currentSettings);
+  });
+
+  // Apply capture exclusion based on user settings
+  applyExclusionSettings();
 }

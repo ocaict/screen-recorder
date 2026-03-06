@@ -51,7 +51,9 @@ const DEFAULT_SETTINGS = {
 
   scheduledRecording: false,
   scheduleTime: "09:00",
-  miniWindowPosition: null
+  miniWindowPosition: null,
+  recordMiniControls: false,
+  recordAnnotationPalette: false
 };
 
 

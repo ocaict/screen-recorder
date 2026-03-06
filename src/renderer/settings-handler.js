@@ -92,6 +92,8 @@ class SettingsHandler {
     setEl("settingsShortcutKey", s.shortcutKey || "F9");
     setEl("settingsShowNotifications", s.showNotifications !== false, true);
     setEl("settingsCountdownSound", s.countdownSound !== false, true);
+    setEl("settingsRecordMiniControls", s.recordMiniControls || false, true);
+    setEl("settingsRecordAnnotationPalette", s.recordAnnotationPalette || false, true);
 
     if (getEl("settingsShowMiniControls")) {
       getEl("settingsShowMiniControls").checked = s.showMiniControls !== false;
@@ -278,6 +280,8 @@ class SettingsHandler {
       shortcutKey: shortcutEnabled ? getEl("settingsShortcutKey")?.value : this.app.settings.shortcutKey || "F9",
       showNotifications: getEl("settingsShowNotifications")?.checked,
       countdownSound: getEl("settingsCountdownSound")?.checked,
+      recordMiniControls: getEl("settingsRecordMiniControls")?.checked,
+      recordAnnotationPalette: getEl("settingsRecordAnnotationPalette")?.checked,
       showMiniControls: getEl("settingsShowMiniControls")?.checked,
       countdown: parseInt(getEl("settingsCountdown")?.value),
       filenamePattern: getEl("settingsFilenamePattern")?.value,

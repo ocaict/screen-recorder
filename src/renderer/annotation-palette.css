@@ -1,0 +1,144 @@
+:root {
+    --bg-dark: rgba(20, 20, 35, 0.9);
+    --accent-blue: #0984e3;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    user-select: none;
+}
+
+body {
+    background-color: transparent;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.annotation-toolbar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-dark);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-color);
+    border-radius: 40px;
+    padding: 6px 14px;
+    box-shadow: var(--shadow);
+    gap: 12px;
+    width: auto;
+    min-width: max-content;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+}
+
+.drag-handle {
+    cursor: grab;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    padding: 8px 4px;
+    display: flex;
+    align-items: center;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.tools-group,
+.colors-group,
+.actions-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.tool-btn,
+.action-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.tool-btn:hover,
+.action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+}
+
+.tool-btn.active {
+    background: var(--accent-blue);
+    color: white;
+    box-shadow: 0 4px 12px rgba(9, 132, 227, 0.3);
+}
+
+/* Color Circle Buttons */
+.color-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    background-color: var(--btn-color);
+    transition: all 0.2s;
+    position: relative;
+    padding: 0;
+}
+
+.color-btn:hover {
+    transform: scale(1.2);
+    border-color: white;
+}
+
+.color-btn.active {
+    border-color: white;
+    box-shadow: 0 0 10px var(--btn-color);
+    transform: scale(1.1);
+}
+
+.divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+}
+
+.close-btn:hover {
+    background: rgba(255, 94, 87, 0.2);
+    color: #ff5e57;
+}
+
+/* Tooltips */
+[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    top: -34px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 100;
+}

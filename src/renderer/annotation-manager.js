@@ -23,7 +23,7 @@ class AnnotationManager {
 
   init() {
     this.createCanvas();
-    this.setupToolbar();
+    this.setupPaletteSync();
     this.setupKeyboardShortcuts();
   }
 
@@ -90,55 +90,22 @@ class AnnotationManager {
     this.canvas.addEventListener("touchend", this.canvasTouchendHandler);
   }
 
-  setupToolbar() {
-    this.toolbar = document.getElementById("annotationToolbar");
-    this.toolBtns = document.querySelectorAll(".annotation-btn[data-tool]");
-    this.colorBtns = document.querySelectorAll(".annotation-color-btn");
-    this.undoBtn = document.getElementById("annotationUndo");
-    this.clearBtn = document.getElementById("annotationClear");
-    this.closeBtn = document.getElementById("annotationClose");
+  setupPaletteSync() {
+    // Listen for updates from the Palette window
+    if (window.electronAPI?.onAnnotationPaletteSettings) {
+      window.electronAPI.onAnnotationPaletteSettings((settings) => {
+        if (settings.tool) this.updateToolUI(settings.tool);
+        if (settings.color) this.updateColorUI(settings.color);
+      });
+    }
+  }
 
-    this.toolBtns.forEach((btn) => {
-      btn._selectHandler = () => {
-        this.toolBtns.forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        this.currentTool = btn.dataset.tool;
-        // Sync configuration with the overlay process
-        if (window.electronAPI?.sendOverlaySettings) {
-          window.electronAPI.sendOverlaySettings({ tool: this.currentTool });
-        }
-      };
-      btn.addEventListener("click", btn._selectHandler);
-    });
+  updateToolUI(tool) {
+    this.currentTool = tool;
+  }
 
-    this.colorBtns.forEach((btn) => {
-      btn._selectHandler = () => {
-        this.colorBtns.forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        this.currentColor = btn.dataset.color;
-        // Sync color configuration with the overlay process
-        if (window.electronAPI?.sendOverlaySettings) {
-          window.electronAPI.sendOverlaySettings({ color: this.currentColor });
-        }
-      };
-      btn.addEventListener("click", btn._selectHandler);
-    });
-
-    this.undoBtn._clickHandler = () => this.undo();
-    this.undoBtn?.addEventListener("click", this.undoBtn._clickHandler);
-
-    this.clearBtn._clickHandler = () => this.clearAll();
-    this.clearBtn?.addEventListener("click", this.clearBtn._clickHandler);
-
-    this.closeBtn._clickHandler = () => {
-      // Call the parent app's toggleAnnotation to properly tear down the overlay
-      if (this.app && typeof this.app.toggleAnnotation === "function") {
-        this.app.toggleAnnotation();
-      } else {
-        this.deactivate(false);
-      }
-    };
-    this.closeBtn?.addEventListener("click", this.closeBtn._clickHandler);
+  updateColorUI(color) {
+    this.currentColor = color;
   }
 
   setupKeyboardShortcuts() {
@@ -176,9 +143,6 @@ class AnnotationManager {
 
   setTool(tool) {
     this.currentTool = tool;
-    this.toolBtns.forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tool === tool);
-    });
     if (window.electronAPI?.sendOverlaySettings) {
       window.electronAPI.sendOverlaySettings({ tool: this.currentTool });
     }
@@ -225,27 +189,34 @@ class AnnotationManager {
     this.redrawHistory();
   }
 
-  activate(isActiveOverlay = false) {
+  activate(showToolbar = true) {
     if (this.isActive) return;
-
     this.isActive = true;
-    this.isActiveOverlay = isActiveOverlay;
-    this.toolbar.classList.remove("hidden");
+    this.isActiveOverlay = true;
 
-    // Only show local canvases if we are NOT in overlay mode
-    if (!isActiveOverlay) {
-      this.canvas.classList.add("active");
-      this.tempCanvas.classList.add("active");
+    // Show the floating palette instead of the inline toolbar
+    if (window.electronAPI?.toggleAnnotationPalette) {
+      window.electronAPI.toggleAnnotationPalette(true);
+    } else if (showToolbar && this.toolbar) {
+      // Fallback to inline if API missing (safety)
+      this.toolbar.classList.remove("hidden");
     }
 
-    this.app.showToast(isActiveOverlay ? "Screen Annotation Active" : "Local Annotation Active", "info");
+    if (this.app) {
+      this.app.overlayAnnotationActive = true;
+    }
   }
 
-  deactivate(clearContent = false) {
-    if (!this.isActive) return;
-
+  deactivate(hideToolbar = true) {
     this.isActive = false;
-    this.toolbar.classList.add("hidden");
+
+    // Hide the floating palette
+    if (window.electronAPI?.toggleAnnotationPalette) {
+      window.electronAPI.toggleAnnotationPalette(false);
+    } else if (hideToolbar && this.toolbar) {
+      this.toolbar.classList.add("hidden");
+    }
+
     this.canvas.classList.remove("active");
     this.tempCanvas.classList.remove("active");
     this.isActiveOverlay = false;
@@ -255,8 +226,8 @@ class AnnotationManager {
       this.textInput = null;
     }
 
-    if (clearContent) {
-      this.clearAll();
+    if (this.app) {
+      this.app.overlayAnnotationActive = false;
     }
   }
 
@@ -657,48 +628,11 @@ class AnnotationManager {
       this.keydownHandler = null;
     }
 
-    // Clean up toolbar listeners
-    if (this.toolBtns) {
-      this.toolBtns.forEach((btn) => {
-        if (btn._selectHandler) {
-          btn.removeEventListener("click", btn._selectHandler);
-          delete btn._selectHandler;
-        }
-      });
-    }
-
-    if (this.colorBtns) {
-      this.colorBtns.forEach((btn) => {
-        if (btn._selectHandler) {
-          btn.removeEventListener("click", btn._selectHandler);
-          delete btn._selectHandler;
-        }
-      });
-    }
-
-    if (this.undoBtn && this.undoBtn._clickHandler) {
-      this.undoBtn.removeEventListener("click", this.undoBtn._clickHandler);
-      delete this.undoBtn._clickHandler;
-    }
-
-    if (this.clearBtn && this.clearBtn._clickHandler) {
-      this.clearBtn.removeEventListener("click", this.clearBtn._clickHandler);
-      delete this.clearBtn._clickHandler;
-    }
-
-    if (this.closeBtn && this.closeBtn._clickHandler) {
-      this.closeBtn.removeEventListener("click", this.closeBtn._clickHandler);
-      delete this.closeBtn._clickHandler;
-    }
-
-    // Clear references
     this.canvas = null;
     this.ctx = null;
     this.tempCanvas = null;
     this.tempCtx = null;
     this.toolbar = null;
-    this.toolBtns = null;
-    this.colorBtns = null;
     this.undoBtn = null;
     this.clearBtn = null;
     this.closeBtn = null;

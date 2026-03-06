@@ -649,6 +649,12 @@ class ScreenRecorder {
       this.showToast("Video conversion started in background", "info");
     });
 
+    if (window.electronAPI.onToggleAnnotationExternal) {
+      window.electronAPI.onToggleAnnotationExternal(() => {
+        this.toggleAnnotation();
+      });
+    }
+
     window.electronAPI.onConversionProgress((progress) => {
       if (this.isQuitting) return;
       if (progress && progress.warning) {
@@ -753,27 +759,27 @@ class ScreenRecorder {
   }
 
   async loadSettings() {
-    return this.settingsHandler.loadSettings();
+    return this.settingsHandler?.loadSettings();
   }
 
   async loadRecentRecordings() {
-    return this.recentRecordingsManager.loadRecentRecordings();
+    return this.recentRecordingsManager?.loadRecentRecordings();
   }
 
   displayRecentRecordings(recordings) {
-    return this.recentRecordingsManager.displayRecentRecordings(recordings);
+    return this.recentRecordingsManager?.displayRecentRecordings(recordings);
   }
 
   formatFileSize(bytes) {
-    return this.uiManager.formatFileSize(bytes);
+    return this.uiManager?.formatFileSize(bytes);
   }
 
   async loadRecentRecordings() {
-    return this.recentRecordingsManager.loadRecentRecordings();
+    return this.recentRecordingsManager?.loadRecentRecordings();
   }
 
   displayRecentRecordings(recordings) {
-    return this.recentRecordingsManager.displayRecentRecordings(recordings);
+    return this.recentRecordingsManager?.displayRecentRecordings(recordings);
   }
 
   updateQuickSettings() {
@@ -956,11 +962,11 @@ class ScreenRecorder {
   }
 
   formatFileSize(bytes) {
-    return this.uiManager.formatFileSize(bytes);
+    return this.uiManager?.formatFileSize(bytes);
   }
 
   updateFileSizeEstimate() {
-    return this.timerControls.updateFileSizeEstimate();
+    return this.timerControls?.updateFileSizeEstimate();
   }
 
   updateQuickSettings() {
@@ -1106,8 +1112,8 @@ class ScreenRecorder {
 
   togglePause() {
     if (
-      !this.recordingManager.isRecording ||
-      !this.recordingManager.mediaRecorder
+      !this.recordingManager?.isRecording ||
+      !this.recordingManager?.mediaRecorder
     )
       return;
 
@@ -1131,11 +1137,10 @@ class ScreenRecorder {
       }
       this.overlayAnnotationActive = false;
       this.annotationToggleBtn.classList.remove("active");
-      this.annotationToggleBtn.querySelector("span").textContent = "Annotate";
 
-      // Also hide the tools toolbar in the main app
+      // Hide the floating palette
       if (this.annotationManager) {
-        this.annotationManager.deactivate(true);
+        this.annotationManager.deactivate();
       }
 
       this.showToast("Annotation overlay hidden", "info");
@@ -1173,12 +1178,10 @@ class ScreenRecorder {
       }
       this.overlayAnnotationActive = true;
       this.annotationToggleBtn.classList.add("active");
-      this.annotationToggleBtn.querySelector("span").textContent = "Drawing";
 
-      // Also show the tools toolbar in the main app
+      // Also show the tools toolbar (floating palette) in the main app
       if (this.annotationManager) {
-        this.annotationManager.clearAll(); // Clear any leftover drawings
-        this.annotationManager.activate(true);
+        this.annotationManager.activate();
       }
 
       this.showToast(
@@ -1216,15 +1219,17 @@ class ScreenRecorder {
     if (this.pillTime) this.pillTime.textContent = "00:00";
 
     this.recordingStats?.classList.remove("hidden");
-    this.recordingManager.recordedBytes = 0;
-    this.recordingManager.updateRecordingStats();
+    if (this.recordingManager) {
+      this.recordingManager.recordedBytes = 0;
+      this.recordingManager.updateRecordingStats();
+    }
     this.hideQuickSettings();
 
     this.hotkeyKey.textContent = this.settings.shortcutKey || "F9";
     this.hotkeyOverlay.classList.remove("hidden");
 
     // Show/Update Webcam Controls
-    if (this.settings.webcamEnabled && this.recordingManager.webcamStream) {
+    if (this.settings.webcamEnabled && this.recordingManager?.webcamStream) {
       if (window.electronAPI.toggleCameraWindow) {
         window.electronAPI.toggleCameraWindow(true);
       }
@@ -1359,7 +1364,7 @@ class ScreenRecorder {
       normX = Math.max(0, Math.min(1, normX));
       normY = Math.max(0, Math.min(1, normY));
 
-      if (this.recordingManager.compositorWorker) {
+      if (this.recordingManager?.compositorWorker) {
         this.recordingManager.compositorWorker.postMessage({
           type: "updateSettings",
           payload: {
@@ -1379,7 +1384,7 @@ class ScreenRecorder {
 
   updateUIForStopped() {
     this.stopCameraSyncTask();
-    this.recordingManager.stopCurrentStream();
+    this.recordingManager?.stopCurrentStream();
     this.recordingManager.selectedRegion = null;
 
     if (this.cropDrawId) {
@@ -1427,13 +1432,12 @@ class ScreenRecorder {
     this.stopBtn.disabled = true;
     this.annotationToggleBtn.disabled = true;
     this.annotationToggleBtn.classList.remove("active");
-    this.annotationToggleBtn.querySelector("span").textContent = "Annotate";
     this.selectSourceBtn.disabled = false;
     this.stopBtn.classList.remove("recording");
     this.recordingIndicator.classList.add("hidden");
     this.recordingPill?.classList.add("hidden");
     this.recordingStats?.classList.add("hidden");
-    this.recordingManager.stopAudioMeter();
+    this.recordingManager?.stopAudioMeter();
     this.hotkeyOverlay.classList.add("hidden");
     if (this.webcamPreviewVideo) this.webcamPreviewVideo.srcObject = null;
 
@@ -1446,8 +1450,13 @@ class ScreenRecorder {
       window.electronAPI.hideOverlay().catch(() => { });
       this.overlayAnnotationActive = false;
     }
-    this.annotationManager?.deactivate(true);
-    this.recordingManager.isPaused = false;
+    if (this.annotationManager) {
+      this.annotationManager.clearAll();
+      this.annotationManager.deactivate(true);
+    }
+    if (this.recordingManager) {
+      this.recordingManager.isPaused = false;
+    }
     this.showQuickSettings();
     this.timerPreset = 0;
     document.querySelectorAll(".timer-preset").forEach((btn) => {
@@ -1461,13 +1470,13 @@ class ScreenRecorder {
     const newEmptyBtn = document.getElementById("emptySourceBtn");
     if (newEmptyBtn) {
       newEmptyBtn.addEventListener("click", () =>
-        this.sourceManager.openSourceModal(),
+        this.sourceManager?.openSourceModal(),
       );
     }
   }
 
   openSettingsModal() {
-    return this.settingsHandler.openSettingsModal();
+    return this.settingsHandler?.openSettingsModal();
   }
 
   populateSettingsUI() {
@@ -1787,19 +1796,19 @@ class ScreenRecorder {
   }
 
   async saveSettings() {
-    return this.settingsHandler.saveSettings();
+    return this.settingsHandler?.saveSettings();
   }
 
   updateTimerPresetFromSettings() {
-    return this.settingsHandler.updateTimerPresetFromSettings();
+    return this.settingsHandler?.updateTimerPresetFromSettings();
   }
 
   closeModal(modal) {
-    this.uiManager.closeModal(modal);
+    this.uiManager?.closeModal(modal);
   }
 
   openModal(modal) {
-    this.uiManager.openModal(modal);
+    this.uiManager?.openModal(modal);
   }
 
   async toggleMaximize() {

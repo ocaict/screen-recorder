@@ -143,5 +143,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getCameraWindowBounds: () => ipcRenderer.invoke("get-camera-window-bounds"),
   setRecordingState: (recording, isPaused = false) =>
     ipcRenderer.invoke("set-recording-state", recording, isPaused),
+  onToggleAnnotationExternal: (callback) =>
+    ipcRenderer.on("toggle-annotation-external", () => callback()),
+
+  // Sync with Annotation Palette
+  sendAnnotationPaletteSettings: (settings) =>
+    ipcRenderer.send("annotation-settings-sync", settings),
+  onAnnotationPaletteSettings: (callback) =>
+    ipcRenderer.on("annotation-settings-update", (_, settings) => callback(settings)),
 });
 

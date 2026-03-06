@@ -10,6 +10,7 @@ class RecordingManager {
     this.recordedChunks = [];
     this.isRecording = false;
     this.isPaused = false;
+    this.accumulatedTime = 0;
     this.selectedSource = null;
     this.selectedRegion = null;
     this.selectedAudioDevice = null;
@@ -181,7 +182,7 @@ class RecordingManager {
   }
 
   async setupWebcamStream(force = false) {
-    if (!!this.app.settings.webcamEnabled !== true && !this.app.settings.webcamEnabled) return null;
+    if (!force && !this.app.settings.webcamEnabled) return null;
 
     if (this._webcamInitializing) {
       console.log("[Webcam Debug] Initialization already in progress, waiting...");
@@ -743,7 +744,8 @@ class RecordingManager {
   startRecordingTimer() {
     let lastTimeStr = "";
     this.recordingTimer = setInterval(() => {
-      const elapsed = Date.now() - this.recordingStartTime;
+      const currentElapsed = this.isPaused ? 0 : (Date.now() - this.recordingStartTime);
+      const elapsed = this.accumulatedTime + currentElapsed;
       const timeStr = this.formatTime(elapsed);
       this.app.recordingTime.textContent = timeStr;
 
@@ -829,206 +831,19 @@ class RecordingManager {
       silencer.connect(context.destination);
 
       const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
+      let lastVolUpdate = 0;
 
       this.audioMeterNode.port.onmessage = (event) => {
         if (!bars) return;
 
         let scalarVol = event.data.volume; // Float 0.0 - 1.0
 
-        // Dynamically style visual volume bars using off-loaded mathematics
-        bars.forEach((bar, index) => {
-          let requiredThreshold = (index + 1) / bars.length;
-
-          if (scalarVol >= requiredThreshold - 0.02) {
-            const height = Math.max(4, 20); // Maximum bar visual height
-            bar.style.height = `${height}px`;
-            bar.classList.add("active");
-
-            if (index > bars.length * 0.75) {
-              bar.classList.add("high");
-            } else if (index > bars.length * 0.4) {
-              bar.classList.add("medium");
-            } else {
-              bar.classList.remove("high", "medium");
-            }
-          } else {
-            bar.style.height = `4px`; // Resting state
-            bar.classList.remove("active", "medium", "high");
-          }
-        });
-      };
-
-    } catch (err) {
-      console.warn("Audio worklet initialization failed:", err);
-    }
-  }
-
-  stopAudioMeter() {
-    if (this.audioAnimationId) {
-      cancelAnimationFrame(this.audioAnimationId);
-      this.audioAnimationId = null;
-    }
-
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-
-    this.audioAnalyser = null;
-    this.app.audioMeter?.classList.add("hidden");
-
-    const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
-    bars?.forEach((bar) => {
-      bar.style.height = "4px";
-      bar.classList.remove("active", "medium", "high");
-    });
-  }
-
-  async startRecording() {
-    if (this.isRecording) {
-      this.app.showToast("Recording already in progress", "error");
-      return;
-    }
-
-    if (!this.selectedSource && !this.selectedRegion) {
-      this.app.showToast("Please select a screen or region first", "error");
-      return;
-    }
-
-    if (
-      this.selectedSource &&
-      (!this.videoStream || !this.videoStream.active)
-    ) {
-      this.app.showToast(
-        "Source stream is no longer active. Please select source again.",
-        "error",
-      );
-      return;
-    }
-
-    if (
-      this.selectedRegion &&
-      this.selectedRegion.width &&
-      this.selectedRegion.height
-    ) {
-      // For region capture, we just need to ensure we have the raw screen source ready.
-      // We don't call setupRegionStream(true) here because that would start a redundant worker.
-      // Instead, we just refresh the selectedSource if needed.
-      if (!this.selectedSource) {
-        try {
-          const sources = await window.electronAPI.getCaptureSources();
-          this.selectedSource = sources?.find((s) => s.id.startsWith("screen:"));
-        } catch (e) {
-          console.error("Failed to refresh sources for region:", e);
+        // Periodically notify main process/mini controls (approx 10 times/sec)
+        const now = Date.now();
+        if (now - lastVolUpdate > 100 && window.electronAPI.sendRecordingVolumeUpdate) {
+          window.electronAPI.sendRecordingVolumeUpdate(scalarVol);
+          lastVolUpdate = now;
         }
-      }
-
-      if (!this.selectedSource) {
-        this.app.showToast("Screen source not found for region capture", "error");
-        return;
-      }
-    }
-
-    const countdownSeconds = this.app.settings.countdown || 0;
-
-    if (countdownSeconds > 0) {
-    }
-  }
-
-  startRecordingTimer() {
-    let lastTimeStr = "";
-    this.recordingTimer = setInterval(() => {
-      const elapsed = Date.now() - this.recordingStartTime;
-      const timeStr = this.formatTime(elapsed);
-      this.app.recordingTime.textContent = timeStr;
-
-      // Update Mini Controls Timer only if the string changed (reduces IPC load)
-      if (timeStr !== lastTimeStr && window.electronAPI.sendRecordingTimerUpdate) {
-        window.electronAPI.sendRecordingTimerUpdate(timeStr);
-        lastTimeStr = timeStr;
-      }
-
-      if (this.app.pillTime) {
-        const totalSeconds = Math.floor(elapsed / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        this.app.pillTime.textContent = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-      }
-      this.updateRecordingStats();
-    }, 1000);
-  }
-
-  updateRecordingStats() {
-    if (!this.selectedSource) return;
-
-    const resolution = this.app.settings.resolution || "1920x1080";
-    const frameRate = this.app.settings.frameRate || 24;
-    const resLabel =
-      resolution === "1920x1080"
-        ? "1080p"
-        : resolution === "1280x720"
-          ? "720p"
-          : resolution === "2560x1440"
-            ? "1440p"
-            : resolution === "3840x2160"
-              ? "4K"
-              : resolution === "native"
-                ? "Native"
-                : resolution;
-
-    const estimatedFps = frameRate;
-    const sizeStr = this.app.formatFileSize(this.recordedBytes);
-
-    if (this.app.statFps) this.app.statFps.textContent = estimatedFps;
-    if (this.app.statSize) this.app.statSize.textContent = sizeStr;
-    if (this.app.statRes) this.app.statRes.textContent = resLabel;
-  }
-
-  formatTime(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return [hours, minutes, seconds]
-      .map((v) => v.toString().padStart(2, "0"))
-      .join(":");
-  }
-
-  async startAudioMeter(audioStream) {
-    const streamToMeter = audioStream || this.audioStream;
-    if (!streamToMeter) return;
-
-    this.app.audioMeter?.classList.remove("hidden");
-
-    try {
-      const context = await this.getAudioContext();
-
-      // Load Worklet to process audio securely off the main UI thread
-
-      try {
-        await context.audioWorklet.addModule("meter-processor.js");
-      } catch (e) {
-        // Module might already be added
-      }
-
-      this.audioMeterNode = new AudioWorkletNode(context, "meter-processor");
-      const source = context.createMediaStreamSource(streamToMeter);
-
-      // Use a silent gain node to pull data through the worklet without playing it to speakers
-      // This prevents audio feedback/echo while recording.
-      const silencer = context.createGain();
-      silencer.gain.value = 0;
-
-      source.connect(this.audioMeterNode);
-      this.audioMeterNode.connect(silencer);
-      silencer.connect(context.destination);
-
-      const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
-
-      this.audioMeterNode.port.onmessage = (event) => {
-        if (!bars) return;
-
-        let scalarVol = event.data.volume; // Float 0.0 - 1.0
 
         // Dynamically style visual volume bars using off-loaded mathematics
         bars.forEach((bar, index) => {
@@ -1078,6 +893,7 @@ class RecordingManager {
       bar.classList.remove("active", "medium", "high");
     });
   }
+
 
   async startRecording() {
     if (this.isRecording) {
@@ -1403,6 +1219,8 @@ class RecordingManager {
 
       this.mediaRecorder.start(100);
       this.isRecording = true;
+      this.isPaused = false;
+      this.accumulatedTime = 0;
       this.recordingStartTime = Date.now();
 
       // Start performance monitoring
@@ -1536,6 +1354,8 @@ class RecordingManager {
     try {
       this.mediaRecorder.pause();
       this.isPaused = true;
+      this.accumulatedTime += Date.now() - this.recordingStartTime;
+      this.recordingStartTime = null;
 
       if (this.recordingTimer) {
         clearInterval(this.recordingTimer);
@@ -1834,7 +1654,7 @@ class RecordingManager {
     this.recordedBytes = 0;
   }
 
-  handleMiniCommand(data) {
+  async handleMiniCommand(data) {
     if (!this.isRecording) return;
 
     switch (data.action) {
@@ -1853,16 +1673,26 @@ class RecordingManager {
         // Update mini control state to reflect mic toggle
         window.electronAPI.setRecordingState(true, this.isPaused);
         break;
+      case "toggle-sys-audio":
+        // Toggle System Audio setting
+        this.app.settings.recordSystemAudio = !this.app.settings.recordSystemAudio;
+        this.app.saveSettings();
+        this.app.showToast(`System Audio ${this.app.settings.recordSystemAudio ? "Enabled" : "Disabled"}`, "info");
+        window.electronAPI.setRecordingState(true, this.isPaused);
+        break;
       case "toggle-draw":
         this.app.toggleAnnotation();
         break;
       case "toggle-presenter":
-        this.togglePresenterMode();
+        await this.togglePresenterMode();
+        break;
+      case "toggle-webcam":
+        await this.toggleWebcam();
         break;
     }
   }
 
-  togglePresenterMode() {
+  async togglePresenterMode() {
     if (!this.compositorWorker) {
       console.warn('[Presenter] No compositorWorker, aborting');
       return;
@@ -1912,9 +1742,52 @@ class RecordingManager {
     }
 
     // 3. Save + update mini button state
-    this.app.saveSettings();
+    await this.app.saveSettings();
+    this.app.showToast(`Presenter Mode ${newMode === "center" ? "Enabled" : "Disabled"}`, "info");
     window.electronAPI.setRecordingState(true, this.isPaused);
     console.log('[Presenter] Done - isPaused:', this.isPaused);
+  }
+
+  async toggleWebcam() {
+    this.app.settings.webcamEnabled = !this.app.settings.webcamEnabled;
+    await this.app.saveSettings();
+
+    const isEnabled = this.app.settings.webcamEnabled;
+    console.log(`[Webcam] Toggling webcam to: ${isEnabled}`);
+
+    // Update compositor worker if active
+    if (this.compositorWorker) {
+      if (isEnabled) {
+        if (!this.webcamStream || !this.webcamStream.active) {
+          await this.setupWebcamStream(true);
+        }
+
+        if (this.webcamStream && this.webcamStream.active) {
+          const webcamTrack = this.webcamStream.getVideoTracks()[0].clone();
+          const webcamProcessor = new MediaStreamTrackProcessor({ track: webcamTrack });
+          const webcamReadable = webcamProcessor.readable;
+
+          this.compositorWorker.postMessage({
+            type: "initStreams",
+            payload: { webcamStream: webcamReadable }
+          }, [webcamReadable]);
+        }
+      }
+
+      this.compositorWorker.postMessage({
+        type: "updateSettings",
+        payload: { includeWebcam: isEnabled }
+      });
+    }
+
+    // Update the actual webcam preview window if it exists
+    if (window.electronAPI.toggleCameraWindow) {
+      await window.electronAPI.toggleCameraWindow(isEnabled);
+    }
+
+    this.app.showToast(`Webcam ${isEnabled ? "Enabled" : "Disabled"}`, "info");
+    window.electronAPI.setRecordingState(true, this.isPaused);
+    console.log('[Webcam] Done, state synced');
   }
 }
 

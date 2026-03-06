@@ -1,4 +1,4 @@
-const { app, BrowserWindow, protocol, net } = require("electron");
+const { app, BrowserWindow, protocol, net, screen } = require("electron");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { setupLogger, log } = require("../utils/logger");
@@ -199,6 +199,7 @@ module.exports = {
   getMainWindow: () => mainWindow,
   getOverlayWindow: () => overlayWindow,
   getMiniControlsWindow: () => miniControlsWindow,
+  createMiniControlsWindow,
   getCameraWindow: () => cameraWindow,
 };
 
@@ -346,23 +347,76 @@ function createOverlayWindow() {
 }
 
 function createMiniControlsWindow() {
+  const { getSettings, saveSettings } = require("../utils/settings");
+  const settings = getSettings();
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { x: pX, y: pY, width: pW, height: pH } = primaryDisplay.bounds;
+
+  let x = settings.miniWindowPosition?.x;
+  let y = settings.miniWindowPosition?.y;
+
+  // Validate position is on-screen
+  const displays = screen.getAllDisplays();
+  const isOnScreen = (x !== undefined && y !== undefined) && displays.some(display => {
+    const bounds = display.bounds;
+    return x >= bounds.x && x < bounds.x + bounds.width &&
+      y >= bounds.y && y < bounds.y + bounds.height;
+  });
+
+  if (!isOnScreen || x === undefined || y === undefined) {
+    console.log('[MiniControls] Position off-screen/null, resetting to primary display bottom-center');
+    x = Math.round(pX + (pW - 480) / 2);
+    y = Math.round(pY + pH - 120);
+  }
+
+  if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+    miniControlsWindow.destroy();
+  }
+
   miniControlsWindow = new BrowserWindow({
     width: 480,
     height: 100,
+    x,
+    y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: false,
-    focusable: true,
     show: false,
-    icon: ICON_PATH,
+    resizable: false,
+    movable: true, // Allow programmatic moving
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "mini-preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
     },
+  });
+
+  // Re-establish the ref in handlers
+  const { setMiniControlsWindowRef } = require("./ipc-handlers");
+  setMiniControlsWindowRef(miniControlsWindow);
+
+  miniControlsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
+
+  // Load the file
+  const miniPath = path.join(__dirname, "..", "renderer", "mini-controls.html");
+  console.log(`[MiniControls] Loading: ${miniPath}`);
+  miniControlsWindow.loadFile(miniPath).catch(err => {
+    console.error(`[MiniControls] Failed to load HTML: ${err.message}`);
+  });
+
+  miniControlsWindow.on("moved", () => {
+    const [nx, ny] = miniControlsWindow.getPosition();
+    const currentSettings = getSettings();
+    currentSettings.miniWindowPosition = { x: nx, y: ny };
+    saveSettings(currentSettings);
+  });
+
+  miniControlsWindow.on("closed", () => {
+    miniControlsWindow = null;
   });
 
   // CRITICAL: Hide this window from screen capture/recordings
@@ -375,12 +429,4 @@ function createMiniControlsWindow() {
     }
   }
 
-  miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
-  miniControlsWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "mini-controls.html"),
-  );
-
-  miniControlsWindow.on("closed", () => {
-    miniControlsWindow = null;
-  });
 }

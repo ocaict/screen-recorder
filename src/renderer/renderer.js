@@ -1879,6 +1879,16 @@ class ScreenRecorder {
     this.uiManager.showToast(message, type);
   }
 
+  saveSettings() {
+    if (this.settingsHandler) {
+      // Return the promise from the main process call
+      const savePromise = window.electronAPI.saveSettings(this.settings);
+      this.settingsHandler.updateQuickSettings();
+      return savePromise;
+    }
+    return Promise.resolve();
+  }
+
   runCountdown(seconds) {
     return this.uiManager.runCountdown(seconds);
   }

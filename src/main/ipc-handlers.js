@@ -57,6 +57,7 @@ let cameraWindow = null;
 let dimmerWindow = null;
 let ICON_PATH = null;
 let clickHighlightHookRunning = false;
+let preFullscreenBounds = null;
 
 function setupClickHighlightHook(enabled) {
   if (!uIOhook) {
@@ -1172,6 +1173,9 @@ function setupIpcHandlers() {
       autoSave: Boolean(newSettings.autoSave),
       nvencPromptDismissed: Boolean(newSettings.nvencPromptDismissed),
       webcamEnabled: Boolean(newSettings.webcamEnabled),
+      cameraMode: ["corner", "center"].includes(newSettings.cameraMode)
+        ? newSettings.cameraMode
+        : "corner",
       selectedCamera: newSettings.selectedCamera || "default",
       webcamPosition: [
         "top-left",
@@ -1695,15 +1699,39 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.on("recording-volume-update", (_, volume) => {
+    if (miniControlsWindow && !miniControlsWindow.isDestroyed() && miniControlsWindow.isVisible()) {
+      miniControlsWindow.webContents.send("mini-volume-update", volume);
+    }
+  });
+
   // Relay command from mini window to main window
+
   ipcMain.on("mini-command", (_, data) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       // Execute command in main window context
-      if (data.action === "close-mini") {
-        if (miniControlsWindow) miniControlsWindow.hide();
+      if (data.action === "close-mini" || data.action === "hide-mini") {
+        if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+          miniControlsWindow.hide();
+        }
       } else {
         mainWindow.webContents.send("mini-command", data);
       }
+    }
+  });
+
+  ipcMain.on("get-mini-window-position", (event) => {
+    if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+      const [x, y] = miniControlsWindow.getPosition();
+      event.returnValue = { x, y };
+    } else {
+      event.returnValue = { x: 0, y: 0 };
+    }
+  });
+
+  ipcMain.on("move-mini-window", (_, x, y) => {
+    if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+      miniControlsWindow.setPosition(Math.round(x), Math.round(y));
     }
   });
 
@@ -1733,10 +1761,21 @@ function setupIpcHandlers() {
       }
 
       // Show/Hide Mini Controls
+      const settings = getSettings();
+      console.log(`[MiniControls] status: recording=${recording}, showMiniControls=${settings.showMiniControls}, winExists=${!!miniControlsWindow}`);
+
+      if (recording && settings.showMiniControls && (!miniControlsWindow || miniControlsWindow.isDestroyed())) {
+        console.log('[MiniControls] Window missing when needed, recreating...');
+        const { createMiniControlsWindow } = require("./main");
+        miniControlsWindow = createMiniControlsWindow();
+      }
+
       if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
-        const settings = getSettings();
         if (recording && settings.showMiniControls) {
+          console.log('[MiniControls] Showing mini window');
+          if (miniControlsWindow.isMinimized()) miniControlsWindow.restore();
           miniControlsWindow.show();
+          miniControlsWindow.focus(); // Ensure it takes top focus
           miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
 
           // Re-assert protection upon show for extra reliability
@@ -1757,9 +1796,12 @@ function setupIpcHandlers() {
           isPaused,
           isRecording: recording,
           recordAudio: getSettings().recordAudio,
+          recordSystemAudio: getSettings().recordSystemAudio,
+          webcamEnabled: getSettings().webcamEnabled,
           isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
           isPresenterMode: getSettings().cameraMode === "center",
         });
+
       }
 
       // Show/Hide Overlay for highlights

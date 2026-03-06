@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS = {
   compression: "balanced",
   hardwareAcceleration: "none",
   webcamEnabled: false,
+  cameraMode: "corner",
   selectedCamera: "default",
   webcamPosition: "bottom-right",
   webcamSize: "medium",
@@ -49,8 +50,10 @@ const DEFAULT_SETTINGS = {
   timerPreset: 0,
 
   scheduledRecording: false,
-  scheduleTime: "09:00"
+  scheduleTime: "09:00",
+  miniWindowPosition: null
 };
+
 
 
 

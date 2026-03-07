@@ -49,11 +49,11 @@ class RecentRecordingsManager {
         <input type="checkbox" class="recording-checkbox" ${isSelected ? "checked" : ""} aria-hidden="true" tabindex="-1">
         <div class="recent-recording-thumb">
           ${recording.thumbnailPath
-            ? `<img src="thumb://${recording.thumbnailPath}" class="recent-recording-img" alt="">`
-            : `<svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          ? `<img src="thumb://${recording.thumbnailPath}" class="recent-recording-img" alt="">`
+          : `<svg class="recent-recording-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5,3 19,12 5,21"/>
               </svg>`
-          }
+        }
         </div>
         <div class="recent-recording-info">
           <div class="recent-recording-name">${recording.fileName}</div>
@@ -165,16 +165,27 @@ class RecentRecordingsManager {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const filePath = btn.dataset.path;
-        if (confirm("Are you sure you want to delete this recording?")) {
-          try {
-            await window.electronAPI.deleteRecording(filePath);
-            this.app.selectedPaths.delete(filePath);
-            await this.loadRecentRecordings();
+        if (!confirm("Remove this recording from the recent list?")) return;
+
+        const deleteFile = confirm("Also delete the file from disk? This cannot be undone.");
+
+        try {
+          if (deleteFile) {
+            const res = await window.electronAPI.removeRecentRecordingAndFile(filePath);
+            if (!res || res.success === false) {
+              this.app.showToast(`Failed to delete file: ${res?.error ?? "unknown"}`, "error");
+              return;
+            }
             this.app.showToast("Recording deleted", "success");
-          } catch (err) {
-            console.error("Failed to delete recording:", err);
-            this.app.showToast("Failed to delete recording", "error");
+          } else {
+            await window.electronAPI.removeRecentRecording(filePath);
+            this.app.showToast("Recording removed from list", "info");
           }
+          this.app.selectedPaths.delete(filePath);
+          await this.loadRecentRecordings();
+        } catch (err) {
+          console.error("Failed to delete recording:", err);
+          this.app.showToast("Failed to delete recording", "error");
         }
       });
     });

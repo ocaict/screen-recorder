@@ -85,9 +85,11 @@ class AnnotationManager {
     this.canvas.addEventListener("mouseup", this.canvasMouseupHandler);
     this.canvas.addEventListener("mouseleave", this.canvasMouseleaveHandler);
 
-    this.canvas.addEventListener("touchstart", this.canvasTouchstartHandler);
-    this.canvas.addEventListener("touchmove", this.canvasTouchmoveHandler);
-    this.canvas.addEventListener("touchend", this.canvasTouchendHandler);
+    // { passive: false } is required because the handlers call e.preventDefault()
+    // to block scroll/zoom while drawing. Omitting this causes a browser violation warning.
+    this.canvas.addEventListener("touchstart", this.canvasTouchstartHandler, { passive: false });
+    this.canvas.addEventListener("touchmove", this.canvasTouchmoveHandler, { passive: false });
+    this.canvas.addEventListener("touchend", this.canvasTouchendHandler, { passive: true });
   }
 
   setupPaletteSync() {
@@ -717,9 +719,9 @@ class AnnotationManager {
       this.canvas.removeEventListener("mousemove", this.canvasMousemoveHandler);
       this.canvas.removeEventListener("mouseup", this.canvasMouseupHandler);
       this.canvas.removeEventListener("mouseleave", this.canvasMouseleaveHandler);
-      this.canvas.removeEventListener("touchstart", this.canvasTouchstartHandler);
-      this.canvas.removeEventListener("touchmove", this.canvasTouchmoveHandler);
-      this.canvas.removeEventListener("touchend", this.canvasTouchendHandler);
+      this.canvas.removeEventListener("touchstart", this.canvasTouchstartHandler, { passive: false });
+      this.canvas.removeEventListener("touchmove", this.canvasTouchmoveHandler, { passive: false });
+      this.canvas.removeEventListener("touchend", this.canvasTouchendHandler, { passive: true });
       this.canvas.remove();
       this.canvas = null;
     }

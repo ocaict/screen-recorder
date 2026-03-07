@@ -1593,7 +1593,7 @@ class RecordingManager {
         this.app.progressEta.textContent = "Starting...";
         if (!this.app.isQuitting) {
           this.app.processingOverlay.classList.add("active");
-          this.app.showToast("Video is being converted in background", "info");
+          // No toast here — onConversionStarted IPC fires the same message immediately after
         }
       } else {
         const message = isPartial

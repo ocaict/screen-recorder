@@ -75,9 +75,15 @@ function checkHardwareEncoders() {
   });
 }
 
+let systemFfmpegPathCache = undefined; // undefined = not yet checked; null = checked but not found
+
 function getSystemFfmpegPath() {
+  // Return cached result after first lookup to avoid repeated execSync calls
+  if (systemFfmpegPathCache !== undefined) {
+    return systemFfmpegPathCache;
+  }
+
   const { execSync } = require("child_process");
-  const { env } = require("process");
 
   const possiblePaths = [
     "C:\\ffmpeg\\bin\\ffmpeg.exe",
@@ -88,7 +94,8 @@ function getSystemFfmpegPath() {
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) {
       log("info", `Found system FFmpeg at: ${p}`);
-      return p;
+      systemFfmpegPathCache = p;
+      return systemFfmpegPathCache;
     }
   }
 
@@ -100,7 +107,8 @@ function getSystemFfmpegPath() {
     const ffmpegPath = pathResult.trim().split("\n")[0].trim();
     if (ffmpegPath && fs.existsSync(ffmpegPath)) {
       log("info", `Found system FFmpeg in PATH: ${ffmpegPath}`);
-      return ffmpegPath;
+      systemFfmpegPathCache = ffmpegPath;
+      return systemFfmpegPathCache;
     }
   } catch (err) {
     log("warn", `Could not find FFmpeg in PATH: ${err.message}`);
@@ -113,12 +121,14 @@ function getSystemFfmpegPath() {
     });
     if (result.includes("ffmpeg version")) {
       log("info", "FFmpeg available in PATH (direct call worked)");
-      return "ffmpeg";
+      systemFfmpegPathCache = "ffmpeg";
+      return systemFfmpegPathCache;
     }
   } catch (err) {
     log("warn", `Direct ffmpeg call failed: ${err.message}`);
   }
 
+  systemFfmpegPathCache = null;
   return null;
 }
 
@@ -133,6 +143,7 @@ async function getAvailableEncoders() {
 
 function resetEncoderCheck() {
   availableEncoders = null;
+  systemFfmpegPathCache = undefined; // Also reset path cache so re-scan picks up any new installs
 }
 
 function setupFfmpeg() {
@@ -177,107 +188,111 @@ function setupFfmpeg() {
 }
 
 async function convertVideo(inputPath, outputPath, onProgress) {
-  return new Promise(async (resolve, reject) => {
-    const settings = require("./settings").getSettings();
+  // Read settings synchronously (getSettings() is a pure in-memory read, safe to call here)
+  const settings = require("./settings").getSettings();
 
-    let crf = 23;
-    let preset = "medium";
-    let audioBitrate = "128k";
+  let crf = 23;
+  let preset = "medium";
+  let audioBitrate = "128k";
 
-    switch (settings.compression) {
-      case "maximum":
-        crf = 32;
-        preset = "ultrafast";
-        audioBitrate = "64k";
-        break;
-      case "balanced":
-        crf = 23;
-        preset = "medium";
-        audioBitrate = "128k";
-        break;
-      case "quality":
-        crf = 15;
-        preset = "slow";
-        audioBitrate = "192k";
-        break;
+  switch (settings.compression) {
+    case "maximum":
+      crf = 32;
+      preset = "ultrafast";
+      audioBitrate = "64k";
+      break;
+    case "balanced":
+      crf = 23;
+      preset = "medium";
+      audioBitrate = "128k";
+      break;
+    case "quality":
+      crf = 15;
+      preset = "slow";
+      audioBitrate = "192k";
+      break;
+  }
+
+  const hwAccel = settings.hardwareAcceleration || "none";
+  const preferredCodec = settings.videoCodec || "libx264";
+  const qualityMode = settings.qualityControl || "crf";
+  const selectedCrf = settings.crfValue !== undefined ? settings.crfValue : crf;
+  const selectedBitrate = (settings.videoBitrate || 5) + "M";
+  const colorFmt = settings.colorFormat || "yuv420p";
+
+  let useHwEncoder = false;
+  let selectedEncoder = null;
+  let cmd = ffmpeg(inputPath);
+
+  // Await encoders BEFORE entering the fluent-ffmpeg Promise chain to avoid
+  // the async-executor anti-pattern which can swallow rejections.
+  if (hwAccel !== "none") {
+    const encoders = await getAvailableEncoders();
+    const systemFfmpeg = getSystemFfmpegPath();
+    const isHevcRequested = preferredCodec === "libx265";
+
+    if (encoders && encoders[hwAccel] && systemFfmpeg && fs.existsSync(systemFfmpeg)) {
+      const hwEncoders = encoders[hwAccel];
+
+      if (isHevcRequested && hwEncoders.hevc) {
+        selectedEncoder = `hevc_${hwAccel}`;
+      } else if (hwEncoders.h264) {
+        selectedEncoder = `h264_${hwAccel}`;
+      }
+
+      if (selectedEncoder) {
+        useHwEncoder = true;
+        try {
+          ffmpeg.setFfmpegPath(systemFfmpeg);
+          ffmpegPath = systemFfmpeg;
+        } catch (err) {
+          log("warn", `Failed to set system FFmpeg path: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  if (useHwEncoder && selectedEncoder) {
+    cmd = cmd.outputOptions("-c:v", selectedEncoder);
+    if (hwAccel === "nvenc") {
+      cmd.outputOptions("-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString());
+      if (!selectedEncoder.includes("hevc")) cmd.outputOptions("-tune", "hq");
+    } else if (hwAccel === "qsv") {
+      cmd.outputOptions("-preset", "balanced", "-global_quality", selectedCrf.toString());
+    } else if (hwAccel === "amf") {
+      cmd.outputOptions("-quality", "balanced", "-rc", "vbr_latency");
     }
 
-    const hwAccel = settings.hardwareAcceleration || "none";
-    const preferredCodec = settings.videoCodec || "libx264";
-    const qualityMode = settings.qualityControl || "crf";
-    const selectedCrf = settings.crfValue !== undefined ? settings.crfValue : crf;
-    const selectedBitrate = (settings.videoBitrate || 5) + "M";
-    const colorFmt = settings.colorFormat || "yuv420p";
-
-    let useHwEncoder = false;
-    let selectedEncoder = null;
-    let cmd = ffmpeg(inputPath);
-
-    if (hwAccel !== "none") {
-      const encoders = await getAvailableEncoders();
-      const systemFfmpeg = getSystemFfmpegPath();
-      const isHevcRequested = preferredCodec === "libx265";
-
-      if (encoders && encoders[hwAccel] && systemFfmpeg && fs.existsSync(systemFfmpeg)) {
-        const hwEncoders = encoders[hwAccel];
-
-        if (isHevcRequested && hwEncoders.hevc) {
-          selectedEncoder = `hevc_${hwAccel}`;
-        } else if (hwEncoders.h264) {
-          selectedEncoder = `h264_${hwAccel}`;
-        }
-
-        if (selectedEncoder) {
-          useHwEncoder = true;
-          try {
-            ffmpeg.setFfmpegPath(systemFfmpeg);
-            ffmpegPath = systemFfmpeg;
-          } catch (err) {
-            log("warn", `Failed to set system FFmpeg path: ${err.message}`);
-          }
-        }
-      }
+    if (qualityMode === "vbr") {
+      cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
     }
+  } else {
+    const swCodec = preferredCodec.startsWith("lib") ? preferredCodec : "libx264";
+    cmd = cmd.outputOptions("-threads", "0")  // Use all CPU cores
+      .outputOptions("-c:v", swCodec)
+      .outputOptions("-preset", preset);
 
-    if (useHwEncoder && selectedEncoder) {
-      cmd = cmd.outputOptions("-c:v", selectedEncoder);
-      if (hwAccel === "nvenc") {
-        cmd.outputOptions("-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString());
-        if (!selectedEncoder.includes("hevc")) cmd.outputOptions("-tune", "hq");
-      } else if (hwAccel === "qsv") {
-        cmd.outputOptions("-preset", "balanced", "-global_quality", selectedCrf.toString());
-      } else if (hwAccel === "amf") {
-        cmd.outputOptions("-quality", "balanced", "-rc", "vbr_latency");
-      }
-
-      if (qualityMode === "vbr") {
-        cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate);
-      }
+    if (qualityMode === "crf") {
+      cmd.outputOptions("-crf", selectedCrf.toString());
     } else {
-      const swCodec = preferredCodec.startsWith("lib") ? preferredCodec : "libx264";
-      cmd = cmd.outputOptions("-threads", "0")  // Use all CPU cores
-        .outputOptions("-c:v", swCodec)
-        .outputOptions("-preset", preset);
-
-      if (qualityMode === "crf") {
-        cmd.outputOptions("-crf", selectedCrf.toString());
-      } else {
-        cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
-      }
-
-      if (swCodec === "libx265") cmd.outputOptions("-vtag", "hvc1");
+      cmd.outputOptions("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
     }
 
-    cmd = cmd
-      .outputOptions("-movflags", "+faststart")
-      .outputOptions("-pix_fmt", colorFmt)
-      .outputOptions("-r", (settings.frameRate || 24).toString())
-      .outputOptions("-c:a", "aac")
-      .outputOptions("-b:a", audioBitrate)
-      .outputOptions("-shortest")
-      .outputOptions("-avoid_negative_ts", "make_zero")
-      .format("mp4");
+    if (swCodec === "libx265") cmd.outputOptions("-vtag", "hvc1");
+  }
 
+  cmd = cmd
+    .outputOptions("-movflags", "+faststart")
+    .outputOptions("-pix_fmt", colorFmt)
+    .outputOptions("-r", (settings.frameRate || 24).toString())
+    .outputOptions("-c:a", "aac")
+    .outputOptions("-b:a", audioBitrate)
+    .outputOptions("-shortest")
+    .outputOptions("-avoid_negative_ts", "make_zero")
+    .format("mp4");
+
+  // Now return a clean, non-async Promise — safe from swallowed rejections
+  return new Promise((resolve, reject) => {
     cmd
       .on("start", (cmdLine) => {
         log("info", `FFmpeg started: ${cmdLine}`);

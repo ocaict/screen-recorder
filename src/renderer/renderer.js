@@ -704,14 +704,14 @@ class ScreenRecorder {
         const isMerged = fileName.startsWith("Merged_");
 
         if (isGif) {
+          // GIF exports don't show the action toast, so keep this notification
           this.showToast(`GIF exported successfully: ${fileName}`, "success");
         } else if (isMerged) {
+          // Merge completions don't show the action toast, so keep this notification
           this.showToast("Videos merged successfully", "success");
-        } else if (isMp4) {
-          this.showToast(`Conversion complete: ${fileName}`, "success");
-        } else {
-          this.showToast(`Recording saved: ${fileName}`, "success");
         }
+        // For regular MP4/WebM recordings: showCompletionOptions (below) renders the
+        // full action toast with Play / Open Location / Trim — no plain toast needed.
 
         try {
           const settings = await window.electronAPI.getSettings();

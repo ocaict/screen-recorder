@@ -1,4 +1,7 @@
-const { ipcRenderer } = require("electron");
+// camera.js — Floating camera window renderer
+// Uses window.cameraAPI (injected by camera-preload.js) instead of
+// direct ipcRenderer access. contextIsolation is now ON for this window.
+
 const cameraVideo = document.getElementById('cameraVideo');
 let currentStream = null;
 
@@ -6,6 +9,7 @@ async function startCamera(deviceId = "default") {
     try {
         if (currentStream) {
             currentStream.getTracks().forEach(t => t.stop());
+            currentStream = null;
         }
 
         const constraints = {
@@ -29,13 +33,14 @@ async function startCamera(deviceId = "default") {
     }
 }
 
-// Listen for updates from the main process
-ipcRenderer.on("update-camera", (event, deviceId) => {
+// Listen for updates from the main process (via secure preload bridge)
+window.cameraAPI.onUpdateCamera((deviceId) => {
     startCamera(deviceId);
 });
 
-ipcRenderer.on("presenter-mode", (event, active) => {
+window.cameraAPI.onPresenterMode((active) => {
     const container = document.querySelector('.camera-container');
+    if (!container) return;
     if (active) {
         container.style.borderColor = "#c084fc"; // Lighter purple
         container.style.boxShadow = "0 0 30px rgba(139, 92, 246, 0.8)";
@@ -45,7 +50,7 @@ ipcRenderer.on("presenter-mode", (event, active) => {
     }
 });
 
-ipcRenderer.on("camera-status", (event, enabled) => {
+window.cameraAPI.onCameraStatus((enabled) => {
     if (!enabled && currentStream) {
         currentStream.getTracks().forEach(t => t.stop());
         currentStream = null;
@@ -55,5 +60,5 @@ ipcRenderer.on("camera-status", (event, enabled) => {
     }
 });
 
-// Start the default camera initially
+// Start the default camera on load
 startCamera();

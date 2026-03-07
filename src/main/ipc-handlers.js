@@ -438,7 +438,32 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
   }
 }
 
+/**
+ * Security guard: only allow opening paths that resolve inside known safe roots.
+ * Prevents path-traversal tricks if a renderer bug passes untrusted input.
+ */
+function isPathAllowed(filePath) {
+  try {
+    const resolved = path.resolve(filePath);
+    const settings = getSettings();
+    const allowedRoots = [
+      path.resolve(settings.outputDirectory || app.getPath("videos")),
+      path.resolve(app.getPath("videos")),
+      path.resolve(app.getPath("userData")),
+      path.resolve(app.getPath("temp")),
+      path.resolve(app.getPath("downloads")),
+    ];
+    return allowedRoots.some((root) => resolved.startsWith(root + path.sep) || resolved === root);
+  } catch {
+    return false;
+  }
+}
+
 function openFileLocation(filePath) {
+  if (!isPathAllowed(filePath)) {
+    log("warn", `openFileLocation: path outside allowed directories — blocked: ${filePath}`);
+    return;
+  }
   if (fs.existsSync(filePath)) {
     shell.showItemInFolder(filePath);
   } else {
@@ -447,6 +472,10 @@ function openFileLocation(filePath) {
 }
 
 async function openFile(filePath) {
+  if (!isPathAllowed(filePath)) {
+    log("warn", `openFile: path outside allowed directories — blocked: ${filePath}`);
+    return;
+  }
   if (fs.existsSync(filePath)) {
     await shell.openPath(filePath);
   } else {
@@ -871,12 +900,6 @@ function setupIpcHandlers() {
             }
             showRecordingNotification(finalPath);
           })();
-
-          // Immediately add a placeholder to history
-          addRecentRecording(sess.finalPath, null);
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("settings-updated", getSettings());
-          }
 
           const hasBacklog = (sess.writeQueue && sess.writeQueue.length > 3) || sess.isWaitingForDrain;
           if (hasBacklog && mainWindow && !mainWindow.isDestroyed()) {

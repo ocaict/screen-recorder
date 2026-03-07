@@ -221,11 +221,13 @@ function createCameraWindow() {
     backgroundColor: "#00000000",
     hasShadow: false,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false, // Set to false to allow direct camera access if needed, though preload is safer
+      preload: path.join(__dirname, "..", "preload", "camera-preload.js"),
+      nodeIntegration: false,      // Hardened: was true
+      contextIsolation: true,      // Hardened: was false
       sandbox: false,
     },
   });
+
 
 
 
@@ -356,6 +358,8 @@ function createMiniControlsWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { x: pX, y: pY, width: pW, height: pH } = primaryDisplay.bounds;
 
+  let miniSaveTimer = null; // Debounce timer for position saves
+
   let x = settings.miniWindowPosition?.x;
   let y = settings.miniWindowPosition?.y;
 
@@ -414,9 +418,13 @@ function createMiniControlsWindow() {
 
   miniControlsWindow.on("moved", () => {
     const [nx, ny] = miniControlsWindow.getPosition();
-    const currentSettings = getSettings();
-    currentSettings.miniWindowPosition = { x: nx, y: ny };
-    saveSettings(currentSettings);
+    // Debounce: only write to disk once the user stops dragging (500ms idle)
+    clearTimeout(miniSaveTimer);
+    miniSaveTimer = setTimeout(() => {
+      const currentSettings = getSettings();
+      currentSettings.miniWindowPosition = { x: nx, y: ny };
+      saveSettings(currentSettings);
+    }, 500);
   });
 
   miniControlsWindow.on("closed", () => {
@@ -474,12 +482,18 @@ function createAnnotationPaletteWindow() {
 
   annotationPaletteWindow.loadFile(path.join(__dirname, "..", "renderer", "annotation-palette.html"));
 
+  let paletteSaveTimer = null; // Debounce timer for position saves
+
   annotationPaletteWindow.on("moved", () => {
     const [nx, ny] = annotationPaletteWindow.getPosition();
-    const currentSettings = getSettings();
-    currentSettings.palettePosition = { x: nx, y: ny };
-    const { saveSettings } = require("../utils/settings");
-    saveSettings(currentSettings);
+    // Debounce: only write to disk once the user stops dragging (500ms idle)
+    clearTimeout(paletteSaveTimer);
+    paletteSaveTimer = setTimeout(() => {
+      const currentSettings = getSettings();
+      currentSettings.palettePosition = { x: nx, y: ny };
+      const { saveSettings } = require("../utils/settings");
+      saveSettings(currentSettings);
+    }, 500);
   });
 
   // Apply capture exclusion based on user settings

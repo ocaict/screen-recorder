@@ -49,16 +49,15 @@ class AnnotationManager {
     this.tempCtx.lineCap = "round";
     this.tempCtx.lineJoin = "round";
 
-    // Store resize handler for cleanup
-    const resizeHandler = () => {
+    // Store resize handler on the instance so it can be properly cleaned up later
+    this.resizeHandler = () => {
       this.canvas.width = window.innerWidth;
       this.canvas.height = window.innerHeight;
       this.tempCanvas.width = window.innerWidth;
       this.tempCanvas.height = window.innerHeight;
       this.redrawHistory();
     };
-    window.__resizeHandler = resizeHandler;
-    window.addEventListener("resize", resizeHandler);
+    window.addEventListener("resize", this.resizeHandler);
 
     // Store canvas event handlers for cleanup
     this.canvasMousedownHandler = (e) => this.startDrawing(e);
@@ -684,7 +683,8 @@ class AnnotationManager {
   undo() {
     if (this.historyIndex < 0) return;
 
-    this.history.pop();
+    // Truncate history to current index so future draws don't re-apply undone items
+    this.history = this.history.slice(0, this.historyIndex);
     this.historyIndex--;
     this.redrawHistory();
     this.dirty = true;
@@ -692,6 +692,50 @@ class AnnotationManager {
     if (this.isActiveOverlay && window.electronAPI?.sendOverlayCommand) {
       window.electronAPI.sendOverlayCommand("undo");
     }
+  }
+
+  /**
+   * Destroy this instance: remove all DOM elements and event listeners.
+   * Call this before creating a new AnnotationManager on the same page.
+   */
+  destroy() {
+    // Remove resize listener (stored on instance, not window global)
+    if (this.resizeHandler) {
+      window.removeEventListener("resize", this.resizeHandler);
+      this.resizeHandler = null;
+    }
+
+    // Remove keyboard listener
+    if (this.keydownHandler) {
+      document.removeEventListener("keydown", this.keydownHandler);
+      this.keydownHandler = null;
+    }
+
+    // Remove canvas event listeners and DOM nodes
+    if (this.canvas) {
+      this.canvas.removeEventListener("mousedown", this.canvasMousedownHandler);
+      this.canvas.removeEventListener("mousemove", this.canvasMousemoveHandler);
+      this.canvas.removeEventListener("mouseup", this.canvasMouseupHandler);
+      this.canvas.removeEventListener("mouseleave", this.canvasMouseleaveHandler);
+      this.canvas.removeEventListener("touchstart", this.canvasTouchstartHandler);
+      this.canvas.removeEventListener("touchmove", this.canvasTouchmoveHandler);
+      this.canvas.removeEventListener("touchend", this.canvasTouchendHandler);
+      this.canvas.remove();
+      this.canvas = null;
+    }
+
+    if (this.tempCanvas) {
+      this.tempCanvas.remove();
+      this.tempCanvas = null;
+    }
+
+    if (this.textInput) {
+      this.textInput.remove();
+      this.textInput = null;
+    }
+
+    this.history = [];
+    this.historyIndex = -1;
   }
 
   clearAll() {
@@ -826,50 +870,6 @@ class AnnotationManager {
     return false;
   }
 
-  destroy() {
-    this.deactivate();
-
-    // Remove all event listeners
-    if (this.canvas) {
-      this.canvas.removeEventListener("mousedown", this.canvasMousedownHandler);
-      this.canvas.removeEventListener("mousemove", this.canvasMousemoveHandler);
-      this.canvas.removeEventListener("mouseup", this.canvasMouseupHandler);
-      this.canvas.removeEventListener(
-        "mouseleave",
-        this.canvasMouseleaveHandler,
-      );
-      this.canvas.removeEventListener(
-        "touchstart",
-        this.canvasTouchstartHandler,
-      );
-      this.canvas.removeEventListener("touchmove", this.canvasTouchmoveHandler);
-      this.canvas.removeEventListener("touchend", this.canvasTouchendHandler);
-      this.canvas.remove();
-    }
-
-    if (this.tempCanvas) {
-      this.tempCanvas.remove();
-    }
-
-    if (window.__resizeHandler) {
-      window.removeEventListener("resize", window.__resizeHandler);
-      delete window.__resizeHandler;
-    }
-
-    if (this.keydownHandler) {
-      document.removeEventListener("keydown", this.keydownHandler);
-      this.keydownHandler = null;
-    }
-
-    this.canvas = null;
-    this.ctx = null;
-    this.tempCanvas = null;
-    this.tempCtx = null;
-    this.toolbar = null;
-    this.undoBtn = null;
-    this.clearBtn = null;
-    this.closeBtn = null;
-  }
 }
 
 window.AnnotationManager = AnnotationManager;

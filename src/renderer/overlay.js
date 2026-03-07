@@ -64,6 +64,7 @@ let clickHighlightsEnabled = false;
 let hoverTimer = null;
 let mouseX = 0;
 let mouseY = 0;
+let isAnimating = false; // Guards against concurrent rAF loops
 
 // Highlight customization settings
 let highlightSettings = {
@@ -102,7 +103,8 @@ function createRipple(x, y, button, manual = false) {
         duration: manual ? highlightSettings.rippleSpeed : highlightSettings.rippleSpeed
     });
 
-    if (activeRipples.length === 1) {
+    if (!isAnimating) {
+        isAnimating = true;
         requestAnimationFrame(animateRipples);
     }
 }
@@ -246,9 +248,12 @@ function animateRipples() {
         return true;
     });
 
-    if (activeRipples.length > 0 || laserPaths.length > 0 || clickHighlightsEnabled) {
+    // Keep looping only while there is something to actually draw.
+    // Cursor glow restarts the loop from handleStealthClick on next mouse move.
+    if (activeRipples.length > 0 || laserPaths.length > 0) {
         requestAnimationFrame(animateRipples);
     } else {
+        isAnimating = false;
         tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
     }
 }
@@ -267,11 +272,10 @@ const handleStealthClick = (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
 
-    // Auto-ripple disabled for testing - click ripples now come from uiohook
-    // Kept only for cursor glow animation
-
-    // If highlights are active, keep the animation loop running for cursor glow
-    if (clickHighlightsEnabled && activeRipples.length === 0) {
+    // Restart the animation loop on mouse movement to update the cursor glow,
+    // but only if the loop is not already running.
+    if (clickHighlightsEnabled && !isAnimating) {
+        isAnimating = true;
         requestAnimationFrame(animateRipples);
     }
 };
@@ -588,16 +592,8 @@ window.electronAPI.onOverlayCommand((cmd) => {
 });
 
 
-// ── Canvas setup (for drawing) ─────────────────────────────────────────────────
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-tempCanvas.width = window.innerWidth;
-tempCanvas.height = window.innerHeight;
-ctx.lineCap = "round";
-ctx.lineJoin = "round";
-tempCtx.lineCap = "round";
-tempCtx.lineJoin = "round";
-// Note: resize listener already registered above via debouncedResize
+// NOTE: Canvas sizes and context settings are already initialized by
+// the resize() call at the top of this file (line ~44). No duplication needed.
 
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 function applyStyle(c) {

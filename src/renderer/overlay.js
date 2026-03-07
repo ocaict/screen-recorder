@@ -16,6 +16,7 @@ let history = [];
 let historyIndex = -1;
 let drawModeActive = false;
 let textInput = null;
+let laserPaths = []; // Store temporary laser trails
 // clickHighlightsEnabled moved to highlight logic section below
 
 console.log('[Overlay] Script initialized');
@@ -105,9 +106,49 @@ function createRipple(x, y, button, manual = false) {
     }
 }
 
+function createLaserPath() {
+    return {
+        points: [],
+        startTime: Date.now(),
+        color: currentColor,
+        width: 4, // Lasers look better at a fixed thin width
+        active: true
+    };
+}
+
 function animateRipples() {
     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
     const now = Date.now();
+
+    // Redraw active normal pen/shapes if we are drawing something other than laser
+    if (isDrawing && currentTool !== "laser" && currentPath.length > 0) {
+        applyStyle(tempCtx);
+        if (currentTool === "pen" || currentTool === "highlighter") {
+            tempCtx.beginPath();
+            if (currentPath.length < 3) {
+                tempCtx.moveTo(currentPath[0].x, currentPath[0].y);
+                tempCtx.lineTo(currentPath[currentPath.length - 1].x, currentPath[currentPath.length - 1].y);
+            } else {
+                tempCtx.moveTo(currentPath[0].x, currentPath[0].y);
+                let i;
+                for (i = 1; i < currentPath.length - 2; i++) {
+                    const xc = (currentPath[i].x + currentPath[i + 1].x) / 2;
+                    const yc = (currentPath[i].y + currentPath[i + 1].y) / 2;
+                    tempCtx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, xc, yc);
+                }
+                tempCtx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, currentPath[i + 1].x, currentPath[i + 1].y);
+            }
+            tempCtx.stroke();
+        } else if (currentTool === "arrow") {
+            drawArrow(tempCtx, startX, startY, mouseX, mouseY, false);
+        } else if (currentTool === "double-arrow") {
+            drawArrow(tempCtx, startX, startY, mouseX, mouseY, true);
+        } else if (currentTool === "rectangle") {
+            tempCtx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
+        } else if (currentTool === "ellipse") {
+            drawEllipse(tempCtx, startX, startY, mouseX - startX, mouseY - startY);
+        }
+    }
 
     // 1. Draw Cursor Glow (always on when highlights enabled)
     if (clickHighlightsEnabled) {
@@ -142,36 +183,71 @@ function animateRipples() {
         const elapsed = now - ripple.startTime;
         const progress = Math.min(elapsed / ripple.duration, 1);
 
-        // Calculate radius based on its unique maxRadius
         ripple.radius = 10 + (progress * (ripple.maxRadius - 10));
         ripple.opacity = 0.9 * (1 - progress);
 
-        // Draw the ripple
         tempCtx.beginPath();
         tempCtx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
 
-        // Use appropriate color based on click type
         let color;
-        if (ripple.button === 2) { // Right Click
+        if (ripple.button === 2) {
             const rightColor = hexToRgb(highlightSettings.rightColor);
             color = `rgba(${rightColor.r}, ${rightColor.g}, ${rightColor.b}, ${ripple.opacity})`;
-        } else { // Left Click
+        } else {
             const leftColor = hexToRgb(highlightSettings.leftColor);
             color = `rgba(${leftColor.r}, ${leftColor.g}, ${leftColor.b}, ${ripple.opacity})`;
         }
 
         tempCtx.strokeStyle = color;
         tempCtx.lineWidth = 3;
-
         tempCtx.stroke();
 
         return progress < 1;
     });
 
-    if (activeRipples.length > 0 || clickHighlightsEnabled) {
+    // 3. Animate and Draw Laser Paths
+    laserPaths = laserPaths.filter(laser => {
+        const elapsed = now - laser.startTime;
+        const duration = 2000; // Laser lasts 2 seconds
+        const opacity = Math.max(0, 1 - (elapsed / duration));
+
+        if (opacity <= 0) return false;
+
+        tempCtx.save();
+        tempCtx.beginPath();
+        tempCtx.strokeStyle = laser.color;
+        tempCtx.lineWidth = laser.width;
+        tempCtx.globalAlpha = opacity;
+        tempCtx.lineCap = "round";
+        tempCtx.lineJoin = "round";
+        tempCtx.shadowBlur = 8;
+        tempCtx.shadowColor = laser.color;
+
+        const pts = laser.points;
+        if (pts.length > 0) {
+            tempCtx.moveTo(pts[0].x, pts[0].y);
+            // Use smoothing for laser too
+            for (let i = 1; i < pts.length - 2; i++) {
+                const xc = (pts[i].x + pts[i + 1].x) / 2;
+                const yc = (pts[i].y + pts[i + 1].y) / 2;
+                tempCtx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+            }
+            if (pts.length > 2) {
+                const i = pts.length - 2;
+                tempCtx.quadraticCurveTo(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+            } else if (pts.length === 2) {
+                tempCtx.lineTo(pts[1].x, pts[1].y);
+            }
+            tempCtx.stroke();
+        }
+        tempCtx.restore();
+
+        return true;
+    });
+
+    if (activeRipples.length > 0 || laserPaths.length > 0 || clickHighlightsEnabled) {
         requestAnimationFrame(animateRipples);
     } else {
-        // Final clear when done
         tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
     }
 }
@@ -247,13 +323,20 @@ function handleMouseDown(e) {
     currentPath = [{ x: startX, y: startY }];
 
     // Initialize dirty rect for this new stroke, adding a bit of padding for stroke width
-    const padding = (currentTool === "highlighter" ? 20 : strokeWidth) * 2;
+    const padding = (currentTool === "highlighter" ? 30 : Math.max(strokeWidth * 4, 100));
     dirtyRect = {
         minX: startX - padding,
         minY: startY - padding,
         maxX: startX + padding,
         maxY: startY + padding
     };
+
+    if (currentTool === "laser") {
+        const newLaser = createLaserPath();
+        newLaser.points.push({ x: startX, y: startY });
+        laserPaths.push(newLaser);
+        requestAnimationFrame(animateRipples);
+    }
 
     applyStyle(tempCtx);
 
@@ -274,7 +357,10 @@ function handleMouseMove(e) {
     const y = e.clientY;
 
     // Clear only the dirty rectangle instead of the whole screen
-    tempCtx.clearRect(dirtyRect.minX, dirtyRect.minY, dirtyRect.maxX - dirtyRect.minX, dirtyRect.maxY - dirtyRect.minY);
+    // For laser tool, DO NOT clear here, let the animateRipples loop handle it
+    if (currentTool !== "laser") {
+        tempCtx.clearRect(dirtyRect.minX, dirtyRect.minY, dirtyRect.maxX - dirtyRect.minX, dirtyRect.maxY - dirtyRect.minY);
+    }
 
     // Use a larger padding to ensure arrow heads and thick strokes are fully cleared
     const padding = (currentTool === "highlighter" ? 30 : Math.max(strokeWidth * 4, 40)); // Increased padding for arrow wings
@@ -288,11 +374,27 @@ function handleMouseMove(e) {
     if (currentTool === "pen" || currentTool === "highlighter") {
         currentPath.push({ x, y });
         tempCtx.beginPath();
-        tempCtx.moveTo(currentPath[0].x, currentPath[0].y);
-        for (let i = 1; i < currentPath.length; i++) tempCtx.lineTo(currentPath[i].x, currentPath[i].y);
+        if (currentPath.length < 3) {
+            tempCtx.moveTo(currentPath[0].x, currentPath[0].y);
+            tempCtx.lineTo(x, y);
+        } else {
+            tempCtx.moveTo(currentPath[0].x, currentPath[0].y);
+            let i;
+            for (i = 1; i < currentPath.length - 2; i++) {
+                const xc = (currentPath[i].x + currentPath[i + 1].x) / 2;
+                const yc = (currentPath[i].y + currentPath[i + 1].y) / 2;
+                tempCtx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, xc, yc);
+            }
+            tempCtx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, currentPath[i + 1].x, currentPath[i + 1].y);
+        }
         tempCtx.stroke();
+    } else if (currentTool === "laser") {
+        const laser = laserPaths[laserPaths.length - 1];
+        if (laser) laser.points.push({ x, y });
     } else if (currentTool === "arrow") {
-        drawArrow(tempCtx, startX, startY, x, y);
+        drawArrow(tempCtx, startX, startY, x, y, false);
+    } else if (currentTool === "double-arrow") {
+        drawArrow(tempCtx, startX, startY, x, y, true);
     } else if (currentTool === "rectangle") {
         tempCtx.strokeRect(startX, startY, x - startX, y - startY);
     } else if (currentTool === "ellipse") {
@@ -309,19 +411,37 @@ function handleMouseUp(e) {
     const endY = e.clientY;
 
     // Clear only the dirty rectangle on the temp canvas
-    tempCtx.clearRect(Math.floor(dirtyRect.minX), Math.floor(dirtyRect.minY), Math.ceil(dirtyRect.maxX - dirtyRect.minX), Math.ceil(dirtyRect.maxY - dirtyRect.minY));
+    if (currentTool !== "laser") {
+        tempCtx.clearRect(Math.floor(dirtyRect.minX), Math.floor(dirtyRect.minY), Math.ceil(dirtyRect.maxX - dirtyRect.minX), Math.ceil(dirtyRect.maxY - dirtyRect.minY));
+    }
 
     applyStyle(ctx);
 
     if (currentTool === "pen" || currentTool === "highlighter") {
         ctx.beginPath();
-        ctx.moveTo(currentPath[0].x, currentPath[0].y);
-        for (let i = 1; i < currentPath.length; i++) ctx.lineTo(currentPath[i].x, currentPath[i].y);
+        if (currentPath.length < 3) {
+            ctx.moveTo(currentPath[0].x, currentPath[0].y);
+            ctx.lineTo(endX, endY);
+        } else {
+            ctx.moveTo(currentPath[0].x, currentPath[0].y);
+            let i;
+            for (i = 1; i < currentPath.length - 2; i++) {
+                const xc = (currentPath[i].x + currentPath[i + 1].x) / 2;
+                const yc = (currentPath[i].y + currentPath[i + 1].y) / 2;
+                ctx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, xc, yc);
+            }
+            ctx.quadraticCurveTo(currentPath[i].x, currentPath[i].y, currentPath[i + 1].x, currentPath[i + 1].y);
+        }
         ctx.stroke();
         saveHistory({ type: currentTool, path: [...currentPath], color: currentColor, strokeWidth, alpha: ctx.globalAlpha });
+    } else if (currentTool === "laser") {
+        // Laser is never saved to history
     } else if (currentTool === "arrow") {
-        drawArrow(ctx, startX, startY, endX, endY);
+        drawArrow(ctx, startX, startY, endX, endY, false);
         saveHistory({ type: "arrow", startX, startY, endX, endY, color: currentColor, strokeWidth });
+    } else if (currentTool === "double-arrow") {
+        drawArrow(ctx, startX, startY, endX, endY, true);
+        saveHistory({ type: "double-arrow", startX, startY, endX, endY, color: currentColor, strokeWidth });
     } else if (currentTool === "rectangle") {
         ctx.strokeRect(startX, startY, endX - startX, endY - startY);
         saveHistory({ type: "rectangle", x: startX, y: startY, width: endX - startX, height: endY - startY, color: currentColor, strokeWidth });
@@ -386,15 +506,24 @@ function applyStyle(c) {
     c.lineJoin = "round";
 }
 
-function drawArrow(ctx, fromX, fromY, toX, toY) {
+function drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false) {
     const headLength = 20;
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
     ctx.beginPath();
-    ctx.moveTo(fromX, fromY);
+    // Head at start
+    if (isDoubleHeaded) {
+        ctx.moveTo(fromX + headLength * Math.cos(angle + Math.PI / 6), fromY + headLength * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(fromX, fromY);
+        ctx.lineTo(fromX + headLength * Math.cos(angle - Math.PI / 6), fromY + headLength * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(fromX, fromY);
+    } else {
+        ctx.moveTo(fromX, fromY);
+    }
+
     ctx.lineTo(toX, toY);
 
-    // Combined path for arrow head
+    // Head at end
     ctx.lineTo(
         toX - headLength * Math.cos(angle - Math.PI / 6),
         toY - headLength * Math.sin(angle - Math.PI / 6),
@@ -552,13 +681,34 @@ function redrawHistory() {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         if (a.type === "pen" || a.type === "highlighter") {
-            ctx.beginPath(); ctx.moveTo(a.path[0].x, a.path[0].y);
-            for (let i = 1; i < a.path.length; i++) ctx.lineTo(a.path[i].x, a.path[i].y);
+            ctx.beginPath();
+            if (a.path.length < 3) {
+                if (a.path.length > 0) {
+                    ctx.moveTo(a.path[0].x, a.path[0].y);
+                    if (a.path.length > 1) {
+                        ctx.lineTo(a.path[a.path.length - 1].x, a.path[a.path.length - 1].y);
+                    }
+                }
+            } else {
+                ctx.moveTo(a.path[0].x, a.path[0].y);
+                let i;
+                for (i = 1; i < a.path.length - 2; i++) {
+                    const xc = (a.path[i].x + a.path[i + 1].x) / 2;
+                    const yc = (a.path[i].y + a.path[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(a.path[i].x, a.path[i].y, xc, yc);
+                }
+                ctx.quadraticCurveTo(a.path[i].x, a.path[i].y, a.path[i + 1].x, a.path[i + 1].y);
+            }
             ctx.stroke();
-        } else if (a.type === "arrow") { drawArrow(ctx, a.startX, a.startY, a.endX, a.endY); }
-        else if (a.type === "rectangle") { ctx.strokeRect(a.x, a.y, a.width, a.height); }
-        else if (a.type === "ellipse") { drawEllipse(ctx, a.x, a.y, a.width, a.height); }
-        else if (a.type === "text") {
+        } else if (a.type === "arrow") {
+            drawArrow(ctx, a.startX, a.startY, a.endX, a.endY, false);
+        } else if (a.type === "double-arrow") {
+            drawArrow(ctx, a.startX, a.startY, a.endX, a.endY, true);
+        } else if (a.type === "rectangle") {
+            ctx.strokeRect(a.x, a.y, a.width, a.height);
+        } else if (a.type === "ellipse") {
+            drawEllipse(ctx, a.x, a.y, a.width, a.height);
+        } else if (a.type === "text") {
             ctx.font = a.font;
             wrapText(ctx, a.text, a.x, a.y, a.maxWidth || canvas.width, 29);
         }

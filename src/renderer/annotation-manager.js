@@ -123,6 +123,8 @@ class AnnotationManager {
         this.setTool("highlighter");
       } else if (key === "a") {
         this.setTool("arrow");
+      } else if (key === "l") {
+        this.setTool("laser");
       } else if (key === "r") {
         this.setTool("rectangle");
       } else if (key === "e") {
@@ -272,13 +274,26 @@ class AnnotationManager {
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
       this.currentPath.push({ x, y });
       this.tempCtx.beginPath();
-      this.tempCtx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
-      for (let i = 1; i < this.currentPath.length; i++) {
-        this.tempCtx.lineTo(this.currentPath[i].x, this.currentPath[i].y);
+      if (this.currentPath.length < 3) {
+        this.tempCtx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
+        this.tempCtx.lineTo(x, y);
+      } else {
+        this.tempCtx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
+        let i;
+        for (i = 1; i < this.currentPath.length - 2; i++) {
+          const xc = (this.currentPath[i].x + this.currentPath[i + 1].x) / 2;
+          const yc = (this.currentPath[i].y + this.currentPath[i + 1].y) / 2;
+          this.tempCtx.quadraticCurveTo(this.currentPath[i].x, this.currentPath[i].y, xc, yc);
+        }
+        this.tempCtx.quadraticCurveTo(this.currentPath[i].x, this.currentPath[i].y, this.currentPath[i + 1].x, this.currentPath[i + 1].y);
       }
       this.tempCtx.stroke();
+    } else if (this.currentTool === "laser") {
+      // Laser logic is handled entirely by the overlay
     } else if (this.currentTool === "arrow") {
-      this.drawArrow(this.tempCtx, this.startX, this.startY, x, y);
+      this.drawArrow(this.tempCtx, this.startX, this.startY, x, y, false);
+    } else if (this.currentTool === "double-arrow") {
+      this.drawArrow(this.tempCtx, this.startX, this.startY, x, y, true);
     } else if (this.currentTool === "rectangle") {
       this.tempCtx.strokeRect(
         this.startX,
@@ -313,9 +328,18 @@ class AnnotationManager {
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
       this.ctx.beginPath();
-      this.ctx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
-      for (let i = 1; i < this.currentPath.length; i++) {
-        this.ctx.lineTo(this.currentPath[i].x, this.currentPath[i].y);
+      if (this.currentPath.length < 3) {
+        this.ctx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
+        this.ctx.lineTo(endX, endY);
+      } else {
+        this.ctx.moveTo(this.currentPath[0].x, this.currentPath[0].y);
+        let i;
+        for (i = 1; i < this.currentPath.length - 2; i++) {
+          const xc = (this.currentPath[i].x + this.currentPath[i + 1].x) / 2;
+          const yc = (this.currentPath[i].y + this.currentPath[i + 1].y) / 2;
+          this.ctx.quadraticCurveTo(this.currentPath[i].x, this.currentPath[i].y, xc, yc);
+        }
+        this.ctx.quadraticCurveTo(this.currentPath[i].x, this.currentPath[i].y, this.currentPath[i + 1].x, this.currentPath[i + 1].y);
       }
       this.ctx.stroke();
 
@@ -326,10 +350,23 @@ class AnnotationManager {
         strokeWidth: this.strokeWidth,
         alpha: this.currentTool === "highlighter" ? 0.4 : 1,
       });
+    } else if (this.currentTool === "laser") {
+      // Laser never saves to history
     } else if (this.currentTool === "arrow") {
-      this.drawArrow(this.ctx, this.startX, this.startY, endX, endY);
+      this.drawArrow(this.ctx, this.startX, this.startY, endX, endY, false);
       this.saveToHistory({
         type: "arrow",
+        startX: this.startX,
+        startY: this.startY,
+        endX: endX,
+        endY: endY,
+        color: this.currentColor,
+        strokeWidth: this.strokeWidth,
+      });
+    } else if (this.currentTool === "double-arrow") {
+      this.drawArrow(this.ctx, this.startX, this.startY, endX, endY, true);
+      this.saveToHistory({
+        type: "double-arrow",
         startX: this.startX,
         startY: this.startY,
         endX: endX,
@@ -376,12 +413,21 @@ class AnnotationManager {
     this.currentPath = [];
   }
 
-  drawArrow(ctx, fromX, fromY, toX, toY) {
+  drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false) {
     const headLength = 20; // Improved arrow head visibility
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
     ctx.beginPath();
-    ctx.moveTo(fromX, fromY);
+
+    if (isDoubleHeaded) {
+      ctx.moveTo(fromX + headLength * Math.cos(angle + Math.PI / 6), fromY + headLength * Math.sin(angle + Math.PI / 6));
+      ctx.lineTo(fromX, fromY);
+      ctx.lineTo(fromX + headLength * Math.cos(angle - Math.PI / 6), fromY + headLength * Math.sin(angle - Math.PI / 6));
+      ctx.moveTo(fromX, fromY);
+    } else {
+      ctx.moveTo(fromX, fromY);
+    }
+
     ctx.lineTo(toX, toY);
 
     // Draw the arrow head as a single continuous path from the tip
@@ -519,9 +565,22 @@ class AnnotationManager {
       if (action.type === "pen" || action.type === "highlighter") {
         if (action.path && action.path.length > 0) {
           this.ctx.beginPath();
-          this.ctx.moveTo(action.path[0].x, action.path[0].y);
-          for (let i = 1; i < action.path.length; i++) {
-            this.ctx.lineTo(action.path[i].x, action.path[i].y);
+          if (action.path.length < 3) {
+            if (action.path.length > 0) {
+              this.ctx.moveTo(action.path[0].x, action.path[0].y);
+              if (action.path.length > 1) {
+                this.ctx.lineTo(action.path[action.path.length - 1].x, action.path[action.path.length - 1].y);
+              }
+            }
+          } else {
+            this.ctx.moveTo(action.path[0].x, action.path[0].y);
+            let i;
+            for (i = 1; i < action.path.length - 2; i++) {
+              const xc = (action.path[i].x + action.path[i + 1].x) / 2;
+              const yc = (action.path[i].y + action.path[i + 1].y) / 2;
+              this.ctx.quadraticCurveTo(action.path[i].x, action.path[i].y, xc, yc);
+            }
+            this.ctx.quadraticCurveTo(action.path[i].x, action.path[i].y, action.path[i + 1].x, action.path[i + 1].y);
           }
           this.ctx.stroke();
         }
@@ -532,6 +591,16 @@ class AnnotationManager {
           action.startY,
           action.endX,
           action.endY,
+          false
+        );
+      } else if (action.type === "double-arrow") {
+        this.drawArrow(
+          this.ctx,
+          action.startX,
+          action.startY,
+          action.endX,
+          action.endY,
+          true
         );
       } else if (action.type === "rectangle") {
         this.ctx.strokeRect(action.x, action.y, action.width, action.height);

@@ -316,6 +316,12 @@ function handleMouseDown(e) {
         return;
     }
 
+    if (currentTool === "eraser") {
+        isDrawing = true;
+        hitTestAndErase(e.clientX, e.clientY);
+        return;
+    }
+
     isDrawing = true;
     // Use client coordinates directly for drawing on the overlay
     startX = e.clientX;
@@ -350,11 +356,79 @@ function handleMouseDown(e) {
     });
 }
 
+function hitTestAndErase(x, y) {
+    if (historyIndex < 0) return false;
+
+    let erased = false;
+    for (let h = historyIndex; h >= 0; h--) {
+        const a = history[h];
+        tempCtx.beginPath();
+
+        const testWidth = Math.max((a.strokeWidth || strokeWidth) + 15, 25);
+        tempCtx.lineWidth = testWidth;
+        tempCtx.lineCap = "round";
+        tempCtx.lineJoin = "round";
+
+        let hit = false;
+        if (a.type === "pen" || a.type === "highlighter") {
+            if (a.path.length < 3) {
+                if (a.path.length > 0) {
+                    tempCtx.moveTo(a.path[0].x, a.path[0].y);
+                    if (a.path.length > 1) {
+                        tempCtx.lineTo(a.path[a.path.length - 1].x, a.path[a.path.length - 1].y);
+                    }
+                }
+            } else {
+                tempCtx.moveTo(a.path[0].x, a.path[0].y);
+                let i;
+                for (i = 1; i < a.path.length - 2; i++) {
+                    const xc = (a.path[i].x + a.path[i + 1].x) / 2;
+                    const yc = (a.path[i].y + a.path[i + 1].y) / 2;
+                    tempCtx.quadraticCurveTo(a.path[i].x, a.path[i].y, xc, yc);
+                }
+                tempCtx.quadraticCurveTo(a.path[i].x, a.path[i].y, a.path[i + 1].x, a.path[i + 1].y);
+            }
+            hit = tempCtx.isPointInStroke(x, y);
+        } else if (a.type === "arrow" || a.type === "double-arrow") {
+            drawArrow(tempCtx, a.startX, a.startY, a.endX, a.endY, a.type === "double-arrow", false);
+            hit = tempCtx.isPointInStroke(x, y);
+        } else if (a.type === "rectangle") {
+            tempCtx.rect(a.x, a.y, a.width, a.height);
+            hit = tempCtx.isPointInStroke(x, y);
+        } else if (a.type === "ellipse") {
+            tempCtx.ellipse(a.x + a.width / 2, a.y + a.height / 2, Math.abs(a.width / 2), Math.abs(a.height / 2), 0, 0, 2 * Math.PI);
+            hit = tempCtx.isPointInStroke(x, y);
+        } else if (a.type === "text") {
+            tempCtx.rect(a.x, a.y - 30, a.maxWidth || canvas.width, 40);
+            hit = tempCtx.isPointInPath(x, y); // fill hit
+        }
+
+        if (hit) {
+            history.splice(h, 1);
+            historyIndex--;
+            erased = true;
+            window.electronAPI.sendOverlayAction({ type: "eraseItem", index: h });
+            break;
+        }
+    }
+
+    if (erased) {
+        redrawHistory();
+    }
+    return erased;
+}
+
 function handleMouseMove(e) {
     if (!isDrawing) return;
     // Use client coordinates directly for drawing on the overlay
     const x = e.clientX;
     const y = e.clientY;
+
+    if (currentTool === "eraser") {
+        hitTestAndErase(x, y);
+        window.electronAPI.sendOverlayAction({ type: "mousemove", x, y });
+        return;
+    }
 
     // Clear only the dirty rectangle instead of the whole screen
     // For laser tool, DO NOT clear here, let the animateRipples loop handle it
@@ -409,6 +483,12 @@ function handleMouseUp(e) {
     // Use client coordinates directly for drawing on the overlay
     const endX = e.clientX;
     const endY = e.clientY;
+
+    if (currentTool === "eraser") {
+        isDrawing = false;
+        window.electronAPI.sendOverlayAction({ type: "mouseup", x: endX, y: endY });
+        return;
+    }
 
     // Clear only the dirty rectangle on the temp canvas
     if (currentTool !== "laser") {
@@ -506,7 +586,7 @@ function applyStyle(c) {
     c.lineJoin = "round";
 }
 
-function drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false) {
+function drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false, doStroke = true) {
     const headLength = 20;
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
@@ -533,7 +613,7 @@ function drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false) {
         toX - headLength * Math.cos(angle + Math.PI / 6),
         toY - headLength * Math.sin(angle + Math.PI / 6),
     );
-    ctx.stroke();
+    if (doStroke) ctx.stroke();
 }
 
 function drawEllipse(c, x, y, w, h) {

@@ -131,6 +131,8 @@ class AnnotationManager {
         this.setTool("ellipse");
       } else if (key === "t") {
         this.setTool("text");
+      } else if (key === "x") {
+        this.setTool("eraser");
       } else if (key === "c") {
         this.clearAll();
       } else if (e.ctrlKey && key === "z") {
@@ -180,6 +182,10 @@ class AnnotationManager {
         font: action.font || "bold 24px sans-serif",
         maxWidth: maxW,
       });
+    } else if (action.type === "eraseItem") {
+      this.history.splice(action.index, 1);
+      this.historyIndex--;
+      this.redrawHistory();
     }
   }
 
@@ -244,6 +250,12 @@ class AnnotationManager {
     this.isDrawing = true;
     this.startX = e.clientX;
     this.startY = e.clientY;
+
+    if (this.currentTool === "eraser") {
+      this.hitTestAndErase(this.startX, this.startY);
+      return;
+    }
+
     this.currentPath = [
       {
         x: this.startX,
@@ -262,6 +274,11 @@ class AnnotationManager {
 
     const x = e.clientX;
     const y = e.clientY;
+
+    if (this.currentTool === "eraser") {
+      this.hitTestAndErase(x, y);
+      return;
+    }
 
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
     // REMOVED: redrawHistory() here was causing performance lag
@@ -317,6 +334,11 @@ class AnnotationManager {
 
     const endX = e ? e.clientX : this.startX;
     const endY = e ? e.clientY : this.startY;
+
+    if (this.currentTool === "eraser") {
+      this.isDrawing = false;
+      return;
+    }
 
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
     this.redrawHistory();
@@ -413,7 +435,71 @@ class AnnotationManager {
     this.currentPath = [];
   }
 
-  drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false) {
+  hitTestAndErase(x, y) {
+    if (this.historyIndex < 0) return false;
+
+    let erased = false;
+    for (let h = this.historyIndex; h >= 0; h--) {
+      const a = this.history[h];
+      this.tempCtx.beginPath();
+
+      const testWidth = Math.max((a.strokeWidth || this.strokeWidth) + 15, 25);
+      this.tempCtx.lineWidth = testWidth;
+      this.tempCtx.lineCap = "round";
+      this.tempCtx.lineJoin = "round";
+
+      let hit = false;
+      if (a.type === "pen" || a.type === "highlighter") {
+        if (a.path.length < 3) {
+          if (a.path.length > 0) {
+            this.tempCtx.moveTo(a.path[0].x, a.path[0].y);
+            if (a.path.length > 1) {
+              this.tempCtx.lineTo(a.path[a.path.length - 1].x, a.path[a.path.length - 1].y);
+            }
+          }
+        } else {
+          this.tempCtx.moveTo(a.path[0].x, a.path[0].y);
+          let i;
+          for (i = 1; i < a.path.length - 2; i++) {
+            const xc = (a.path[i].x + a.path[i + 1].x) / 2;
+            const yc = (a.path[i].y + a.path[i + 1].y) / 2;
+            this.tempCtx.quadraticCurveTo(a.path[i].x, a.path[i].y, xc, yc);
+          }
+          this.tempCtx.quadraticCurveTo(a.path[i].x, a.path[i].y, a.path[i + 1].x, a.path[i + 1].y);
+        }
+        hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "arrow") {
+        this.drawArrow(this.tempCtx, a.startX, a.startY, a.endX, a.endY, false, false);
+        hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "double-arrow") {
+        this.drawArrow(this.tempCtx, a.startX, a.startY, a.endX, a.endY, true, false);
+        hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "rectangle") {
+        this.tempCtx.rect(a.x, a.y, a.width, a.height);
+        hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "ellipse") {
+        this.tempCtx.ellipse(a.x + a.width / 2, a.y + a.height / 2, Math.abs(a.width / 2), Math.abs(a.height / 2), 0, 0, 2 * Math.PI);
+        hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "text") {
+        this.tempCtx.rect(a.x, a.y - 30, a.maxWidth || this.canvas.width, 40);
+        hit = this.tempCtx.isPointInPath(x, y); // fill hit
+      }
+
+      if (hit) {
+        this.history.splice(h, 1);
+        this.historyIndex--;
+        erased = true;
+        break;
+      }
+    }
+
+    if (erased) {
+      this.redrawHistory();
+    }
+    return erased;
+  }
+
+  drawArrow(ctx, fromX, fromY, toX, toY, isDoubleHeaded = false, doStroke = true) {
     const headLength = 20; // Improved arrow head visibility
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
@@ -440,7 +526,7 @@ class AnnotationManager {
       toX - headLength * Math.cos(angle + Math.PI / 6),
       toY - headLength * Math.sin(angle + Math.PI / 6),
     );
-    ctx.stroke();
+    if (doStroke) ctx.stroke();
   }
 
   drawEllipse(ctx, x, y, width, height) {

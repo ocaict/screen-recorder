@@ -104,18 +104,22 @@ const chunkSessions = new Map();
 
 // ── Ghost session cleanup sweep ─────────────────────────────────────────────
 // Runs every 5 minutes. Kills FFmpeg processes and removes temp files for
-// sessions that have been idle for more than 10 minutes (likely zombie sessions
-// caused by renderer crashes or unexpected IPC disconnects).
-const GHOST_SESSION_TTL_MS = 10 * 60 * 1000;   // 10 minutes
-const GHOST_SESSION_SWEEP_MS = 5 * 60 * 1000;   // 5 minutes
+// sessions that have been IDLE (no chunks received) for more than 15 minutes.
+// Sessions that are actively recording update lastActivityAt on every chunk,
+// so they will never be swept even if the recording runs for hours.
+const GHOST_SESSION_IDLE_TTL_MS = 15 * 60 * 1000;  // 15 min idle = truly abandoned
+const GHOST_SESSION_SWEEP_MS = 5 * 60 * 1000;   // check every 5 min
 
 setInterval(() => {
   const now = Date.now();
   for (const [sid, sess] of chunkSessions) {
-    const age = now - (sess.createdAt || now);
+    // Use lastActivityAt so actively-recording sessions are never evicted.
+    // Fall back to createdAt only if no chunk has been received yet.
+    const lastActivity = sess.lastActivityAt || sess.createdAt || now;
+    const idleMs = now - lastActivity;
     const isFinalizing = sess.isFinalizing;
-    if (!isFinalizing && age > GHOST_SESSION_TTL_MS) {
-      log("warn", `Ghost session detected: ${sid} (age ${Math.round(age / 60000)}min). Cleaning up.`);
+    if (!isFinalizing && idleMs > GHOST_SESSION_IDLE_TTL_MS) {
+      log("warn", `Ghost session detected: ${sid} (idle ${Math.round(idleMs / 60000)}min). Cleaning up.`);
       try { if (sess.ffmpegProcess) sess.ffmpegProcess.kill("SIGKILL"); } catch (e) { }
       try { if (sess.ws) sess.ws.destroy(); } catch (e) { }
       try {
@@ -731,6 +735,7 @@ function setupIpcHandlers() {
           isLive: true,
           size: 0,
           createdAt: Date.now(),
+          lastActivityAt: Date.now(),   // updated on every chunk — used by ghost sweep
           isFinalizing: false,
           initialBuffer: [],
           writeQueue: [],
@@ -747,7 +752,7 @@ function setupIpcHandlers() {
         `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`
       );
       const ws = fs.createWriteStream(tempFilePath, { flags: "w" });
-      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false, createdAt: Date.now() });
+      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false, createdAt: Date.now(), lastActivityAt: Date.now() });
       log("info", `Started WebM chunked session ${sessionId} -> ${tempFilePath}`);
       return { sessionId, tempFilePath, isLive: false };
     } catch (err) {
@@ -795,6 +800,8 @@ function setupIpcHandlers() {
         sess.ws.write(buf);
       }
 
+      // Stamp activity time so the ghost-session sweep never evicts active recordings
+      sess.lastActivityAt = Date.now();
       sess.size = (sess.size || 0) + buf.length;
     } catch (err) {
       log("error", `append-recording-chunk failed: ${err.message}`);

@@ -974,18 +974,24 @@ class ScreenRecorder {
     const frameRate = this.settings.frameRate || 24;
     const quality = this.settings.videoQuality || "high";
 
-    const resLabel =
-      resolution === "1920x1080"
-        ? "1080p"
-        : resolution === "1280x720"
-          ? "720p"
-          : resolution === "2560x1440"
-            ? "1440p"
-            : resolution === "3840x2160"
-              ? "4K"
-              : resolution === "native"
-                ? "Native"
+    let resLabel;
+    if (resolution === "native") {
+      let nativeW = this.recordingManager?.actualStreamWidth;
+      let nativeH = this.recordingManager?.actualStreamHeight;
+      if (!nativeW || !nativeH) {
+        const dpr = window.devicePixelRatio || 1;
+        nativeW = Math.round(window.screen.width * dpr);
+        nativeH = Math.round(window.screen.height * dpr);
+      }
+      resLabel = `${nativeW}×${nativeH}`;
+    } else {
+      resLabel =
+        resolution === "1920x1080" ? "1080p"
+          : resolution === "1280x720" ? "720p"
+            : resolution === "2560x1440" ? "1440p"
+              : resolution === "3840x2160" ? "4K"
                 : resolution;
+    }
 
     const qualityLabel = quality.charAt(0).toUpperCase() + quality.slice(1);
 
@@ -1017,7 +1023,7 @@ class ScreenRecorder {
     document.getElementById("settingsFrameRate").value =
       this.settings.frameRate || "24";
     document.getElementById("settingsResolution").value =
-      this.settings.resolution || "1920x1080";
+      this.settings.resolution || "native";
     document.getElementById("settingsRecordAudio").checked =
       this.settings.recordAudio !== false;
     document.getElementById("settingsRecordSystemAudio").checked =

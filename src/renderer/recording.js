@@ -136,13 +136,37 @@ class RecordingManager {
         ]
       };
 
-      // Add resolution constraints only if not native
+      let targetWidth = null;
+      let targetHeight = null;
+
       if (resolution !== "native") {
-        const [width, height] = resolution.split("x").map(Number);
-        videoConstraints.mandatory.minWidth = width;
-        videoConstraints.mandatory.maxWidth = width;
-        videoConstraints.mandatory.minHeight = height;
-        videoConstraints.mandatory.maxHeight = height;
+        const [wStr, hStr] = resolution.split("x");
+        targetWidth = Number(wStr);
+        targetHeight = Number(hStr);
+      } else {
+        // "Native" selected. Fetch the true physical resolution of the specific display using Electron.
+        // If we don't supply minWidth/Height constraints, Chrome defaults to the primary screen's resolution (often 1080p),
+        // completely destroying quality on secondary 4K displays.
+        if (window.electronAPI.getDisplays && source.display_id) {
+          try {
+            const displays = await window.electronAPI.getDisplays();
+            const display = displays.find(d => d.id.toString() === source.display_id);
+            if (display) {
+              targetWidth = Math.round(display.bounds.width * display.scaleFactor);
+              targetHeight = Math.round(display.bounds.height * display.scaleFactor);
+            }
+          } catch (e) {
+            console.warn("Failed to get displays for native resolution", e);
+          }
+        }
+      }
+
+      // Add resolution constraints if resolved (which is always TRUE except on a rare getDisplays failure)
+      if (targetWidth && targetHeight) {
+        videoConstraints.mandatory.minWidth = targetWidth;
+        videoConstraints.mandatory.maxWidth = targetWidth;
+        videoConstraints.mandatory.minHeight = targetHeight;
+        videoConstraints.mandatory.maxHeight = targetHeight;
       }
 
       try {
@@ -150,6 +174,18 @@ class RecordingManager {
           video: videoConstraints,
           audio: false,
         });
+
+        // Finalize actual dimensions for the HUD/estimator
+        if (targetWidth && targetHeight) {
+          this.actualStreamWidth = targetWidth;
+          this.actualStreamHeight = targetHeight;
+        } else {
+          // Absolute fallback if Native resolution fetching failed completely
+          const actualTrack = this.videoStream.getVideoTracks()[0];
+          const actualSettings = actualTrack ? actualTrack.getSettings() : {};
+          this.actualStreamWidth = actualSettings.width || null;
+          this.actualStreamHeight = actualSettings.height || null;
+        }
       } catch (streamErr) {
         this.app.showToast(
           `Failed to access source: ${streamErr.message}`,
@@ -587,10 +623,46 @@ class RecordingManager {
     const screenSettings = screenTrack.getSettings();
     const frameRate = screenSettings.frameRate || 30;
 
-    // Use selectedRegion if available to determine canvas size
+    // Use selectedRegion if available to determine the source crop dimensions
     const region = this.selectedRegion;
-    const width = region ? region.width : (screenSettings.width || 1920);
-    const height = region ? region.height : (screenSettings.height || 1080);
+    const sourceWidth = region ? region.width : (screenSettings.width || 1920);
+    const sourceHeight = region ? region.height : (screenSettings.height || 1080);
+
+    // Determine output (canvas/recording) dimensions.
+    // For a fixed resolution setting the compositor scales the output to match.
+    // For "native" (or full-screen where constraints already enforce the size)
+    // we output at the natural source/crop dimensions.
+    const selectedResolution = this.app.settings.resolution;
+    let width = sourceWidth;
+    let height = sourceHeight;
+
+    if (selectedResolution && selectedResolution !== "native") {
+      const [targetW, targetH] = selectedResolution.split("x").map(Number);
+      if (region) {
+        // Region mode: scale crop to fit target resolution, preserving aspect ratio
+        const sourceAspect = sourceWidth / sourceHeight;
+        const targetAspect = targetW / targetH;
+        if (sourceAspect >= targetAspect) {
+          width = targetW;
+          height = Math.round(targetW / sourceAspect);
+        } else {
+          height = targetH;
+          width = Math.round(targetH * sourceAspect);
+        }
+      } else {
+        // Full-screen: getUserMedia constraints already forced the exact resolution,
+        // so the track is already at targetW×targetH — just echo those dimensions.
+        width = screenSettings.width || targetW;
+        height = screenSettings.height || targetH;
+      }
+      // Ensure even pixel dimensions (required by most video encoders)
+      width = width % 2 === 0 ? width : width - 1;
+      height = height % 2 === 0 ? height : height - 1;
+    }
+
+    // Store for stats HUD (used by updateRecordingStats when resolution is "native")
+    this.actualStreamWidth = width;
+    this.actualStreamHeight = height;
 
     // Use a regular canvas and transfer its control to an offscreen compositor
     const canvas = document.createElement("canvas");
@@ -620,13 +692,12 @@ class RecordingManager {
         height,
         frameRate,
         settings: {
-          // Disable webcam in compositor BEFORE recording starts to avoid "double vision"
-          // (The DOM-based draggable handle provides the preview during setup)
           includeWebcam: this.isRecording && !!this.webcamStream,
           includeAnnotations: includeAnnotations,
           webcamPosition: this.app.settings.webcamPosition || "bottom-right",
           webcamSize: this.app.settings.webcamSize || "medium",
-          cropRegion: region ? { x: region.x, y: region.y, width, height } : null
+          // cropRegion uses the original source dimensions so the worker crops correctly
+          cropRegion: region ? { x: region.x, y: region.y, width: sourceWidth, height: sourceHeight } : null
         }
       }
     }, [offscreenCanvas]);
@@ -770,18 +841,21 @@ class RecordingManager {
 
     const resolution = this.app.settings.resolution || "1920x1080";
     const frameRate = this.app.settings.frameRate || 24;
-    const resLabel =
-      resolution === "1920x1080"
-        ? "1080p"
-        : resolution === "1280x720"
-          ? "720p"
-          : resolution === "2560x1440"
-            ? "1440p"
-            : resolution === "3840x2160"
-              ? "4K"
-              : resolution === "native"
-                ? "Native"
+
+    let resLabel;
+    if (resolution === "native") {
+      // Show real captured pixel dimensions when available, otherwise just "Native"
+      resLabel = (this.actualStreamWidth && this.actualStreamHeight)
+        ? `${this.actualStreamWidth}×${this.actualStreamHeight}`
+        : "Native";
+    } else {
+      resLabel =
+        resolution === "1920x1080" ? "1080p"
+          : resolution === "1280x720" ? "720p"
+            : resolution === "2560x1440" ? "1440p"
+              : resolution === "3840x2160" ? "4K"
                 : resolution;
+    }
 
     const estimatedFps = frameRate;
     const sizeStr = this.app.formatFileSize(this.recordedBytes);

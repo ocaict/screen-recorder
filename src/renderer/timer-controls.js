@@ -20,7 +20,17 @@ class TimerControls {
     const frameRate = parseInt(getEl("settingsFrameRate")?.value || "30");
     const recordAudio = getEl("settingsRecordAudio")?.checked !== false;
 
-    const parseRes = resolution === "native" ? "1920x1080" : resolution;
+    // Resolve "native" to the real physical pixel dimensions of the selected source.
+    // If we haven't selected a source yet, gracefully fallback to the primary screen dimensions.
+    let nativeW = this.app.recordingManager?.actualStreamWidth;
+    let nativeH = this.app.recordingManager?.actualStreamHeight;
+    if (!nativeW || !nativeH) {
+      const dpr = window.devicePixelRatio || 1;
+      nativeW = Math.round(window.screen.width * dpr);
+      nativeH = Math.round(window.screen.height * dpr);
+    }
+
+    const parseRes = resolution === "native" ? `${nativeW}x${nativeH}` : resolution;
     const [width, height] = parseRes.split("x").map(Number);
     const pixels = width * height;
     const pixelsPerSecond = pixels * frameRate;
@@ -39,12 +49,12 @@ class TimerControls {
     let audioBitrate = recordAudio || recordSystemAudio ? (128 * 1024) / 8 : 0;
 
     const totalBitratePerSecond = videoBitrate + audioBitrate;
-    const durationSeconds = 60;
+    const durationSeconds = 60; // estimate is per minute
     const estimatedBytes = totalBitratePerSecond * durationSeconds;
 
     const sizeValue = this.app.fileSizePreview?.querySelector(".size-value");
     if (sizeValue) {
-      sizeValue.textContent = `~${this.formatFileSize(estimatedBytes)}`;
+      sizeValue.textContent = `~${this.formatFileSize(estimatedBytes)}/min`;
     }
   }
 

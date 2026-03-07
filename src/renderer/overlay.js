@@ -17,6 +17,7 @@ let historyIndex = -1;
 let drawModeActive = false;
 let textInput = null;
 let laserPaths = []; // Store temporary laser trails
+let stepCounter = 1;
 // clickHighlightsEnabled moved to highlight logic section below
 
 console.log('[Overlay] Script initialized');
@@ -346,6 +347,10 @@ function handleMouseDown(e) {
 
     applyStyle(tempCtx);
 
+    if (currentTool === "step") {
+        drawStep(tempCtx, startX, startY, stepCounter, currentColor, strokeWidth);
+    }
+
     window.electronAPI.sendOverlayAction({
         type: "mousedown",
         x: startX,
@@ -398,6 +403,10 @@ function hitTestAndErase(x, y) {
         } else if (a.type === "ellipse") {
             tempCtx.ellipse(a.x + a.width / 2, a.y + a.height / 2, Math.abs(a.width / 2), Math.abs(a.height / 2), 0, 0, 2 * Math.PI);
             hit = tempCtx.isPointInStroke(x, y);
+        } else if (a.type === "step") {
+            const radius = 18 + ((a.strokeWidth || strokeWidth) * 1.5);
+            tempCtx.arc(a.x, a.y, radius, 0, Math.PI * 2);
+            hit = tempCtx.isPointInPath(x, y);
         } else if (a.type === "text") {
             tempCtx.rect(a.x, a.y - 30, a.maxWidth || canvas.width, 40);
             hit = tempCtx.isPointInPath(x, y); // fill hit
@@ -406,6 +415,8 @@ function hitTestAndErase(x, y) {
         if (hit) {
             history.splice(h, 1);
             historyIndex--;
+            // Keep step counter in sync with remaining steps
+            stepCounter = history.filter(a => a.type === "step").length + 1;
             erased = true;
             window.electronAPI.sendOverlayAction({ type: "eraseItem", index: h });
             break;
@@ -473,6 +484,8 @@ function handleMouseMove(e) {
         tempCtx.strokeRect(startX, startY, x - startX, y - startY);
     } else if (currentTool === "ellipse") {
         drawEllipse(tempCtx, startX, startY, x - startX, y - startY);
+    } else if (currentTool === "step") {
+        drawStep(tempCtx, x, y, stepCounter, currentColor, strokeWidth);
     }
 
     window.electronAPI.sendOverlayAction({ type: "mousemove", x, y });
@@ -528,6 +541,10 @@ function handleMouseUp(e) {
     } else if (currentTool === "ellipse") {
         drawEllipse(ctx, startX, startY, endX - startX, endY - startY);
         saveHistory({ type: "ellipse", x: startX, y: startY, width: endX - startX, height: endY - startY, color: currentColor, strokeWidth });
+    } else if (currentTool === "step") {
+        drawStep(ctx, endX, endY, stepCounter, currentColor, strokeWidth);
+        saveHistory({ type: "step", x: endX, y: endY, color: currentColor, strokeWidth, stepNumber: stepCounter });
+        stepCounter++;
     }
 
     window.electronAPI.sendOverlayAction({ type: "mouseup", x: endX, y: endY });
@@ -540,7 +557,12 @@ function handleMouseUp(e) {
 
 // ── Tool / color / width updates from main window ────────────────────────────
 window.electronAPI.onOverlaySettings((settings) => {
-    if (settings.tool) currentTool = settings.tool;
+    if (settings.tool) {
+        if (settings.tool === "step" && currentTool !== "step") {
+            stepCounter = 1;
+        }
+        currentTool = settings.tool;
+    }
     if (settings.color) currentColor = settings.color;
     if (settings.width) strokeWidth = settings.width;
     if (settings.showClickHighlights !== undefined) {
@@ -620,6 +642,23 @@ function drawEllipse(c, x, y, w, h) {
     c.beginPath();
     c.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, 2 * Math.PI);
     c.stroke();
+}
+
+function drawStep(c, x, y, number, color, width) {
+    const radius = 18 + (width * 1.5);
+    c.beginPath();
+    c.arc(x, y, radius, 0, Math.PI * 2);
+    c.fillStyle = color;
+    c.fill();
+    c.strokeStyle = color === "#ffffff" ? "#000000" : "#ffffff";
+    c.lineWidth = 2;
+    c.stroke();
+
+    c.fillStyle = color === "#ffffff" ? "#000000" : "#ffffff";
+    c.font = `bold ${radius}px sans-serif`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(number.toString(), x, y + (radius * 0.1));
 }
 
 function addText(x, y) {
@@ -788,6 +827,8 @@ function redrawHistory() {
             ctx.strokeRect(a.x, a.y, a.width, a.height);
         } else if (a.type === "ellipse") {
             drawEllipse(ctx, a.x, a.y, a.width, a.height);
+        } else if (a.type === "step") {
+            drawStep(ctx, a.x, a.y, a.stepNumber, a.color, a.strokeWidth || strokeWidth);
         } else if (a.type === "text") {
             ctx.font = a.font;
             wrapText(ctx, a.text, a.x, a.y, a.maxWidth || canvas.width, 29);
@@ -806,12 +847,15 @@ function undo() {
     if (historyIndex < 0) return;
     history.pop();
     historyIndex--;
+    // Re-sync step counter
+    stepCounter = history.filter(a => a.type === "step").length + 1;
     redrawHistory();
 }
 
 function clearAll() {
     history = [];
     historyIndex = -1;
+    stepCounter = 1;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
 

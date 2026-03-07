@@ -13,6 +13,7 @@ class AnnotationManager {
     this.maxHistorySize = 100;
     this.currentPath = [];
     this.textInput = null;
+    this.stepCounter = 1;
     this.dirty = false;
 
     this.canvas = null;
@@ -133,6 +134,8 @@ class AnnotationManager {
         this.setTool("text");
       } else if (key === "x") {
         this.setTool("eraser");
+      } else if (key === "s") {
+        this.setTool("step");
       } else if (key === "c") {
         this.clearAll();
       } else if (e.ctrlKey && key === "z") {
@@ -146,6 +149,9 @@ class AnnotationManager {
   }
 
   setTool(tool) {
+    if (tool === "step" && this.currentTool !== "step") {
+      this.stepCounter = 1;
+    }
     this.currentTool = tool;
     if (window.electronAPI?.sendOverlaySettings) {
       window.electronAPI.sendOverlaySettings({ tool: this.currentTool });
@@ -160,6 +166,9 @@ class AnnotationManager {
     const e = { clientX: action.x, clientY: action.y };
 
     if (action.type === "mousedown") {
+      if (action.tool === "step" && this.currentTool !== "step") {
+        this.stepCounter = 1;
+      }
       this.currentTool = action.tool || this.currentTool;
       this.currentColor = action.color || this.currentColor;
       this.strokeWidth = action.width || this.strokeWidth;
@@ -185,6 +194,8 @@ class AnnotationManager {
     } else if (action.type === "eraseItem") {
       this.history.splice(action.index, 1);
       this.historyIndex--;
+      // Recalculate step counter so next placed Step follows correct numbering
+      this.stepCounter = this.history.filter(h => h.type === "step").length + 1;
       this.redrawHistory();
     }
   }
@@ -267,6 +278,17 @@ class AnnotationManager {
     this.tempCtx.lineWidth =
       this.currentTool === "highlighter" ? 20 : this.strokeWidth;
     this.tempCtx.globalAlpha = this.currentTool === "highlighter" ? 0.4 : 1;
+
+    if (this.currentTool === "step") {
+      this.drawStep(
+        this.tempCtx,
+        this.startX,
+        this.startY,
+        this.stepCounter,
+        this.currentColor,
+        this.strokeWidth,
+      );
+    }
   }
 
   draw(e) {
@@ -325,6 +347,15 @@ class AnnotationManager {
         this.startY,
         x - this.startX,
         y - this.startY,
+      );
+    } else if (this.currentTool === "step") {
+      this.drawStep(
+        this.tempCtx,
+        x,
+        y,
+        this.stepCounter,
+        this.currentColor,
+        this.strokeWidth,
       );
     }
   }
@@ -429,6 +460,24 @@ class AnnotationManager {
         color: this.currentColor,
         strokeWidth: this.strokeWidth,
       });
+    } else if (this.currentTool === "step") {
+      this.drawStep(
+        this.ctx,
+        endX,
+        endY,
+        this.stepCounter,
+        this.currentColor,
+        this.strokeWidth,
+      );
+      this.saveToHistory({
+        type: "step",
+        x: endX,
+        y: endY,
+        color: this.currentColor,
+        strokeWidth: this.strokeWidth,
+        stepNumber: this.stepCounter,
+      });
+      this.stepCounter++;
     }
 
     this.isDrawing = false;
@@ -480,6 +529,10 @@ class AnnotationManager {
       } else if (a.type === "ellipse") {
         this.tempCtx.ellipse(a.x + a.width / 2, a.y + a.height / 2, Math.abs(a.width / 2), Math.abs(a.height / 2), 0, 0, 2 * Math.PI);
         hit = this.tempCtx.isPointInStroke(x, y);
+      } else if (a.type === "step") {
+        const radius = 18 + ((a.strokeWidth || this.strokeWidth) * 1.5);
+        this.tempCtx.arc(a.x, a.y, radius, 0, Math.PI * 2);
+        hit = this.tempCtx.isPointInPath(x, y);
       } else if (a.type === "text") {
         this.tempCtx.rect(a.x, a.y - 30, a.maxWidth || this.canvas.width, 40);
         hit = this.tempCtx.isPointInPath(x, y); // fill hit
@@ -541,6 +594,23 @@ class AnnotationManager {
       2 * Math.PI,
     );
     ctx.stroke();
+  }
+
+  drawStep(ctx, x, y, number, color, width) {
+    const radius = 18 + (width * 1.5);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = color === "#ffffff" ? "#000000" : "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = color === "#ffffff" ? "#000000" : "#ffffff";
+    ctx.font = `bold ${radius}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(number.toString(), x, y + (radius * 0.1));
   }
 
   addText(x, y) {
@@ -627,6 +697,7 @@ class AnnotationManager {
   clearAll() {
     this.history = [];
     this.historyIndex = -1;
+    this.stepCounter = 1;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.tempCtx.clearRect(0, 0, this.tempCanvas.width, this.tempCanvas.height);
     this.dirty = true;
@@ -697,6 +768,15 @@ class AnnotationManager {
           action.y,
           action.width,
           action.height,
+        );
+      } else if (action.type === "step") {
+        this.drawStep(
+          this.ctx,
+          action.x,
+          action.y,
+          action.stepNumber,
+          action.color,
+          action.strokeWidth || this.strokeWidth
         );
       } else if (action.type === "text") {
         this.ctx.font = action.font;

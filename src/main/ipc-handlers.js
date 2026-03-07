@@ -916,7 +916,8 @@ function setupIpcHandlers() {
           return {
             success: true,
             filePath: sess.finalPath,
-            backgroundProcessing: hasBacklog
+            backgroundProcessing: true,
+            hasBacklog: hasBacklog
           };
         }
 

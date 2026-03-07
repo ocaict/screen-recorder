@@ -1659,22 +1659,29 @@ class RecordingManager {
       }
 
       if (result.backgroundProcessing) {
-        this.app.processingTitle.textContent = "Processing Video";
-        this.app.processingStatus.textContent = "Converting to MP4...";
-        this.app.processingStartTime = Date.now();
-        this.app.progressFill.style.width = "0%";
-        this.app.progressPercent.textContent = "0%";
-        this.app.progressEta.textContent = "Starting...";
-        if (!this.app.isQuitting) {
-          this.app.processingOverlay.classList.add("active");
-          // No toast here — onConversionStarted IPC fires the same message immediately after
+        if (result.hasBacklog !== false) {
+          this.app.processingTitle.textContent = "Processing Video";
+          this.app.processingStatus.textContent = "Converting to MP4...";
+          this.app.processingStartTime = Date.now();
+          this.app.progressFill.style.width = "0%";
+          this.app.progressPercent.textContent = "0%";
+          this.app.progressEta.textContent = "Starting...";
+          if (!this.app.isQuitting) {
+            this.app.processingOverlay.classList.add("active");
+            // No toast here — onConversionStarted IPC fires the same message immediately after
+          }
         }
       } else {
         const message = isPartial
           ? "Recording saved (partial - memory limit reached)!"
           : "Recording saved!";
         this.app.processingOverlay.classList.remove("active");
-        this.app.showToast(message, isPartial ? "warning" : "success");
+
+        // This 'else' block ONLY hits for instantaneous raw WebM dumps now!
+        // We use the same Completion Options UI instead of the generic Toast to stay consistent with MP4 saves.
+        if (isPartial) {
+          this.app.showToast(message, "warning");
+        }
 
         if (settings.autoOpenAfterRecording && result.filePath) {
           try {
@@ -1682,6 +1689,11 @@ class RecordingManager {
           } catch (openErr) {
             console.warn("Failed to open file:", openErr);
           }
+        }
+
+        // Ensure standard WebM captures update the recent recordings panel instantly
+        if (this.app.loadRecentRecordings) {
+          await this.app.loadRecentRecordings();
         }
         this.app.showCompletionOptions(result.filePath);
       }

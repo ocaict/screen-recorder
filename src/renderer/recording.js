@@ -210,6 +210,9 @@ class RecordingManager {
       if (this.app.settings.webcamEnabled === true) {
         this.setupWebcamStream(true).catch(e => console.warn("Initial webcam preview failed:", e));
       }
+
+      // Start audio preview meter so user can verify audio levels before hitting record
+      this.startPreviewAudioMeter();
     } catch (err) {
       this.stopCurrentStream();
       this.app.showToast(`Failed to connect: ${err.message}`, "error");
@@ -373,6 +376,9 @@ class RecordingManager {
       if (this.app.settings.webcamEnabled === true) {
         this.setupWebcamStream(true).catch(e => console.warn("Initial webcam preview failed:", e));
       }
+
+      // Start audio preview meter so user can verify audio levels before hitting record
+      this.startPreviewAudioMeter();
     } catch (err) {
       this.stopCurrentStream();
       this.app.showToast(`Failed to setup region: ${err.message}`, "error");
@@ -389,6 +395,67 @@ class RecordingManager {
       await this.audioContext.resume();
     }
     return this.audioContext;
+  }
+
+  /**
+   * Opens a temporary microphone/system-audio stream purely for the pre-recording
+   * audio level meter. The stream is kept in `this.previewAudioStream` and torn
+   * down by stopCurrentStream() and stopAudioMeter().
+   */
+  async startPreviewAudioMeter() {
+    // Only show meter if at least one audio source is configured
+    const wantMic = this.app.settings.recordAudio !== false;
+    const wantSys = this.app.settings.recordSystemAudio === true;
+    if (!wantMic && !wantSys) return;
+
+    // Stop any existing preview stream first (source re-select)
+    this.stopPreviewAudioMeter();
+
+    try {
+      let previewStream = null;
+
+      if (wantMic) {
+        const micDeviceId =
+          this.app.settings.selectedMicrophone !== "default"
+            ? this.app.settings.selectedMicrophone
+            : undefined;
+        previewStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            deviceId: micDeviceId ? { exact: micDeviceId } : undefined,
+          },
+        });
+      } else if (wantSys && this.selectedSource) {
+        // Fallback to system audio (desktop capture audio)
+        try {
+          const sysStream = await navigator.mediaDevices.getUserMedia({
+            audio: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: this.selectedSource.id } },
+            video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: this.selectedSource.id } },
+          });
+          sysStream.getVideoTracks().forEach(t => t.stop());
+          previewStream = sysStream;
+        } catch (e) {
+          console.warn("[PreviewMeter] System audio preview unavailable:", e);
+          return;
+        }
+      }
+
+      if (!previewStream) return;
+
+      this.previewAudioStream = previewStream;
+      await this.startAudioMeter(previewStream);
+    } catch (err) {
+      console.warn("[PreviewMeter] Failed to start audio preview meter:", err);
+    }
+  }
+
+  stopPreviewAudioMeter() {
+    if (this.previewAudioStream) {
+      this.previewAudioStream.getTracks().forEach(t => t.stop());
+      this.previewAudioStream = null;
+    }
   }
 
   async setupAudioStream() {
@@ -491,6 +558,12 @@ class RecordingManager {
 
 
   stopCurrentStream(keepAudio = false) {
+    // Close any pre-recording audio preview meter
+    if (!this.isRecording) {
+      this.stopPreviewAudioMeter();
+      this.stopAudioMeter();
+    }
+
     try {
       if (this.videoStream) {
         this.videoStream.getTracks().forEach((track) => {
@@ -951,6 +1024,9 @@ class RecordingManager {
       cancelAnimationFrame(this.audioAnimationId);
       this.audioAnimationId = null;
     }
+
+    // Also stop the preview audio stream if one was open
+    this.stopPreviewAudioMeter();
 
     if (this.audioContext) {
       this.audioContext.close();

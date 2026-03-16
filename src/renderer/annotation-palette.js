@@ -7,6 +7,7 @@ class AnnotationPalette {
         this.startY = 0;
         this.winX = 0;
         this.winY = 0;
+        this.animationFrameId = null;
 
         this.init();
     }
@@ -83,11 +84,22 @@ class AnnotationPalette {
             if (!this.isDragging) return;
             const deltaX = e.screenX - this.startX;
             const deltaY = e.screenY - this.startY;
-            window.electronAPI?.movePalette(this.winX + deltaX, this.winY + deltaY);
+
+            if (this.animationFrameId) {
+                cancelAnimationFrame(this.animationFrameId);
+            }
+
+            this.animationFrameId = requestAnimationFrame(() => {
+                window.electronAPI?.movePalette(this.winX + deltaX, this.winY + deltaY);
+            });
         });
 
         window.addEventListener("mouseup", () => {
             this.isDragging = false;
+            if (this.animationFrameId) {
+                cancelAnimationFrame(this.animationFrameId);
+                this.animationFrameId = null;
+            }
         });
     }
 

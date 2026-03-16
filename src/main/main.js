@@ -455,7 +455,7 @@ function createAnnotationPaletteWindow() {
   }
 
   annotationPaletteWindow = new BrowserWindow({
-    width: 700,
+    width: 800,
     height: 80,
     x,
     y,

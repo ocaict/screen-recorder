@@ -8,6 +8,7 @@ class MiniControls {
         this.timerEl = document.getElementById("miniTimer");
         this.pauseBtn = document.getElementById("miniPauseBtn");
         this.stopBtn = document.getElementById("miniStopBtn");
+        this.discardBtn = document.getElementById("miniDiscardBtn");
         this.micBtn = document.getElementById("miniMicBtn");
         this.sysAudioBtn = document.getElementById("miniSysAudioBtn");
         this.webcamBtn = document.getElementById("miniWebcamBtn");
@@ -33,6 +34,7 @@ class MiniControls {
         // Button Event Listeners
         this.pauseBtn.addEventListener("click", () => this.togglePause());
         this.stopBtn.addEventListener("click", () => this.stopRecording());
+        if (this.discardBtn) this.discardBtn.addEventListener("click", () => this.discardRecording());
         this.micBtn.addEventListener("click", () => this.toggleMic());
         this.sysAudioBtn.addEventListener("click", () => this.toggleSysAudio());
         this.webcamBtn.addEventListener("click", () => this.toggleWebcam());
@@ -70,6 +72,7 @@ class MiniControls {
             switch (e.key.toLowerCase()) {
                 case "p": this.togglePause(); break;
                 case "s": this.stopRecording(); break;
+                case "delete": this.discardRecording(); break;
                 case "m": this.toggleMic(); break;
                 case "a": this.toggleSysAudio(); break;
                 case "w": this.toggleWebcam(); break;
@@ -120,6 +123,12 @@ class MiniControls {
 
     stopRecording() {
         window.electronAPI.sendMiniCommand({ action: "stop-recording" });
+    }
+
+    discardRecording() {
+        if (confirm("Are you sure you want to discard this recording? It will be permanently deleted.")) {
+            window.electronAPI.sendMiniCommand({ action: "discard-recording" });
+        }
     }
 
     toggleMic() {

@@ -131,6 +131,11 @@ class ScreenRecorder {
     this.stopBtn.addEventListener("click", () =>
       this.recordingManager.stopRecording(),
     );
+    this.discardBtn?.addEventListener("click", () => {
+      if (confirm("Are you sure you want to discard this recording? It will be permanently deleted.")) {
+        this.recordingManager.discardRecording();
+      }
+    });
     this.annotationToggleBtn.addEventListener("click", () =>
       this.toggleAnnotation(),
     );
@@ -1216,6 +1221,7 @@ class ScreenRecorder {
     this.resumeIcon.style.display = "none";
     this.pauseBtnText.textContent = "Pause";
     this.stopBtn.disabled = false;
+    if (this.discardBtn) this.discardBtn.disabled = false;
     this.annotationToggleBtn.disabled = false;
     this.selectSourceBtn.disabled = true;
     this.stopBtn.classList.add("recording");
@@ -1436,6 +1442,7 @@ class ScreenRecorder {
     this.resumeIcon.style.display = "none";
     this.pauseBtnText.textContent = "Pause";
     this.stopBtn.disabled = true;
+    if (this.discardBtn) this.discardBtn.disabled = true;
     this.annotationToggleBtn.disabled = true;
     this.annotationToggleBtn.classList.remove("active");
     this.selectSourceBtn.disabled = false;

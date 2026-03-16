@@ -1421,6 +1421,78 @@ class RecordingManager {
     }
   }
 
+  async discardRecording() {
+    if (!this.isRecording || !this.mediaRecorder) return;
+
+    try {
+      if (this.recordingTimeout) {
+        clearTimeout(this.recordingTimeout);
+        this.recordingTimeout = null;
+      }
+
+      if (window.electronAPI.hideRegionIndicator) {
+        window.electronAPI.hideRegionIndicator();
+      }
+
+      // Stop chunked recording interval FIRST
+      this.stopChunkedRecording();
+
+      // Tell the main process to nuke the FFmpeg session and file!
+      if (this.chunkSessionId) {
+        await window.electronAPI.abortChunkedRecording(this.chunkSessionId).catch(() => {});
+        this.chunkSessionId = null;
+        this.tempChunkPath = null;
+      }
+
+      // Stop mediaRecorder but remove onstop to prevent normal save payload
+      if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+        this.mediaRecorder.onstop = null;
+        this.mediaRecorder.stop();
+      }
+      this.isRecording = false;
+
+      // Stop performance monitor
+      if (this.monitor) {
+        this.monitor.stopRecording();
+      }
+
+      if (this.app.webcamPreviewVideo) {
+        this.app.webcamPreviewVideo.style.opacity = "1";
+      }
+
+      if (this.recordingTimer) {
+        clearInterval(this.recordingTimer);
+        this.recordingTimer = null;
+      }
+
+      this.app.updateUIForStopped();
+      await window.electronAPI.setRecordingState(false).catch(() => {});
+      
+      // Cleanup streams
+      if (this.mixedStream) {
+        this.mixedStream.getTracks().forEach((track) => track.stop());
+        this.mixedStream = null;
+      }
+      if (this.systemAudioStream) {
+        this.systemAudioStream.getTracks().forEach((track) => track.stop());
+        this.systemAudioStream = null;
+      }
+      if (this.audioStream) {
+        this.audioStream.getTracks().forEach((track) => track.stop());
+        this.audioStream = null;
+      }
+
+      this.recordedChunks = [];
+      this.chunkFiles = [];
+      this.recordedBytes = 0;
+
+      this.app.showToast("Recording discarded", "warning");
+    } catch (err) {
+      this.app.showToast(`Failed to discard: ${err.message}`, "error");
+      console.error(err);
+    }
+  }
+
   pauseRecording() {
     if (!this.mediaRecorder || this.isPaused) return;
 
@@ -1749,6 +1821,9 @@ class RecordingManager {
         break;
       case "stop-recording":
         this.stopRecording();
+        break;
+      case "discard-recording":
+        this.discardRecording();
         break;
       case "toggle-mic":
         // Toggle Mic setting

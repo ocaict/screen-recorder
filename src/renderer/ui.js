@@ -15,6 +15,7 @@ class UIManager {
     this.app.resumeIcon = document.getElementById("resumeIcon");
     this.app.pauseBtnText = document.getElementById("pauseBtnText");
     this.app.stopBtn = document.getElementById("stopBtn");
+    this.app.discardBtn = document.getElementById("discardBtn");
     this.app.annotationToggleBtn = document.getElementById("annotationToggleBtn");
     this.app.sourceModal = document.getElementById("sourceModal");
     this.app.sourceGrid = document.getElementById("sourceGrid");

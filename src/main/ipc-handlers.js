@@ -46,7 +46,10 @@ try {
   uiohook = uIOhook;
   log("info", "uiohook-napi loaded successfully");
 } catch (e) {
-  log("warn", "uiohook-napi not available, click highlights disabled: " + e.message);
+  log(
+    "warn",
+    "uiohook-napi not available, click highlights disabled: " + e.message,
+  );
 }
 
 let mainWindow = null;
@@ -78,7 +81,7 @@ function setupClickHighlightHook(enabled) {
             overlayWindow.webContents.send("global-click", {
               x: e.x,
               y: e.y,
-              button: e.button
+              button: e.button,
             });
           }
         });
@@ -107,8 +110,8 @@ const chunkSessions = new Map();
 // sessions that have been IDLE (no chunks received) for more than 15 minutes.
 // Sessions that are actively recording update lastActivityAt on every chunk,
 // so they will never be swept even if the recording runs for hours.
-const GHOST_SESSION_IDLE_TTL_MS = 15 * 60 * 1000;  // 15 min idle = truly abandoned
-const GHOST_SESSION_SWEEP_MS = 5 * 60 * 1000;   // check every 5 min
+const GHOST_SESSION_IDLE_TTL_MS = 15 * 60 * 1000; // 15 min idle = truly abandoned
+const GHOST_SESSION_SWEEP_MS = 5 * 60 * 1000; // check every 5 min
 
 setInterval(() => {
   const now = Date.now();
@@ -119,19 +122,25 @@ setInterval(() => {
     const idleMs = now - lastActivity;
     const isFinalizing = sess.isFinalizing;
     if (!isFinalizing && idleMs > GHOST_SESSION_IDLE_TTL_MS) {
-      log("warn", `Ghost session detected: ${sid} (idle ${Math.round(idleMs / 60000)}min). Cleaning up.`);
-      try { if (sess.ffmpegProcess) sess.ffmpegProcess.kill("SIGKILL"); } catch (e) { }
-      try { if (sess.ws) sess.ws.destroy(); } catch (e) { }
+      log(
+        "warn",
+        `Ghost session detected: ${sid} (idle ${Math.round(idleMs / 60000)}min). Cleaning up.`,
+      );
+      try {
+        if (sess.ffmpegProcess) sess.ffmpegProcess.kill("SIGKILL");
+      } catch (e) {}
+      try {
+        if (sess.ws) sess.ws.destroy();
+      } catch (e) {}
       try {
         if (sess.tempFilePath && fs.existsSync(sess.tempFilePath)) {
           fs.unlinkSync(sess.tempFilePath);
         }
-      } catch (e) { }
+      } catch (e) {}
       chunkSessions.delete(sid);
     }
   }
 }, GHOST_SESSION_SWEEP_MS).unref(); // .unref() so this timer won't block app shutdown
-
 
 async function generateThumbnailHelper(videoPath) {
   try {
@@ -175,8 +184,13 @@ function applyExclusionSettings() {
   const settings = getSettings();
 
   if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
-    const exclude = settings.recordMiniControls === false || settings.recordMiniControls === undefined;
-    log("info", `[Capture] MiniControls exclude from capture set to: ${exclude} (Setting: ${settings.recordMiniControls})`);
+    const exclude =
+      settings.recordMiniControls === false ||
+      settings.recordMiniControls === undefined;
+    log(
+      "info",
+      `[Capture] MiniControls exclude from capture set to: ${exclude} (Setting: ${settings.recordMiniControls})`,
+    );
     if (typeof miniControlsWindow.setExcludeFromCapture === "function") {
       miniControlsWindow.setExcludeFromCapture(exclude);
     }
@@ -186,8 +200,13 @@ function applyExclusionSettings() {
   }
 
   if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
-    const exclude = settings.recordAnnotationPalette === false || settings.recordAnnotationPalette === undefined;
-    log("info", `[Capture] AnnotationPalette exclude from capture set to: ${exclude} (Setting: ${settings.recordAnnotationPalette})`);
+    const exclude =
+      settings.recordAnnotationPalette === false ||
+      settings.recordAnnotationPalette === undefined;
+    log(
+      "info",
+      `[Capture] AnnotationPalette exclude from capture set to: ${exclude} (Setting: ${settings.recordAnnotationPalette})`,
+    );
     if (typeof annotationPaletteWindow.setExcludeFromCapture === "function") {
       annotationPaletteWindow.setExcludeFromCapture(exclude);
     }
@@ -256,7 +275,11 @@ function showRecordingNotification(filePath) {
 // Keep track of the forwarding pulse
 let forwardingPulseInterval = null;
 
-async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false) {
+async function saveRecording(
+  streamData,
+  chunkFiles = [],
+  forceAutoSave = false,
+) {
   const settings = getSettings();
   const tempDir = app.getPath("temp");
   const outputDir = settings.outputDirectory || app.getPath("videos");
@@ -268,7 +291,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
 
   const fsPromises = fs.promises;
   let dirExists = false;
-  try { await fsPromises.access(outputDir); dirExists = true; } catch (e) { }
+  try {
+    await fsPromises.access(outputDir);
+    dirExists = true;
+  } catch (e) {}
 
   if (!dirExists) {
     try {
@@ -308,14 +334,22 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     let counter = 1;
     const basePath = filePath;
     let fileExists = false;
-    try { await fsPromises.access(filePath); fileExists = true; } catch (e) { }
+    try {
+      await fsPromises.access(filePath);
+      fileExists = true;
+    } catch (e) {}
 
     while (fileExists) {
       const ext = path.extname(basePath);
       const name = path.basename(basePath, ext);
       filePath = path.join(outputDir, `${name}_${counter}${ext}`);
       counter++;
-      try { await fsPromises.access(filePath); fileExists = true; } catch (e) { fileExists = false; }
+      try {
+        await fsPromises.access(filePath);
+        fileExists = true;
+      } catch (e) {
+        fileExists = false;
+      }
     }
     log("info", `Auto-saving to: ${filePath}, ext=${path.extname(filePath)}`);
   } else {
@@ -349,7 +383,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
       const allChunks = [];
       for (const chunkPath of chunkFiles) {
         let chunkExists = false;
-        try { await fsPromises.access(chunkPath); chunkExists = true; } catch (e) { }
+        try {
+          await fsPromises.access(chunkPath);
+          chunkExists = true;
+        } catch (e) {}
         if (chunkExists) {
           const chunkData = await fsPromises.readFile(chunkPath);
           allChunks.push(chunkData);
@@ -371,7 +408,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
     }
 
     let tempExists = false;
-    try { await fsPromises.access(tempFilePath); tempExists = true; } catch (e) { }
+    try {
+      await fsPromises.access(tempFilePath);
+      tempExists = true;
+    } catch (e) {}
     if (tempExists) {
       const stats = await fsPromises.stat(tempFilePath);
       log(
@@ -386,7 +426,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
       const convertedPath = filePath;
 
       let convertedExists = false;
-      try { await fsPromises.access(tempFilePath); convertedExists = true; } catch (e) { }
+      try {
+        await fsPromises.access(tempFilePath);
+        convertedExists = true;
+      } catch (e) {}
       log(
         "info",
         `Starting conversion: temp=${tempFilePath}, output=${convertedPath}, exists=${convertedExists}`,
@@ -399,7 +442,10 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
       })
         .then(async () => {
           let tempStillExists = false;
-          try { await fsPromises.access(tempFilePath); tempStillExists = true; } catch (e) { }
+          try {
+            await fsPromises.access(tempFilePath);
+            tempStillExists = true;
+          } catch (e) {}
           if (tempStillExists) {
             await fsPromises.unlink(tempFilePath);
           }
@@ -415,7 +461,9 @@ async function saveRecording(streamData, chunkFiles = [], forceAutoSave = false)
             `Conversion failed: ${convertErr.message}, saving as webm`,
           );
           const webmPath = filePath.replace(/\.mp4$/i, ".webm");
-          try { await fsPromises.rename(tempFilePath, webmPath); } catch (e) { }
+          try {
+            await fsPromises.rename(tempFilePath, webmPath);
+          } catch (e) {}
           const thumbPath = await generateThumbnailHelper(webmPath);
           addRecentRecording(webmPath, thumbPath);
           mainWindow?.webContents.send("conversion-complete", webmPath);
@@ -457,7 +505,9 @@ function isPathAllowed(filePath) {
       path.resolve(app.getPath("temp")),
       path.resolve(app.getPath("downloads")),
     ];
-    return allowedRoots.some((root) => resolved.startsWith(root + path.sep) || resolved === root);
+    return allowedRoots.some(
+      (root) => resolved.startsWith(root + path.sep) || resolved === root,
+    );
   } catch {
     return false;
   }
@@ -465,7 +515,10 @@ function isPathAllowed(filePath) {
 
 function openFileLocation(filePath) {
   if (!isPathAllowed(filePath)) {
-    log("warn", `openFileLocation: path outside allowed directories — blocked: ${filePath}`);
+    log(
+      "warn",
+      `openFileLocation: path outside allowed directories — blocked: ${filePath}`,
+    );
     return;
   }
   if (fs.existsSync(filePath)) {
@@ -477,7 +530,10 @@ function openFileLocation(filePath) {
 
 async function openFile(filePath) {
   if (!isPathAllowed(filePath)) {
-    log("warn", `openFile: path outside allowed directories — blocked: ${filePath}`);
+    log(
+      "warn",
+      `openFile: path outside allowed directories — blocked: ${filePath}`,
+    );
     return;
   }
   if (fs.existsSync(filePath)) {
@@ -520,9 +576,12 @@ function setupIpcHandlers() {
     return await getCaptureSources();
   });
 
-  ipcMain.handle("save-recording", async (_, streamData, chunkFiles, options = {}) => {
-    return await saveRecording(streamData, chunkFiles, options.forceAutoSave);
-  });
+  ipcMain.handle(
+    "save-recording",
+    async (_, streamData, chunkFiles, options = {}) => {
+      return await saveRecording(streamData, chunkFiles, options.forceAutoSave);
+    },
+  );
 
   // Chunked recording: create session, append chunks (via ipc send), finalize/abort
   // Supports 3 tiers: (1) live FFmpeg MP4 pipe, (2) sw-encoder fallback, (3) WebM file fallback
@@ -545,7 +604,8 @@ function setupIpcHandlers() {
         const hwAccel = settings.hardwareAcceleration || "none";
         const preferredCodec = settings.videoCodec || "libx264";
         const qualityMode = settings.qualityControl || "crf";
-        const selectedCrf = settings.crfValue !== undefined ? settings.crfValue : 23;
+        const selectedCrf =
+          settings.crfValue !== undefined ? settings.crfValue : 23;
         const selectedBitrate = (settings.videoBitrate || 5) + "M";
         const colorFmt = settings.colorFormat || "yuv420p";
 
@@ -558,21 +618,56 @@ function setupIpcHandlers() {
           if (hwAccel !== "none") {
             const isHevc = preferredCodec === "libx265";
             // Each branch checks encoder availability explicitly so "auto" can fall through the chain
-            if (hwAccel === "nvenc" || (hwAccel === "auto" && encoders.nvenc?.h264)) {
+            if (
+              hwAccel === "nvenc" ||
+              (hwAccel === "auto" && encoders.nvenc?.h264)
+            ) {
               const isH264 = !isHevc || !encoders.nvenc?.hevc;
               v_codec = isH264 ? "h264_nvenc" : "hevc_nvenc";
-              v_options = ["-preset", "p4", "-rc", "vbr", "-cq", selectedCrf.toString(), "-pix_fmt", "yuv420p"];
-              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
-            } else if (hwAccel === "qsv" || (hwAccel === "auto" && encoders.qsv?.h264)) {
+              v_options = [
+                "-preset",
+                "p4",
+                "-rc",
+                "vbr",
+                "-cq",
+                selectedCrf.toString(),
+                "-pix_fmt",
+                "yuv420p",
+              ];
+              if (isH264)
+                v_options.push("-profile:v", "high", "-level:v", "4.1");
+            } else if (
+              hwAccel === "qsv" ||
+              (hwAccel === "auto" && encoders.qsv?.h264)
+            ) {
               const isH264 = !isHevc || !encoders.qsv?.hevc;
               v_codec = isH264 ? "h264_qsv" : "hevc_qsv";
-              v_options = ["-preset", "balanced", "-global_quality", selectedCrf.toString(), "-pix_fmt", "yuv420p"];
-              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
-            } else if (hwAccel === "amf" || (hwAccel === "auto" && encoders.amf?.h264)) {
+              v_options = [
+                "-preset",
+                "balanced",
+                "-global_quality",
+                selectedCrf.toString(),
+                "-pix_fmt",
+                "yuv420p",
+              ];
+              if (isH264)
+                v_options.push("-profile:v", "high", "-level:v", "4.1");
+            } else if (
+              hwAccel === "amf" ||
+              (hwAccel === "auto" && encoders.amf?.h264)
+            ) {
               const isH264 = !isHevc || !encoders.amf?.hevc;
               v_codec = isH264 ? "h264_amf" : "hevc_amf";
-              v_options = ["-quality", "balanced", "-rc", "vbr_latency", "-pix_fmt", "yuv420p"];
-              if (isH264) v_options.push("-profile:v", "high", "-level:v", "4.1");
+              v_options = [
+                "-quality",
+                "balanced",
+                "-rc",
+                "vbr_latency",
+                "-pix_fmt",
+                "yuv420p",
+              ];
+              if (isH264)
+                v_options.push("-profile:v", "high", "-level:v", "4.1");
             }
           }
         } catch (encErr) {
@@ -585,7 +680,14 @@ function setupIpcHandlers() {
           if (qualityMode === "crf") {
             v_options.push("-crf", selectedCrf.toString());
           } else {
-            v_options.push("-b:v", selectedBitrate, "-maxrate", selectedBitrate, "-bufsize", (parseInt(selectedBitrate) * 2) + "M");
+            v_options.push(
+              "-b:v",
+              selectedBitrate,
+              "-maxrate",
+              selectedBitrate,
+              "-bufsize",
+              parseInt(selectedBitrate) * 2 + "M",
+            );
           }
           if (v_codec === "libx265") v_options.push("-vtag", "hvc1");
         } else if (qualityMode === "vbr") {
@@ -594,7 +696,8 @@ function setupIpcHandlers() {
 
         // Resolve output path
         const outputDir = settings.outputDirectory || app.getPath("videos");
-        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+        if (!fs.existsSync(outputDir))
+          fs.mkdirSync(outputDir, { recursive: true });
         const pattern = settings.filenamePattern || "Recording_{date}_{time}";
         let finalPath = path.join(outputDir, generateFilename(pattern, "mp4"));
         let counter = 1;
@@ -608,24 +711,39 @@ function setupIpcHandlers() {
         log("info", `Starting live FFmpeg pipe (${v_codec}) -> ${finalPath}`);
 
         const args = [
-          "-loglevel", "error",
-          "-thread_queue_size", "8192",
-          "-probesize", "10M",
-          "-analyzeduration", "10M",
-          "-fflags", "+genpts+discardcorrupt+nobuffer",
-          "-threads", "2",
-          "-f", "webm",
-          "-i", "pipe:0",
-          "-c:v", v_codec,
+          "-loglevel",
+          "error",
+          "-thread_queue_size",
+          "8192",
+          "-probesize",
+          "10M",
+          "-analyzeduration",
+          "10M",
+          "-fflags",
+          "+genpts+discardcorrupt+nobuffer",
+          "-threads",
+          "2",
+          "-f",
+          "webm",
+          "-i",
+          "pipe:0",
+          "-c:v",
+          v_codec,
           ...v_options,
-          "-r", String(settings.frameRate || 24),
-          "-c:a", "aac",
-          "-b:a", "128k",
-          "-pix_fmt", colorFmt,
-          "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-          "-flush_packets", "1",
+          "-r",
+          String(settings.frameRate || 24),
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-pix_fmt",
+          colorFmt,
+          "-movflags",
+          "+frag_keyframe+empty_moov+default_base_moof",
+          "-flush_packets",
+          "1",
           "-y",
-          finalPath
+          finalPath,
         ];
 
         let ffmpegProcess = spawn(ffmpegPath, args);
@@ -633,7 +751,8 @@ function setupIpcHandlers() {
 
         const setupHandlers = (proc, isFallback = false) => {
           proc.stdin.on("error", (err) => {
-            if (!hasFailedPrematurely) log("warn", `FFmpeg stdin error: ${err.message}`);
+            if (!hasFailedPrematurely)
+              log("warn", `FFmpeg stdin error: ${err.message}`);
           });
 
           proc.stderr.on("data", (data) => {
@@ -651,29 +770,52 @@ function setupIpcHandlers() {
             ) {
               hasFailedPrematurely = true;
               log("info", "HW encoder failed, retrying with libx264...");
-              try { proc.kill(); } catch (e) { }
+              try {
+                proc.kill();
+              } catch (e) {}
 
               // Rebuild SW args from scratch to avoid HW arg mutation bugs
               const swArgs = [
-                "-loglevel", "error",
-                "-thread_queue_size", "8192",
-                "-probesize", "10M",
-                "-analyzeduration", "10M",
-                "-fflags", "+genpts+discardcorrupt+nobuffer",
-                "-threads", "2",
-                "-f", "webm",
-                "-i", "pipe:0",
-                "-c:v", "libx264",
-                "-preset", "ultrafast", "-tune", "zerolatency",
-                "-crf", selectedCrf.toString(),
-                "-r", String(settings.frameRate || 24),
-                "-c:a", "aac",
-                "-b:a", "128k",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-                "-flush_packets", "1",
-                "-vtag", "hvc1", // Safety for QuickTime compat if fallback is 265
-                "-y", finalPath
+                "-loglevel",
+                "error",
+                "-thread_queue_size",
+                "8192",
+                "-probesize",
+                "10M",
+                "-analyzeduration",
+                "10M",
+                "-fflags",
+                "+genpts+discardcorrupt+nobuffer",
+                "-threads",
+                "2",
+                "-f",
+                "webm",
+                "-i",
+                "pipe:0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-tune",
+                "zerolatency",
+                "-crf",
+                selectedCrf.toString(),
+                "-r",
+                String(settings.frameRate || 24),
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+frag_keyframe+empty_moov+default_base_moof",
+                "-flush_packets",
+                "1",
+                "-vtag",
+                "hvc1", // Safety for QuickTime compat if fallback is 265
+                "-y",
+                finalPath,
               ];
               ffmpegProcess = spawn(ffmpegPath, swArgs);
               setupHandlers(ffmpegProcess, true);
@@ -683,7 +825,8 @@ function setupIpcHandlers() {
                 sessFallback.ffmpegProcess = ffmpegProcess;
                 if (sessFallback.initialBuffer) {
                   for (const chunk of sessFallback.initialBuffer) {
-                    if (ffmpegProcess.stdin.writable) ffmpegProcess.stdin.write(chunk);
+                    if (ffmpegProcess.stdin.writable)
+                      ffmpegProcess.stdin.write(chunk);
                   }
                   sessFallback.initialBuffer = null;
                 }
@@ -696,20 +839,28 @@ function setupIpcHandlers() {
             const sess = chunkSessions.get(sessionId);
             if (sess && !sess.isFinalizing && code !== 0) {
               // Tier 3: FFmpeg crashed entirely – dump remaining data to WebM
-              log("error", `FFmpeg crashed (code ${code}). Falling back to WebM file.`);
+              log(
+                "error",
+                `FFmpeg crashed (code ${code}). Falling back to WebM file.`,
+              );
               sess.isLive = false;
               sess.ffmpegProcess = null;
-              sess.tempFilePath = path.join(tempDir, `chunked_${Date.now()}_fallback.webm`);
+              sess.tempFilePath = path.join(
+                tempDir,
+                `chunked_${Date.now()}_fallback.webm`,
+              );
               sess.ws = fs.createWriteStream(sess.tempFilePath, { flags: "w" });
-              sess.ws.on("error", (e) => log("error", `Tier-3 fallback ws error: ${e.message}`));
+              sess.ws.on("error", (e) =>
+                log("error", `Tier-3 fallback ws error: ${e.message}`),
+              );
               // Replay buffered chunks only after the stream confirms it is open
               sess.ws.once("open", () => {
                 if (sess.initialBuffer) {
-                  sess.initialBuffer.forEach(c => sess.ws.write(c));
+                  sess.initialBuffer.forEach((c) => sess.ws.write(c));
                   sess.initialBuffer = null;
                 }
                 if (sess.writeQueue) {
-                  sess.writeQueue.forEach(c => sess.ws.write(c));
+                  sess.writeQueue.forEach((c) => sess.ws.write(c));
                   sess.writeQueue = [];
                 }
               });
@@ -718,7 +869,7 @@ function setupIpcHandlers() {
                 mainWindow.webContents.send("conversion-progress", {
                   percent: 10,
                   stage: "recovering",
-                  status: "MP4 encoder failed. Saving as WebM instead..."
+                  status: "MP4 encoder failed. Saving as WebM instead...",
                 });
               }
             } else {
@@ -735,7 +886,7 @@ function setupIpcHandlers() {
           isLive: true,
           size: 0,
           createdAt: Date.now(),
-          lastActivityAt: Date.now(),   // updated on every chunk — used by ghost sweep
+          lastActivityAt: Date.now(), // updated on every chunk — used by ghost sweep
           isFinalizing: false,
           initialBuffer: [],
           writeQueue: [],
@@ -749,11 +900,21 @@ function setupIpcHandlers() {
       // Default: simple WebM temp file
       const tempFilePath = path.join(
         tempDir,
-        `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`
+        `chunked_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`,
       );
       const ws = fs.createWriteStream(tempFilePath, { flags: "w" });
-      chunkSessions.set(sessionId, { ws, tempFilePath, size: 0, isLive: false, createdAt: Date.now(), lastActivityAt: Date.now() });
-      log("info", `Started WebM chunked session ${sessionId} -> ${tempFilePath}`);
+      chunkSessions.set(sessionId, {
+        ws,
+        tempFilePath,
+        size: 0,
+        isLive: false,
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+      });
+      log(
+        "info",
+        `Started WebM chunked session ${sessionId} -> ${tempFilePath}`,
+      );
       return { sessionId, tempFilePath, isLive: false };
     } catch (err) {
       log("error", `start-chunked-recording failed: ${err.message}`);
@@ -767,7 +928,11 @@ function setupIpcHandlers() {
       const sess = chunkSessions.get(sessionId);
       if (!sess) return;
 
-      const buf = Buffer.from(uint8Array.buffer, uint8Array.byteOffset, uint8Array.byteLength);
+      const buf = Buffer.from(
+        uint8Array.buffer,
+        uint8Array.byteOffset,
+        uint8Array.byteLength,
+      );
 
       if (sess.isLive && sess.ffmpegProcess) {
         if (sess.isFinalizing) return;
@@ -795,7 +960,6 @@ function setupIpcHandlers() {
           }
         };
         processQueue();
-
       } else if (sess.ws) {
         sess.ws.write(buf);
       }
@@ -822,7 +986,9 @@ function setupIpcHandlers() {
 
           (async () => {
             // Drain remaining write queue
-            const initialQueueSize = sess.writeQueue ? sess.writeQueue.length : 0;
+            const initialQueueSize = sess.writeQueue
+              ? sess.writeQueue.length
+              : 0;
             let lastQueueSize = initialQueueSize;
             let stalledCycles = 0;
 
@@ -834,28 +1000,36 @@ function setupIpcHandlers() {
               if (initialQueueSize > 5) {
                 const percent = Math.min(
                   99,
-                  Math.round(((initialQueueSize - sess.writeQueue.length) / initialQueueSize) * 100)
+                  Math.round(
+                    ((initialQueueSize - sess.writeQueue.length) /
+                      initialQueueSize) *
+                      100,
+                  ),
                 );
                 if (mainWindow && !mainWindow.isDestroyed()) {
                   mainWindow.webContents.send("conversion-progress", {
                     percent,
                     stage: "finalizing",
-                    status: `Flushing ${sess.writeQueue.length} remaining chunks...`
+                    status: `Flushing ${sess.writeQueue.length} remaining chunks...`,
                   });
                 }
               }
-              await new Promise(r => setTimeout(r, 50));
-              if (sess.writeQueue.length === lastQueueSize && !sess.isWaitingForDrain) {
+              await new Promise((r) => setTimeout(r, 50));
+              if (
+                sess.writeQueue.length === lastQueueSize &&
+                !sess.isWaitingForDrain
+              ) {
                 stalledCycles++;
               } else {
                 stalledCycles = 0;
                 lastQueueSize = sess.writeQueue.length;
               }
-              if (sess.ffmpegProcess && sess.ffmpegProcess.exitCode !== null) break;
+              if (sess.ffmpegProcess && sess.ffmpegProcess.exitCode !== null)
+                break;
             }
 
             // Close FFmpeg stdin
-            await new Promise(resolve => {
+            await new Promise((resolve) => {
               if (sess.ffmpegProcess?.stdin?.writable) {
                 sess.ffmpegProcess.stdin.end(() => resolve());
               } else {
@@ -864,7 +1038,7 @@ function setupIpcHandlers() {
             });
 
             // Wait for FFmpeg to fully exit and capture exit code
-            const ffmpegExitCode = await new Promise(resolve => {
+            const ffmpegExitCode = await new Promise((resolve) => {
               if (!sess.ffmpegProcess || sess.ffmpegProcess.exitCode !== null)
                 return resolve(sess.ffmpegProcess?.exitCode ?? 0);
               sess.ffmpegProcess.on("close", (code) => resolve(code));
@@ -873,7 +1047,8 @@ function setupIpcHandlers() {
 
             const finalPath = sess.finalPath;
             const { spawn: spawnDefrag } = require("child_process");
-            const defragFfmpegPath = require("../utils/ffmpeg").getSystemFfmpegPath() || "ffmpeg";
+            const defragFfmpegPath =
+              require("../utils/ffmpeg").getSystemFfmpegPath() || "ffmpeg";
             chunkSessions.delete(sessionId);
 
             // Defragment fMP4 → standard MP4 with +faststart for better seeking & player compat
@@ -882,20 +1057,32 @@ function setupIpcHandlers() {
               try {
                 await new Promise((res, rej) => {
                   const dp = spawnDefrag(defragFfmpegPath, [
-                    "-loglevel", "error",
-                    "-i", finalPath,
-                    "-c", "copy",
-                    "-movflags", "+faststart",
-                    "-y", defragPath
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    finalPath,
+                    "-c",
+                    "copy",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    defragPath,
                   ]);
-                  dp.on("close", (c) => (c === 0 ? res() : rej(new Error(`defrag exit ${c}`))));
+                  dp.on("close", (c) =>
+                    c === 0 ? res() : rej(new Error(`defrag exit ${c}`)),
+                  );
                   dp.on("error", rej);
                 });
                 fs.renameSync(defragPath, finalPath);
                 log("info", `fMP4 faststart applied: ${finalPath}`);
               } catch (defragErr) {
-                log("warn", `fMP4 defrag skipped (file still usable): ${defragErr.message}`);
-                try { if (fs.existsSync(defragPath)) fs.unlinkSync(defragPath); } catch (_) { }
+                log(
+                  "warn",
+                  `fMP4 defrag skipped (file still usable): ${defragErr.message}`,
+                );
+                try {
+                  if (fs.existsSync(defragPath)) fs.unlinkSync(defragPath);
+                } catch (_) {}
               }
             }
 
@@ -908,7 +1095,9 @@ function setupIpcHandlers() {
             showRecordingNotification(finalPath);
           })();
 
-          const hasBacklog = (sess.writeQueue && sess.writeQueue.length > 3) || sess.isWaitingForDrain;
+          const hasBacklog =
+            (sess.writeQueue && sess.writeQueue.length > 3) ||
+            sess.isWaitingForDrain;
           if (hasBacklog && mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send("conversion-started");
           }
@@ -917,7 +1106,7 @@ function setupIpcHandlers() {
             success: true,
             filePath: sess.finalPath,
             backgroundProcessing: true,
-            hasBacklog: hasBacklog
+            hasBacklog: hasBacklog,
           };
         }
 
@@ -933,8 +1122,11 @@ function setupIpcHandlers() {
         const settings = getSettings();
         const outputDir = settings.outputDirectory || app.getPath("videos");
         if (!fs.existsSync(outputDir)) {
-          try { fs.mkdirSync(outputDir, { recursive: true }); }
-          catch (e) { return { success: false, error: "Cannot access output directory" }; }
+          try {
+            fs.mkdirSync(outputDir, { recursive: true });
+          } catch (e) {
+            return { success: false, error: "Cannot access output directory" };
+          }
         }
 
         const format = settings.defaultFormat || "mp4";
@@ -942,16 +1134,25 @@ function setupIpcHandlers() {
         let canceled = false;
 
         if (settings.autoSave || options.forceAutoSave) {
-          const defaultName = generateFilename(settings.filenamePattern || "Recording_{date}_{time}", format);
+          const defaultName = generateFilename(
+            settings.filenamePattern || "Recording_{date}_{time}",
+            format,
+          );
           filePath = path.join(outputDir, defaultName);
           let counter = 1;
           const base = filePath;
           while (fs.existsSync(filePath)) {
-            filePath = path.join(outputDir, `${path.basename(base, path.extname(base))}_${counter}${path.extname(base)}`);
+            filePath = path.join(
+              outputDir,
+              `${path.basename(base, path.extname(base))}_${counter}${path.extname(base)}`,
+            );
             counter++;
           }
         } else {
-          const defaultName = generateFilename(settings.filenamePattern || "Recording_{date}_{time}", format);
+          const defaultName = generateFilename(
+            settings.filenamePattern || "Recording_{date}_{time}",
+            format,
+          );
           const result = await dialog.showSaveDialog(mainWindow, {
             title: "Save Recording",
             defaultPath: path.join(outputDir, defaultName),
@@ -966,7 +1167,9 @@ function setupIpcHandlers() {
         }
 
         if (canceled || !filePath) {
-          try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (e) { }
+          try {
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+          } catch (e) {}
           return { success: false, canceled: true };
         }
 
@@ -978,22 +1181,36 @@ function setupIpcHandlers() {
             mainWindow?.webContents.send("conversion-progress", progress);
           })
             .then(async () => {
-              try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (e) { }
+              try {
+                if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+              } catch (e) {}
               const thumbPath = await generateThumbnailHelper(convertedPath);
               addRecentRecording(convertedPath, thumbPath);
-              mainWindow?.webContents.send("conversion-complete", convertedPath);
+              mainWindow?.webContents.send(
+                "conversion-complete",
+                convertedPath,
+              );
               showRecordingNotification(convertedPath);
             })
             .catch(async (convertErr) => {
-              log("error", `Conversion failed: ${convertErr.message}, saving as webm`);
+              log(
+                "error",
+                `Conversion failed: ${convertErr.message}, saving as webm`,
+              );
               const webmPath = filePath.replace(/\.mp4$/i, ".webm");
-              try { fs.renameSync(tempFilePath, webmPath); } catch (e) { }
+              try {
+                fs.renameSync(tempFilePath, webmPath);
+              } catch (e) {}
               const thumbPath = await generateThumbnailHelper(webmPath);
               addRecentRecording(webmPath, thumbPath);
               mainWindow?.webContents.send("conversion-complete", webmPath);
               showRecordingNotification(webmPath);
             });
-          return { success: true, filePath: convertedPath, backgroundProcessing: true };
+          return {
+            success: true,
+            filePath: convertedPath,
+            backgroundProcessing: true,
+          };
         } else {
           try {
             fs.renameSync(tempFilePath, filePath);
@@ -1017,11 +1234,21 @@ function setupIpcHandlers() {
       const sess = chunkSessions.get(sessionId);
       if (sess) {
         if (sess.isLive && sess.ffmpegProcess) {
-          try { sess.ffmpegProcess.kill("SIGKILL"); } catch (e) { }
-          try { if (sess.finalPath && fs.existsSync(sess.finalPath)) fs.unlinkSync(sess.finalPath); } catch (e) { }
+          try {
+            sess.ffmpegProcess.kill("SIGKILL");
+          } catch (e) {}
+          try {
+            if (sess.finalPath && fs.existsSync(sess.finalPath))
+              fs.unlinkSync(sess.finalPath);
+          } catch (e) {}
         } else {
-          try { sess.ws.destroy(); } catch (e) { }
-          try { if (fs.existsSync(sess.tempFilePath)) fs.unlinkSync(sess.tempFilePath); } catch (e) { }
+          try {
+            sess.ws.destroy();
+          } catch (e) {}
+          try {
+            if (fs.existsSync(sess.tempFilePath))
+              fs.unlinkSync(sess.tempFilePath);
+          } catch (e) {}
         }
         chunkSessions.delete(sessionId);
       }
@@ -1133,8 +1360,6 @@ function setupIpcHandlers() {
     }
   });
 
-
-
   ipcMain.handle("get-settings", () => {
     return getSettings();
   });
@@ -1177,7 +1402,7 @@ function setupIpcHandlers() {
       console.error("remove-recent-recording-and-file error:", err);
       try {
         removeRecentRecording(filePath);
-      } catch (e) { }
+      } catch (e) {}
       return { success: false, error: err.message };
     }
   });
@@ -1187,7 +1412,6 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("save-settings", (_, newSettings) => {
-
     if (!newSettings) {
       return getSettings();
     }
@@ -1201,9 +1425,13 @@ function setupIpcHandlers() {
       frameRate: [24, 30, 60].includes(newSettings.frameRate)
         ? newSettings.frameRate
         : 24,
-      resolution: ["native", "1280x720", "1920x1080", "2560x1440", "3840x2160"].includes(
-        newSettings.resolution,
-      )
+      resolution: [
+        "native",
+        "1280x720",
+        "1920x1080",
+        "2560x1440",
+        "3840x2160",
+      ].includes(newSettings.resolution)
         ? newSettings.resolution
         : "native",
       recordAudio: Boolean(newSettings.recordAudio),
@@ -1265,30 +1493,61 @@ function setupIpcHandlers() {
       qualityControl: ["crf", "vbr"].includes(newSettings.qualityControl)
         ? newSettings.qualityControl
         : "crf",
-      crfValue: Number.isInteger(newSettings.crfValue) && newSettings.crfValue >= 0 && newSettings.crfValue <= 51
-        ? newSettings.crfValue
-        : 23,
-      videoBitrate: Number.isInteger(newSettings.videoBitrate) && newSettings.videoBitrate >= 1 && newSettings.videoBitrate <= 50
-        ? newSettings.videoBitrate
-        : 5,
+      crfValue:
+        Number.isInteger(newSettings.crfValue) &&
+        newSettings.crfValue >= 0 &&
+        newSettings.crfValue <= 51
+          ? newSettings.crfValue
+          : 23,
+      videoBitrate:
+        Number.isInteger(newSettings.videoBitrate) &&
+        newSettings.videoBitrate >= 1 &&
+        newSettings.videoBitrate <= 50
+          ? newSettings.videoBitrate
+          : 5,
       colorFormat: ["yuv420p", "yuv444p"].includes(newSettings.colorFormat)
         ? newSettings.colorFormat
         : "yuv420p",
       showMiniControls: Boolean(newSettings.showMiniControls),
       showClickHighlights: Boolean(newSettings.showClickHighlights),
-      highlightLeftColor: typeof newSettings.highlightLeftColor === 'string' ? newSettings.highlightLeftColor : '#FFEB3B',
-      highlightRightColor: typeof newSettings.highlightRightColor === 'string' ? newSettings.highlightRightColor : '#2196F3',
-      highlightRippleSize: Number.isInteger(newSettings.highlightRippleSize) ? newSettings.highlightRippleSize : 50,
-      highlightRippleSpeed: Number.isInteger(newSettings.highlightRippleSpeed) ? newSettings.highlightRippleSpeed : 400,
-      highlightGlowSize: Number.isInteger(newSettings.highlightGlowSize) ? newSettings.highlightGlowSize : 25,
-      highlightGlowIntensity: Number.isInteger(newSettings.highlightGlowIntensity) ? newSettings.highlightGlowIntensity : 30,
-      timerPreset: Number.isInteger(newSettings.timerPreset) ? newSettings.timerPreset : 0,
+      highlightLeftColor:
+        typeof newSettings.highlightLeftColor === "string"
+          ? newSettings.highlightLeftColor
+          : "#FFEB3B",
+      highlightRightColor:
+        typeof newSettings.highlightRightColor === "string"
+          ? newSettings.highlightRightColor
+          : "#2196F3",
+      highlightRippleSize: Number.isInteger(newSettings.highlightRippleSize)
+        ? newSettings.highlightRippleSize
+        : 50,
+      highlightRippleSpeed: Number.isInteger(newSettings.highlightRippleSpeed)
+        ? newSettings.highlightRippleSpeed
+        : 400,
+      highlightGlowSize: Number.isInteger(newSettings.highlightGlowSize)
+        ? newSettings.highlightGlowSize
+        : 25,
+      highlightGlowIntensity: Number.isInteger(
+        newSettings.highlightGlowIntensity,
+      )
+        ? newSettings.highlightGlowIntensity
+        : 30,
+      timerPreset: Number.isInteger(newSettings.timerPreset)
+        ? newSettings.timerPreset
+        : 0,
       scheduledRecording: Boolean(newSettings.scheduledRecording),
-      scheduleTime: typeof newSettings.scheduleTime === 'string' ? newSettings.scheduleTime : "09:00",
+      scheduleTime:
+        typeof newSettings.scheduleTime === "string"
+          ? newSettings.scheduleTime
+          : "09:00",
       recordMiniControls: Boolean(newSettings.recordMiniControls),
       recordAnnotationPalette: Boolean(newSettings.recordAnnotationPalette),
-      idleTimeoutMinutes: Number.isInteger(newSettings.idleTimeoutMinutes) ? newSettings.idleTimeoutMinutes : 5,
-      memoryThresholdMB: Number.isInteger(newSettings.memoryThresholdMB) ? newSettings.memoryThresholdMB : 500,
+      idleTimeoutMinutes: Number.isInteger(newSettings.idleTimeoutMinutes)
+        ? newSettings.idleTimeoutMinutes
+        : 5,
+      memoryThresholdMB: Number.isInteger(newSettings.memoryThresholdMB)
+        ? newSettings.memoryThresholdMB
+        : 500,
     };
 
     saveSettings(validatedSettings);
@@ -1438,7 +1697,6 @@ function setupIpcHandlers() {
             regionWindow.setContentProtection(true);
           }
 
-
           // Send initial data immediately
           regionWindow.webContents.send("region-init", {
             scaleFactor,
@@ -1452,9 +1710,11 @@ function setupIpcHandlers() {
           regionWindow.focus();
 
           // Fetch windows asynchronously to not block the UI
-          windowBoundsPromise.then(windows => {
+          windowBoundsPromise.then((windows) => {
             if (regionWindow && !regionWindow.isDestroyed()) {
-              console.log(`[IPC] Asynchronously sending ${windows.length} window bounds to renderer`);
+              console.log(
+                `[IPC] Asynchronously sending ${windows.length} window bounds to renderer`,
+              );
               regionWindow.webContents.send("windows-update", windows);
             }
           });
@@ -1469,7 +1729,10 @@ function setupIpcHandlers() {
           isFinalized = true;
           pendingRegionSelection = null;
 
-          log("info", `Finalizing selection. Result: ${result ? "Region" : "None"}`);
+          log(
+            "info",
+            `Finalizing selection. Result: ${result ? "Region" : "None"}`,
+          );
 
           // Remove listeners
           ipcMain.removeListener("region-selected", onSelected);
@@ -1504,7 +1767,7 @@ function setupIpcHandlers() {
             try {
               const current = getSettings();
               saveSettings({ ...current, lastRegion: region });
-            } catch (e) { }
+            } catch (e) {}
           }
           finalize(region);
         };
@@ -1526,12 +1789,10 @@ function setupIpcHandlers() {
     }
   });
 
-
   ipcMain.handle("get-available-encoders", async () => {
     try {
       const ffmpegUtil = require("../utils/ffmpeg");
-      const { getAvailableEncoders, getSystemFfmpegPath } =
-        ffmpegUtil;
+      const { getAvailableEncoders, getSystemFfmpegPath } = ffmpegUtil;
       const enc = await getAvailableEncoders();
       const systemPath = getSystemFfmpegPath();
       return { encoders: enc, systemFfmpeg: systemPath };
@@ -1555,7 +1816,9 @@ function setupIpcHandlers() {
 
     if (displayId !== undefined && displayId !== null) {
       const allDisplays = screen.getAllDisplays();
-      targetDisplay = allDisplays.find(d => d.id === displayId) || screen.getPrimaryDisplay();
+      targetDisplay =
+        allDisplays.find((d) => d.id === displayId) ||
+        screen.getPrimaryDisplay();
     }
 
     const bounds = targetDisplay.bounds;
@@ -1568,10 +1831,16 @@ function setupIpcHandlers() {
 
     // Send display offset to overlay for coordinate conversion
     if (ov.webContents) {
-      ov.webContents.send("overlay-display-offset", { x: bounds.x, y: bounds.y });
+      ov.webContents.send("overlay-display-offset", {
+        x: bounds.x,
+        y: bounds.y,
+      });
     }
 
-    log("info", `Overlay shown on display ${targetDisplay.id} at (${bounds.x}, ${bounds.y})`);
+    log(
+      "info",
+      `Overlay shown on display ${targetDisplay.id} at (${bounds.x}, ${bounds.y})`,
+    );
   });
 
   // Hide the overlay
@@ -1618,17 +1887,29 @@ function setupIpcHandlers() {
           overlayWindow.moveTop();
 
           // Keep Mini Controls above the drawing surface
-          if (miniControlsWindow && !miniControlsWindow.isDestroyed() && miniControlsWindow.isVisible()) {
+          if (
+            miniControlsWindow &&
+            !miniControlsWindow.isDestroyed() &&
+            miniControlsWindow.isVisible()
+          ) {
             miniControlsWindow.moveTop();
           }
 
           // Keep Main Window (Tools) above the drawing surface
-          if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+          if (
+            mainWindow &&
+            !mainWindow.isDestroyed() &&
+            mainWindow.isVisible()
+          ) {
             mainWindow.moveTop();
           }
 
           // Keep Annotation Palette above the drawing surface
-          if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed() && annotationPaletteWindow.isVisible()) {
+          if (
+            annotationPaletteWindow &&
+            !annotationPaletteWindow.isDestroyed() &&
+            annotationPaletteWindow.isVisible()
+          ) {
             annotationPaletteWindow.moveTop();
           }
         } else {
@@ -1704,9 +1985,8 @@ function setupIpcHandlers() {
         regionIndicatorWindow.setContentProtection(true);
       }
 
-
       regionIndicatorWindow.loadFile(
-        path.join(__dirname, "..", "renderer", "region-indicator.html")
+        path.join(__dirname, "..", "renderer", "region-indicator.html"),
       );
     }
 
@@ -1798,7 +2078,11 @@ function setupIpcHandlers() {
   });
 
   ipcMain.on("recording-volume-update", (_, volume) => {
-    if (miniControlsWindow && !miniControlsWindow.isDestroyed() && miniControlsWindow.isVisible()) {
+    if (
+      miniControlsWindow &&
+      !miniControlsWindow.isDestroyed() &&
+      miniControlsWindow.isVisible()
+    ) {
       miniControlsWindow.webContents.send("mini-volume-update", volume);
     }
   });
@@ -1843,7 +2127,11 @@ function setupIpcHandlers() {
         // Ensure it stays above overlay and taskbar
         if (!paletteTopInterval) {
           paletteTopInterval = setInterval(() => {
-            if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed() && annotationPaletteWindow.isVisible()) {
+            if (
+              annotationPaletteWindow &&
+              !annotationPaletteWindow.isDestroyed() &&
+              annotationPaletteWindow.isVisible()
+            ) {
               annotationPaletteWindow.setAlwaysOnTop(true, "screen-saver");
               annotationPaletteWindow.moveTop();
             } else {
@@ -1881,9 +2169,13 @@ function setupIpcHandlers() {
     // Forward command to the overlay window
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       if (data.action === "set-tool") {
-        overlayWindow.webContents.send("overlay-settings", { tool: data.value });
+        overlayWindow.webContents.send("overlay-settings", {
+          tool: data.value,
+        });
       } else if (data.action === "set-color") {
-        overlayWindow.webContents.send("overlay-settings", { color: data.value });
+        overlayWindow.webContents.send("overlay-settings", {
+          color: data.value,
+        });
       } else if (data.action === "undo" || data.action === "clear") {
         overlayWindow.webContents.send("overlay-command", data.action);
       } else if (data.action === "close") {
@@ -1898,148 +2190,162 @@ function setupIpcHandlers() {
   ipcMain.on("annotation-settings-sync", (event, settings) => {
     // Forward from main window to palette window
     if (annotationPaletteWindow && !annotationPaletteWindow.isDestroyed()) {
-      annotationPaletteWindow.webContents.send("annotation-settings-update", settings);
+      annotationPaletteWindow.webContents.send(
+        "annotation-settings-update",
+        settings,
+      );
     }
   });
 
   // We add to set-recording-state to keep mini window in sync
-  ipcMain.handle("set-recording-state", async (_, recording, isPaused = false) => {
-    try {
-      state.setRecordingState(recording);
-      state.setPaused(isPaused);
+  ipcMain.handle(
+    "set-recording-state",
+    async (_, recording, isPaused = false) => {
+      try {
+        state.setRecordingState(recording);
+        state.setPaused(isPaused);
 
-      if (recording && !isPaused) {
-        tray.createRecordingTray();
-        const settings = getSettings();
-        if (settings.hideWindowDuringRecording && mainWindow) {
-          mainWindow.hide();
-        }
-      } else if (recording && isPaused) {
-        tray.createPausedTray();
-      } else {
-        tray.restoreNormalTray();
-        if (mainWindow && !mainWindow.isVisible()) {
-          mainWindow.show();
-          if (mainWindow.isMinimized()) {
-            mainWindow.restore();
+        if (recording && !isPaused) {
+          tray.createRecordingTray();
+          const settings = getSettings();
+          if (settings.hideWindowDuringRecording && mainWindow) {
+            mainWindow.hide();
           }
-          mainWindow.focus();
-        }
-      }
-
-      // Show/Hide Mini Controls
-      const settings = getSettings();
-      console.log(`[MiniControls] status: recording=${recording}, showMiniControls=${settings.showMiniControls}, winExists=${!!miniControlsWindow}`);
-
-      if (recording && settings.showMiniControls && (!miniControlsWindow || miniControlsWindow.isDestroyed())) {
-        console.log('[MiniControls] Window missing when needed, recreating...');
-        const { createMiniControlsWindow } = require("./main");
-        miniControlsWindow = createMiniControlsWindow();
-      }
-
-      if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
-        if (recording && settings.showMiniControls) {
-          console.log('[MiniControls] Showing mini window');
-          if (miniControlsWindow.isMinimized()) miniControlsWindow.restore();
-          miniControlsWindow.show();
-          miniControlsWindow.focus(); // Ensure it takes top focus
-          miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
-
-          // Apply capture exclusion based on user settings
-          applyExclusionSettings();
+        } else if (recording && isPaused) {
+          tray.createPausedTray();
         } else {
-          miniControlsWindow.hide();
+          tray.restoreNormalTray();
+          if (mainWindow && !mainWindow.isVisible()) {
+            mainWindow.show();
+            if (mainWindow.isMinimized()) {
+              mainWindow.restore();
+            }
+            mainWindow.focus();
+          }
         }
 
-        // Sync settings/state to mini window
-        miniControlsWindow.webContents.send("mini-state-update", {
-          isPaused,
-          isRecording: recording,
-          recordAudio: getSettings().recordAudio,
-          recordSystemAudio: getSettings().recordSystemAudio,
-          webcamEnabled: getSettings().webcamEnabled,
-          isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
-          isPresenterMode: getSettings().cameraMode === "center",
-        });
-
-      }
-
-      // Show/Hide Overlay for highlights
-      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        // Show/Hide Mini Controls
         const settings = getSettings();
-        if (recording && settings.showClickHighlights) {
-          // Start global click hook for capturing mouse clicks
-          setupClickHighlightHook(true);
+        console.log(
+          `[MiniControls] status: recording=${recording}, showMiniControls=${settings.showMiniControls}, winExists=${!!miniControlsWindow}`,
+        );
 
-          const { screen } = require("electron");
-          const primaryDisplay = screen.getPrimaryDisplay();
-          const bounds = primaryDisplay.bounds;
+        if (
+          recording &&
+          settings.showMiniControls &&
+          (!miniControlsWindow || miniControlsWindow.isDestroyed())
+        ) {
+          console.log(
+            "[MiniControls] Window missing when needed, recreating...",
+          );
+          const { createMiniControlsWindow } = require("./main");
+          miniControlsWindow = createMiniControlsWindow();
+        }
 
-          overlayWindow.setPosition(bounds.x, bounds.y);
-          overlayWindow.setSize(bounds.width, bounds.height);
+        if (miniControlsWindow && !miniControlsWindow.isDestroyed()) {
+          if (recording && settings.showMiniControls) {
+            console.log("[MiniControls] Showing mini window");
+            if (miniControlsWindow.isMinimized()) miniControlsWindow.restore();
+            miniControlsWindow.show();
+            miniControlsWindow.focus(); // Ensure it takes top focus
+            miniControlsWindow.setAlwaysOnTop(true, "screen-saver");
 
-          // Forward clicks to windows below so they're captured in recording
-          // Note: This means we can't capture clicks via DOM events
-          // We'll rely on uiohook for global click detection
-          overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+            // Apply capture exclusion based on user settings
+            applyExclusionSettings();
+          } else {
+            miniControlsWindow.hide();
+          }
 
-          overlayWindow.showInactive();
-          overlayWindow.setAlwaysOnTop(true, "screen-saver");
+          // Sync settings/state to mini window
+          miniControlsWindow.webContents.send("mini-state-update", {
+            isPaused,
+            isRecording: recording,
+            recordAudio: getSettings().recordAudio,
+            recordSystemAudio: getSettings().recordSystemAudio,
+            webcamEnabled: getSettings().webcamEnabled,
+            isDrawingActive: overlayWindow ? overlayWindow.isVisible() : false,
+            isPresenterMode: getSettings().cameraMode === "center",
+          });
+        }
 
-          // Start a pulse to keep Windows from "forgetting" our forwarding flag
-          if (forwardingPulseInterval) clearInterval(forwardingPulseInterval);
-          forwardingPulseInterval = setInterval(() => {
+        // Show/Hide Overlay for highlights
+        if (overlayWindow && !overlayWindow.isDestroyed()) {
+          const settings = getSettings();
+          if (recording && settings.showClickHighlights) {
+            // Start global click hook for capturing mouse clicks
+            setupClickHighlightHook(true);
+
+            const { screen } = require("electron");
+            const primaryDisplay = screen.getPrimaryDisplay();
+            const bounds = primaryDisplay.bounds;
+
+            overlayWindow.setPosition(bounds.x, bounds.y);
+            overlayWindow.setSize(bounds.width, bounds.height);
+
+            // Forward clicks to windows below so they're captured in recording
+            // Note: This means we can't capture clicks via DOM events
+            // We'll rely on uiohook for global click detection
+            overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+            overlayWindow.showInactive();
+            overlayWindow.setAlwaysOnTop(true, "screen-saver");
+
+            // Start a pulse to keep Windows from "forgetting" our forwarding flag
+            if (forwardingPulseInterval) clearInterval(forwardingPulseInterval);
+            forwardingPulseInterval = setInterval(() => {
+              if (overlayWindow && !overlayWindow.isDestroyed()) {
+                overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+                // Re-assert top level in case other windows try to overlap
+                overlayWindow.setAlwaysOnTop(true, "screen-saver");
+              }
+            }, 1000);
+
+            // Sync highlight setting to overlay with a small delay to ensure it's ready
+            setTimeout(() => {
+              if (overlayWindow && !overlayWindow.isDestroyed()) {
+                overlayWindow.webContents.send("overlay-settings", {
+                  showClickHighlights: settings.showClickHighlights,
+                  highlightLeftColor: settings.highlightLeftColor || "#FFEB3B",
+                  highlightRightColor:
+                    settings.highlightRightColor || "#2196F3",
+                  highlightRippleSize: settings.highlightRippleSize || 50,
+                  highlightRippleSpeed: settings.highlightRippleSpeed || 400,
+                  highlightGlowSize: settings.highlightGlowSize || 25,
+                  highlightGlowIntensity: settings.highlightGlowIntensity || 30,
+                });
+              }
+            }, 200);
+          } else if (!recording) {
+            // Stop global click hook
+            setupClickHighlightHook(false);
+
+            // If stopped recording, hide the overlay
             if (overlayWindow && !overlayWindow.isDestroyed()) {
-              overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-              // Re-assert top level in case other windows try to overlap
-              overlayWindow.setAlwaysOnTop(true, "screen-saver");
-            }
-          }, 1000);
-
-          // Sync highlight setting to overlay with a small delay to ensure it's ready
-          setTimeout(() => {
-            if (overlayWindow && !overlayWindow.isDestroyed()) {
+              overlayWindow.hide();
+              // Also sync state to off
               overlayWindow.webContents.send("overlay-settings", {
-                showClickHighlights: settings.showClickHighlights,
-                highlightLeftColor: settings.highlightLeftColor || "#FFEB3B",
-                highlightRightColor: settings.highlightRightColor || "#2196F3",
-                highlightRippleSize: settings.highlightRippleSize || 50,
-                highlightRippleSpeed: settings.highlightRippleSpeed || 400,
-                highlightGlowSize: settings.highlightGlowSize || 25,
-                highlightGlowIntensity: settings.highlightGlowIntensity || 30
+                showClickHighlights: false,
               });
             }
-          }, 200);
-        } else if (!recording) {
-          // Stop global click hook
-          setupClickHighlightHook(false);
 
-          // If stopped recording, hide the overlay
-          if (overlayWindow && !overlayWindow.isDestroyed()) {
-            overlayWindow.hide();
-            // Also sync state to off
-            overlayWindow.webContents.send("overlay-settings", {
-              showClickHighlights: false
-            });
-          }
-
-          if (overlayMoveTopInterval) {
-            clearInterval(overlayMoveTopInterval);
-            overlayMoveTopInterval = null;
-          }
-          if (forwardingPulseInterval) {
-            clearInterval(forwardingPulseInterval);
-            forwardingPulseInterval = null;
+            if (overlayMoveTopInterval) {
+              clearInterval(overlayMoveTopInterval);
+              overlayMoveTopInterval = null;
+            }
+            if (forwardingPulseInterval) {
+              clearInterval(forwardingPulseInterval);
+              forwardingPulseInterval = null;
+            }
           }
         }
-      }
 
-      return { success: true };
-    } catch (err) {
-      log("error", `set-recording-state failed: ${err.message}`);
-      return { success: false, error: err.message };
-    }
-  });
+        return { success: true };
+      } catch (err) {
+        log("error", `set-recording-state failed: ${err.message}`);
+        return { success: false, error: err.message };
+      }
+    },
+  );
 
   ipcMain.handle("camera-window-toggle", (_, show) => {
     if (!cameraWindow || cameraWindow.isDestroyed()) return;
@@ -2048,11 +2354,13 @@ function setupIpcHandlers() {
     if (show) {
       // Only showInactive if actually hidden, to avoid Windows resetting position during tweens
       if (!visible) {
-        console.log('[CamToggle] Window was hidden → calling showInactive()');
+        console.log("[CamToggle] Window was hidden → calling showInactive()");
         cameraWindow.showInactive();
         cameraWindow.setAlwaysOnTop(true, "screen-saver");
       } else {
-        console.log('[CamToggle] Window already visible → skipping showInactive()');
+        console.log(
+          "[CamToggle] Window already visible → skipping showInactive()",
+        );
       }
       cameraWindow.webContents.send("camera-status", true);
     } else {
@@ -2063,11 +2371,12 @@ function setupIpcHandlers() {
       if (dimmerWindow && !dimmerWindow.isDestroyed()) {
         dimmerWindow.hide();
       }
-      console.log('[CamToggle] Window hidden, preFullscreenBounds + Dimmer cleared');
+      console.log(
+        "[CamToggle] Window hidden, preFullscreenBounds + Dimmer cleared",
+      );
     }
   });
 
-  let preFullscreenBounds = null;
   let tweenInterval = null;
 
   function easeInOutCubic(t) {
@@ -2094,12 +2403,18 @@ function setupIpcHandlers() {
 
       const x = Math.round(fromBounds.x + (toBounds.x - fromBounds.x) * t);
       const y = Math.round(fromBounds.y + (toBounds.y - fromBounds.y) * t);
-      const w = Math.round(fromBounds.width + (toBounds.width - fromBounds.width) * t);
-      const h = Math.round(fromBounds.height + (toBounds.height - fromBounds.height) * t);
+      const w = Math.round(
+        fromBounds.width + (toBounds.width - fromBounds.width) * t,
+      );
+      const h = Math.round(
+        fromBounds.height + (toBounds.height - fromBounds.height) * t,
+      );
 
       try {
         cameraWindow.setBounds({ x, y, width: w, height: h });
-      } catch (e) { /* window may have been destroyed */ }
+      } catch (e) {
+        /* window may have been destroyed */
+      }
 
       if (rawT >= 1) {
         clearInterval(tweenInterval);
@@ -2111,7 +2426,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle("update-camera-settings", (_, settings) => {
     if (!cameraWindow || cameraWindow.isDestroyed()) {
-      console.warn('[CamSettings] cameraWindow missing/destroyed');
+      console.warn("[CamSettings] cameraWindow missing/destroyed");
       return;
     }
 
@@ -2120,15 +2435,22 @@ function setupIpcHandlers() {
     const currentDisplay = screen.getDisplayMatching(fromBounds);
     const hw = currentDisplay.workAreaSize;
 
-    console.log(`[CamSettings] IN: mode=${settings.cameraMode}, curBounds=${JSON.stringify(fromBounds)}, preFull=${JSON.stringify(preFullscreenBounds)}, displayX=${currentDisplay.bounds.x}`);
+    console.log(
+      `[CamSettings] IN: mode=${settings.cameraMode}, curBounds=${JSON.stringify(fromBounds)}, preFull=${JSON.stringify(preFullscreenBounds)}, displayX=${currentDisplay.bounds.x}`,
+    );
 
     if (settings.cameraMode === "center") {
       // Transition to Presenter Mode
       if (!preFullscreenBounds) {
         preFullscreenBounds = fromBounds;
-        console.log('[CamSettings] SAVED preFullscreenBounds:', JSON.stringify(preFullscreenBounds));
+        console.log(
+          "[CamSettings] SAVED preFullscreenBounds:",
+          JSON.stringify(preFullscreenBounds),
+        );
       }
-      console.log(`[CamSettings] Presenter Mode Toggle: fromBounds=${JSON.stringify(fromBounds)}`);
+      console.log(
+        `[CamSettings] Presenter Mode Toggle: fromBounds=${JSON.stringify(fromBounds)}`,
+      );
 
       const bigSize = Math.round(Math.min(hw.width, hw.height) * 0.45);
       const toBounds = {
@@ -2138,21 +2460,26 @@ function setupIpcHandlers() {
         height: bigSize,
       };
 
-      console.log('[CamSettings] Animating to center:', JSON.stringify(toBounds));
+      console.log(
+        "[CamSettings] Animating to center:",
+        JSON.stringify(toBounds),
+      );
       animateCameraWindow(fromBounds, toBounds, 400);
 
       // Send display dimensions to compositor for presenter mode center calculation
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("presenter-mode-display", {
           width: hw.width,
-          height: hw.height
+          height: hw.height,
         });
       }
 
       // Show dimmer overlay in UX - Move to the correct display first
       if (dimmerWindow && !dimmerWindow.isDestroyed()) {
         const display = screen.getDisplayMatching(fromBounds);
-        console.log(`[CamSettings] Showing Dimmer on display at ${display.bounds.x}, ${display.bounds.y}. Camera currently at ${fromBounds.x}, ${fromBounds.y}`);
+        console.log(
+          `[CamSettings] Showing Dimmer on display at ${display.bounds.x}, ${display.bounds.y}. Camera currently at ${fromBounds.x}, ${fromBounds.y}`,
+        );
         dimmerWindow.setBounds(display.bounds);
         dimmerWindow.setOpacity(0.6); // 60% dim
         dimmerWindow.showInactive();
@@ -2171,9 +2498,9 @@ function setupIpcHandlers() {
         // Use a 150ms delay to ensure the OS has finished processing the show
         setTimeout(() => {
           if (cameraWindow && !cameraWindow.isDestroyed()) {
-            cameraWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+            cameraWindow.setAlwaysOnTop(true, "screen-saver", 1);
             cameraWindow.moveTop();
-            console.log('[CamSettings] Z-Order: Camera moved above Dimmer');
+            console.log("[CamSettings] Z-Order: Camera moved above Dimmer");
           }
         }, 150);
       }
@@ -2185,7 +2512,9 @@ function setupIpcHandlers() {
     } else if (settings.cameraMode === "corner") {
       // Transition back to Corner Mode
       const savedBounds = preFullscreenBounds;
-      console.log(`[CamSettings] EXIT Presenter Mode: currentBounds=${JSON.stringify(fromBounds)}, savedBounds=${JSON.stringify(savedBounds)}`);
+      console.log(
+        `[CamSettings] EXIT Presenter Mode: currentBounds=${JSON.stringify(fromBounds)}, savedBounds=${JSON.stringify(savedBounds)}`,
+      );
 
       let targetWidth = 200;
       let targetHeight = 200;
@@ -2195,26 +2524,37 @@ function setupIpcHandlers() {
         targetHeight = savedBounds.height;
       } else {
         if (settings.webcamSize === "small") targetWidth = targetHeight = 150;
-        else if (settings.webcamSize === "large") targetWidth = targetHeight = 300;
+        else if (settings.webcamSize === "large")
+          targetWidth = targetHeight = 300;
       }
 
-      console.log('[CamSettings] Animating back to corner. targetSize=', targetWidth, 'savedBounds=', JSON.stringify(savedBounds));
+      console.log(
+        "[CamSettings] Animating back to corner. targetSize=",
+        targetWidth,
+        "savedBounds=",
+        JSON.stringify(savedBounds),
+      );
 
-      const restoreBounds = savedBounds ? {
-        x: savedBounds.x,
-        y: savedBounds.y,
-        width: targetWidth,
-        height: targetHeight,
-      } : {
-        x: fromBounds.x,
-        y: fromBounds.y,
-        width: targetWidth,
-        height: targetHeight,
-      };
+      const restoreBounds = savedBounds
+        ? {
+            x: savedBounds.x,
+            y: savedBounds.y,
+            width: targetWidth,
+            height: targetHeight,
+          }
+        : {
+            x: fromBounds.x,
+            y: fromBounds.y,
+            width: targetWidth,
+            height: targetHeight,
+          };
 
       preFullscreenBounds = null; // Clear now
 
-      console.log(`[CamSettings] Target restoreBounds:`, JSON.stringify(restoreBounds));
+      console.log(
+        `[CamSettings] Target restoreBounds:`,
+        JSON.stringify(restoreBounds),
+      );
 
       animateCameraWindow(fromBounds, restoreBounds, 400);
 
@@ -2231,7 +2571,9 @@ function setupIpcHandlers() {
       // CRITICAL: DO NOT touch size/position if a tween is running or we're in presenter mode.
       // applySettings() from renderer often fires and would otherwise "fight" the animation.
       if (tweenInterval || preFullscreenBounds) {
-        console.log('[CamSettings] Skipping static resize - animation active or in presenter mode');
+        console.log(
+          "[CamSettings] Skipping static resize - animation active or in presenter mode",
+        );
       } else {
         let newSize = 200;
         if (settings.webcamSize === "small") newSize = 150;
@@ -2239,7 +2581,9 @@ function setupIpcHandlers() {
 
         try {
           cameraWindow.setSize(newSize, newSize);
-        } catch (e) { /* IGNORE */ }
+        } catch (e) {
+          /* IGNORE */
+        }
       }
     }
 
@@ -2247,7 +2591,6 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("get-camera-window-bounds", () => {
-
     if (!cameraWindow || cameraWindow.isDestroyed()) return null;
     return cameraWindow.getBounds();
   });

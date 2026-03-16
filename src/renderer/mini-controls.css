@@ -200,9 +200,11 @@ body {
 
 .meter-bar {
     height: 100%;
-    width: 0%;
+    width: 100%;
+    transform: scaleX(0);
+    transform-origin: left;
     background: linear-gradient(to right, #0be881, #ffd32a, #ff5e57);
-    transition: width 0.1s ease-out, background 0.3s ease;
+    transition: transform 0.1s ease-out, background 0.3s ease;
     border-radius: 1px;
 }
 

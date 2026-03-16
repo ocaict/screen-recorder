@@ -924,8 +924,7 @@ class RecordingManager {
           let requiredThreshold = (index + 1) / bars.length;
 
           if (scalarVol >= requiredThreshold - 0.02) {
-            const height = Math.max(4, 20); // Maximum bar visual height
-            bar.style.height = `${height}px`;
+            bar.style.transform = "scaleY(1)";
             bar.classList.add("active");
 
             if (index > bars.length * 0.75) {
@@ -936,7 +935,7 @@ class RecordingManager {
               bar.classList.remove("high", "medium");
             }
           } else {
-            bar.style.height = `4px`; // Resting state
+            bar.style.transform = ""; // Resting state
             bar.classList.remove("active", "medium", "high");
           }
         });
@@ -963,7 +962,7 @@ class RecordingManager {
 
     const bars = this.app.audioMeterBars?.querySelectorAll(".audio-bar");
     bars?.forEach((bar) => {
-      bar.style.height = "4px";
+      bar.style.transform = "";
       bar.classList.remove("active", "medium", "high");
     });
   }

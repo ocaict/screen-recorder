@@ -60,7 +60,7 @@ class MiniControls {
                     // volume is 0.0 to 1.0
                     // We apply a slight boost and clamping for better visualization
                     const displayVol = Math.min(100, volume * 120);
-                    meterBar.style.width = `${displayVol}%`;
+                    meterBar.style.transform = `scaleX(${displayVol / 100})`;
                 }
             });
         }
@@ -158,6 +158,7 @@ class MiniControls {
 
         let isDragging = false;
         let startX, startY, winX, winY;
+        let animationFrameId = null;
 
         dragHandle.addEventListener("mousedown", (e) => {
             isDragging = true;
@@ -178,15 +179,25 @@ class MiniControls {
             const deltaX = e.screenX - startX;
             const deltaY = e.screenY - startY;
 
-            if (window.electronAPI?.moveMiniWindow) {
-                window.electronAPI.moveMiniWindow(winX + deltaX, winY + deltaY);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
             }
+
+            animationFrameId = requestAnimationFrame(() => {
+                if (window.electronAPI?.moveMiniWindow) {
+                    window.electronAPI.moveMiniWindow(winX + deltaX, winY + deltaY);
+                }
+            });
         });
 
         window.addEventListener("mouseup", () => {
             if (isDragging) {
                 isDragging = false;
                 dragHandle.style.cursor = "grab";
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
             }
         });
     }

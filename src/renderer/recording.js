@@ -388,8 +388,10 @@ class RecordingManager {
 
   async getAudioContext() {
     if (!this.audioContext || this.audioContext.state === "closed") {
-      this.audioContext = new (window.AudioContext ||
-        window.webkitAudioContext)();
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 48000,
+        latencyHint: "interactive"
+      });
     }
     if (this.audioContext.state === "suspended") {
       await this.audioContext.resume();
@@ -494,9 +496,7 @@ class RecordingManager {
   }
 
   async applyNoiseCancellation(stream) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-      sampleRate: 48000 // RNNoise works best at 44100 or 48000
-    });
+    const audioContext = await this.getAudioContext();
     
     // 1. Load the processor as a module
     await audioContext.audioWorklet.addModule('audio/rnnoise-processor.js', {
@@ -518,9 +518,6 @@ class RecordingManager {
     
     source.connect(rnnoiseNode);
     rnnoiseNode.connect(destination);
-    
-    this._audioContexts = this._audioContexts || [];
-    this._audioContexts.push(audioContext);
     
     return destination.stream;
   }
@@ -635,18 +632,6 @@ class RecordingManager {
             }
           });
           this.audioStream = null;
-        }
-
-        // Cleanup noise cancellation contexts
-        if (this._audioContexts) {
-          this._audioContexts.forEach(ctx => {
-            try {
-              if (ctx.state !== 'closed') ctx.close();
-            } catch (e) {
-              console.error("Failed to close audio context:", e);
-            }
-          });
-          this._audioContexts = [];
         }
       } catch (e) {
         console.warn("Error stopping audio stream:", e);
@@ -1106,6 +1091,11 @@ class RecordingManager {
   }
 
   stopAudioMeter() {
+    if (this.audioMeterNode) {
+      this.audioMeterNode.disconnect();
+      this.audioMeterNode.port.onmessage = null;
+      this.audioMeterNode = null;
+    }
     if (this.audioAnimationId) {
       cancelAnimationFrame(this.audioAnimationId);
       this.audioAnimationId = null;
@@ -1114,11 +1104,8 @@ class RecordingManager {
     // Also stop the preview audio stream if one was open
     this.stopPreviewAudioMeter();
 
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-
+    // Instead of closing the context (which kills live streams like RNNoise),
+    // we just disconnect the meter node. The context is reused via getAudioContext().
     this.audioAnalyser = null;
     this.app.audioMeter?.classList.add("hidden");
 
@@ -1313,10 +1300,6 @@ class RecordingManager {
         if (finalAudioStream) {
           // CLONE the audio tracks so they aren't killed by stopCurrentStream() cleanup
           audioTracks = finalAudioStream.getAudioTracks().map(t => t.clone());
-
-          // Start the meter with a stream containing the CLONED tracks
-          const meterStream = new MediaStream(audioTracks);
-          await this.startAudioMeter(meterStream);
         }
       } catch (trackErr) {
         console.error("Failed to get tracks:", trackErr);
@@ -1335,6 +1318,12 @@ class RecordingManager {
         // Kill any existing preview compositor before starting recording compositor.
         // IMPORTANT: We preserve the audio tracks we just prepared for recording.
         this.stopCurrentStream(true);
+
+        // Start the meter with a stream containing the audio tracks we're actually using
+        if (audioTracks && audioTracks.length > 0) {
+          const meterStream = new MediaStream(audioTracks);
+          await this.startAudioMeter(meterStream);
+        }
 
         // Now safely assign the webcam stream to track property
         if (newWebcamStream) {

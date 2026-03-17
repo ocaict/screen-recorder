@@ -243,6 +243,30 @@ class SettingsHandler {
             micSelect.innerHTML += `<option value="${dev.deviceId}" ${this.app.settings.selectedMicrophone === dev.deviceId ? "selected" : ""}>${dev.label || "Microphone"}</option>`;
           }
         });
+
+        // Start live mic preview meter
+        if (this.app.settings.recordAudio !== false) {
+          this.app.startSettingsMicMeter?.(micSelect.value);
+        }
+
+        // Re-init meter when user picks a different mic
+        micSelect.onchange = () => {
+          if (this.app.settings.recordAudio !== false) {
+            this.app.startSettingsMicMeter?.(micSelect.value);
+          }
+        };
+
+        // Toggle meter when Record Microphone checkbox changes
+        const micChk = this.app.document.getElementById("settingsRecordAudio");
+        if (micChk) {
+          micChk.onchange = () => {
+            if (micChk.checked) {
+              this.app.startSettingsMicMeter?.(micSelect.value);
+            } else {
+              this.app.stopSettingsMicMeter?.();
+            }
+          };
+        }
       }
 
       if (sysSelect) {

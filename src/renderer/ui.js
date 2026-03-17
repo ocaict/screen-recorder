@@ -115,6 +115,10 @@ class UIManager {
     modal.classList.remove("active");
     modal.removeAttribute("aria-modal");
     modal.removeAttribute("role");
+    // Stop settings mic meter when settings modal closes
+    if (modal && modal.id === "settingsModal") {
+      this.app?.stopSettingsMicMeter?.();
+    }
   }
 
   openModal(modal) {

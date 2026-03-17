@@ -1224,6 +1224,12 @@ class ScreenRecorder {
     if (this.discardBtn) this.discardBtn.disabled = false;
     this.annotationToggleBtn.disabled = false;
     this.selectSourceBtn.disabled = true;
+    if (this.settingsBtn) this.settingsBtn.disabled = true;
+    // Close settings if open when recording starts (e.g. during countdown)
+    if (this.settingsModal?.classList.contains("active")) {
+      this.stopSettingsMicMeter();
+      this.closeModal(this.settingsModal);
+    }
     this.stopBtn.classList.add("recording");
     this.recordingIndicator.classList.remove("hidden");
     this.recordingPill?.classList.remove("hidden");
@@ -1446,6 +1452,7 @@ class ScreenRecorder {
     this.annotationToggleBtn.disabled = true;
     this.annotationToggleBtn.classList.remove("active");
     this.selectSourceBtn.disabled = false;
+    if (this.settingsBtn) this.settingsBtn.disabled = false;
     this.stopBtn.classList.remove("recording");
     this.recordingIndicator.classList.add("hidden");
     this.recordingPill?.classList.add("hidden");
@@ -1685,6 +1692,7 @@ class ScreenRecorder {
   }
 
   openShortcutsModal() {
+    this.stopSettingsMicMeter();
     this.closeModal(this.settingsModal);
     setTimeout(() => {
       this.openModal(this.shortcutsModal);
@@ -1786,6 +1794,30 @@ class ScreenRecorder {
         micSelect.value = this.settings.selectedMicrophone;
       }
 
+      // Start live mic preview meter in settings
+      if (this.settings.recordAudio !== false) {
+        this.startSettingsMicMeter(micSelect.value);
+      }
+
+      // Re-init meter when user picks a different mic
+      micSelect.onchange = () => {
+        if (this.settings.recordAudio !== false) {
+          this.startSettingsMicMeter(micSelect.value);
+        }
+      };
+
+      // Toggle meter when checkbox changes
+      const micChk = document.getElementById("settingsRecordAudio");
+      if (micChk) {
+        micChk.onchange = () => {
+          if (micChk.checked) {
+            this.startSettingsMicMeter(micSelect.value);
+          } else {
+            this.stopSettingsMicMeter();
+          }
+        };
+      }
+
       const cameraSelect = document.getElementById("settingsCamera");
       if (cameraSelect) {
         cameraSelect.innerHTML =
@@ -1810,6 +1842,102 @@ class ScreenRecorder {
 
   async saveSettings() {
     return this.settingsHandler?.saveSettings();
+  }
+
+  /**
+   * Start a live microphone level preview meter inside the Settings modal.
+   * Uses a hidden GainNode(0) to avoid audio playback feedback.
+   */
+  async startSettingsMicMeter(deviceId) {
+    // Stop any existing settings meter first
+    this.stopSettingsMicMeter();
+
+    const meterBar = document.getElementById("settingsMicFill");
+    const meterWrap = document.getElementById("settingsMicMeter");
+    if (!meterWrap || !meterBar) return;
+
+    meterWrap.style.display = "block";
+
+    try {
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      };
+      if (deviceId && deviceId !== "default") {
+        constraints.audio.deviceId = { exact: deviceId };
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      this._settingsMicStream = stream;
+
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this._settingsMicCtx = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.75;
+
+      // Silent output — prevents mic playback echo
+      const silencer = ctx.createGain();
+      silencer.gain.value = 0;
+
+      source.connect(analyser);
+      analyser.connect(silencer);
+      silencer.connect(ctx.destination);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      this._settingsMicRafId = null;
+
+      const draw = () => {
+        this._settingsMicRafId = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+
+        // Compute an average volume across all frequency bins
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const pct = Math.min(100, Math.round((avg / 128) * 140)); // scale 0-128 -> 0-100%
+
+        meterBar.style.width = pct + "%";
+
+        // Colour feedback: green / yellow / red
+        if (pct > 85) {
+          meterBar.style.background = "linear-gradient(to right, #22c55e, #eab308 60%, #ef4444)";
+        } else if (pct > 55) {
+          meterBar.style.background = "linear-gradient(to right, #22c55e, #eab308)";
+        } else {
+          meterBar.style.background = "#22c55e";
+        }
+      };
+      draw();
+
+    } catch (err) {
+      console.warn("[SettingsMicMeter] Could not open mic stream:", err);
+      meterWrap.style.display = "none";
+    }
+  }
+
+  stopSettingsMicMeter() {
+    if (this._settingsMicRafId) {
+      cancelAnimationFrame(this._settingsMicRafId);
+      this._settingsMicRafId = null;
+    }
+    if (this._settingsMicStream) {
+      this._settingsMicStream.getTracks().forEach(t => t.stop());
+      this._settingsMicStream = null;
+    }
+    if (this._settingsMicCtx) {
+      this._settingsMicCtx.close().catch(() => {});
+      this._settingsMicCtx = null;
+    }
+    const meterWrap = document.getElementById("settingsMicMeter");
+    const meterBar = document.getElementById("settingsMicFill");
+    if (meterWrap) meterWrap.style.display = "none";
+    if (meterBar) meterBar.style.width = "0%";
   }
 
   updateTimerPresetFromSettings() {

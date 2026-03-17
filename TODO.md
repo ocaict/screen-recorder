@@ -107,7 +107,7 @@
 - [x] Error Recovery: WebM backup fallback when source disconnects mid-recording
 - [x] Memory Optimization: stream processing to disk instead of RAM for very long recordings
 - [ ] Background Processing: convert videos while a new recording starts
-- [ ] Audio noise removal (AI-based noise cancellation filter)
+- [x] Audio noise removal (AI-based noise cancellation filter)
 
 ---
 

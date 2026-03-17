@@ -1,41 +1,10 @@
 'use strict';
 
+// Import the sync module. This requires the AudioWorklet to be loaded as a module.
+import createRNNWasmModuleSync from './rnnoise-sync.js';
+
 const RNNOISE_FRAME_SIZE = 480;
 const SHIFT_16_BIT_NR = 32768;
-
-// Handle WASM module initialization
-class WasmModuleInitializer {
-    constructor(messagePort) {
-        this.messagePort = messagePort;
-        this.Module = null;
-    }
-
-    async initSyncModule(jsContent) {
-        try {
-            if (!jsContent) throw new Error('Missing sync module JS content');
-
-            // The content from rnnoise-sync.js defines createRNNWasmModuleSync
-            const createFunction = new Function(jsContent + '; return createRNNWasmModuleSync;')();
-            this.Module = await createFunction();
-
-            if (this.Module.ready) {
-                await this.Module.ready;
-            }
-
-            console.log('[RNNoise] Sync module initialized');
-            this.messagePort.postMessage({ type: 'wasm-ready' });
-            return this.Module;
-        } catch (error) {
-            console.error('[RNNoise] Sync module initialization error:', error);
-            this.messagePort.postMessage({ type: 'wasm-error', error: error.message });
-            throw error;
-        }
-    }
-
-    getModule() {
-        return this.Module;
-    }
-}
 
 // Handle RNNoise context and buffer management
 class RNNoiseContextManager {
@@ -145,25 +114,32 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
         this.initialized = false;
         this.enabled = false;
         
-        this.wasmInitializer = new WasmModuleInitializer(this.port);
         this.contextManager = null;
         this.frameBuffer = new AudioFrameBuffer();
 
-        this.port.onmessage = async (event) => {
-            const { type, jsContent, enabled } = event.data;
-            if (type === 'sync-module') {
-                try {
-                    const module = await this.wasmInitializer.initSyncModule(jsContent);
-                    this.contextManager = new RNNoiseContextManager(module);
-                    this.initialized = true;
-                    console.log('[RNNoise] Processor fully initialized');
-                } catch (error) {
-                    console.error('[RNNoise] Failed to initialize:', error);
-                }
-            } else if (type === 'enable') {
+        // Initialize immediately if module is available
+        this.initModule();
+
+        this.port.onmessage = (event) => {
+            const { type, enabled } = event.data;
+            if (type === 'enable') {
                 this.enabled = enabled;
             }
         };
+    }
+
+    async initModule() {
+        try {
+            console.log('[RNNoise] Initializing WASM module...');
+            const module = await createRNNWasmModuleSync();
+            this.contextManager = new RNNoiseContextManager(module);
+            this.initialized = true;
+            this.port.postMessage({ type: 'wasm-ready' });
+            console.log('[RNNoise] Processor fully initialized');
+        } catch (error) {
+            console.error('[RNNoise] Failed to initialize:', error);
+            this.port.postMessage({ type: 'wasm-error', error: error.message });
+        }
     }
 
     process(inputs, outputs) {
@@ -188,10 +164,6 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
                 this.frameBuffer.markProcessed();
             }
 
-            // If we have processed samples to give, give them. 
-            // Otherwise, we might have a gap during the first 480 samples.
-            // For simplicity, we just output the processed sample if available, else silence or passthrough.
-            // Note: This introduces the 480-sample latency (~10ms).
             output[i] = this.frameBuffer.getProcessedSample();
         }
 

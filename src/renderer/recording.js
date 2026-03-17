@@ -498,21 +498,15 @@ class RecordingManager {
       sampleRate: 48000 // RNNoise works best at 44100 or 48000
     });
     
-    // 1. Load the processor
-    await audioContext.audioWorklet.addModule('audio/rnnoise-processor.js');
+    // 1. Load the processor as a module
+    await audioContext.audioWorklet.addModule('audio/rnnoise-processor.js', {
+      type: 'module'
+    });
     
     // 2. Create the node
     const rnnoiseNode = new AudioWorkletNode(audioContext, 'noise-suppression-processor');
     
-    // 3. Fetch the glue code content and send it to the worklet
-    const response = await fetch('audio/rnnoise-sync.js');
-    const jsContent = await response.text();
-    
-    rnnoiseNode.port.postMessage({
-      type: 'sync-module',
-      jsContent: jsContent
-    });
-
+    // 3. Enable it
     rnnoiseNode.port.postMessage({
       type: 'enable',
       enabled: true

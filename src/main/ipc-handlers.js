@@ -1436,6 +1436,7 @@ function setupIpcHandlers() {
         : "native",
       recordAudio: Boolean(newSettings.recordAudio),
       recordSystemAudio: Boolean(newSettings.recordSystemAudio),
+      noiseCancellation: Boolean(newSettings.noiseCancellation),
       selectedMicrophone: newSettings.selectedMicrophone || "default",
       outputDirectory: newSettings.outputDirectory || "",
       shortcutEnabled: Boolean(newSettings.shortcutEnabled),

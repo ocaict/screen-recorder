@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   resolution: "native",
   recordAudio: true,
   recordSystemAudio: false,
+  noiseCancellation: false,
   selectedMicrophone: "default",
   outputDirectory: "",
   shortcutEnabled: true,

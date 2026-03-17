@@ -464,7 +464,8 @@ class RecordingManager {
         this.app.settings.selectedMicrophone !== "default"
           ? this.app.settings.selectedMicrophone
           : undefined;
-      this.audioStream = await navigator.mediaDevices.getUserMedia({
+      
+      let stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -472,6 +473,17 @@ class RecordingManager {
           deviceId: micDeviceId ? { exact: micDeviceId } : undefined,
         },
       });
+
+      if (this.app.settings.noiseCancellation && stream) {
+        try {
+          stream = await this.applyNoiseCancellation(stream);
+          console.log("[RNNoise] Noise cancellation applied to stream");
+        } catch (err) {
+          console.error("[RNNoise] Failed to apply noise cancellation:", err);
+        }
+      }
+
+      this.audioStream = stream;
     } catch (audioErr) {
       console.warn("Could not get audio stream:", audioErr);
       this.app.showToast(
@@ -479,6 +491,44 @@ class RecordingManager {
         "info",
       );
     }
+  }
+
+  async applyNoiseCancellation(stream) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: 48000 // RNNoise works best at 44100 or 48000
+    });
+    
+    // 1. Load the processor
+    await audioContext.audioWorklet.addModule('audio/rnnoise-processor.js');
+    
+    // 2. Create the node
+    const rnnoiseNode = new AudioWorkletNode(audioContext, 'noise-suppression-processor');
+    
+    // 3. Fetch the glue code content and send it to the worklet
+    const response = await fetch('audio/rnnoise-sync.js');
+    const jsContent = await response.text();
+    
+    rnnoiseNode.port.postMessage({
+      type: 'sync-module',
+      jsContent: jsContent
+    });
+
+    rnnoiseNode.port.postMessage({
+      type: 'enable',
+      enabled: true
+    });
+
+    // 4. Connect the graph
+    const source = audioContext.createMediaStreamSource(stream);
+    const destination = audioContext.createMediaStreamDestination();
+    
+    source.connect(rnnoiseNode);
+    rnnoiseNode.connect(destination);
+    
+    this._audioContexts = this._audioContexts || [];
+    this._audioContexts.push(audioContext);
+    
+    return destination.stream;
   }
 
   async setupSystemAudioStream() {
@@ -591,6 +641,18 @@ class RecordingManager {
             }
           });
           this.audioStream = null;
+        }
+
+        // Cleanup noise cancellation contexts
+        if (this._audioContexts) {
+          this._audioContexts.forEach(ctx => {
+            try {
+              if (ctx.state !== 'closed') ctx.close();
+            } catch (e) {
+              console.error("Failed to close audio context:", e);
+            }
+          });
+          this._audioContexts = [];
         }
       } catch (e) {
         console.warn("Error stopping audio stream:", e);

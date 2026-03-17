@@ -75,6 +75,8 @@ class SettingsHandler {
     setEl("settingsResolution", s.resolution || "native");
     setEl("settingsOutputDir", s.outputDirectory || "");
     setEl("settingsRecordAudio", s.recordAudio !== false, true);
+    setEl("settingsRecordSystemAudio", s.recordSystemAudio || false, true);
+    setEl("settingsNoiseCancellation", s.noiseCancellation || false, true);
     setEl("settingsCountdown", s.countdown || 3);
     setEl("settingsFilenamePattern", s.filenamePattern || "Recording_{date}_{time}");
     setEl("settingsCompression", s.compression || "balanced");
@@ -340,6 +342,7 @@ class SettingsHandler {
       outputDirectory: getEl("settingsOutputDir")?.value,
       recordAudio: getEl("settingsRecordAudio")?.checked,
       recordSystemAudio: getEl("settingsRecordSystemAudio")?.checked,
+      noiseCancellation: getEl("settingsNoiseCancellation")?.checked,
       selectedMicrophone: getEl("settingsMicrophone")?.value,
       hideWindowDuringRecording: getEl("settingsHideWindow")?.checked,
       shortcutEnabled: shortcutEnabled,

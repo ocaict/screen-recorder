@@ -338,11 +338,18 @@
         <button class="settings-tab" data-tab="history" role="tab" aria-selected="false" aria-controls="tab-history"
           id="tab-history-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
+            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           History
+        </button>
+        <button class="settings-tab" data-tab="watermark" role="tab" aria-selected="false" aria-controls="tab-watermark"
+          id="tab-watermark-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="21 8 21 21 3 21 3 8" />
+            <rect x="1" y="3" width="22" height="5" />
+            <line x1="10" y1="12" x2="14" y2="12" />
+          </svg>
+          Watermark
         </button>
       </div>
       <div class="modal-body">
@@ -835,6 +842,97 @@
               <div class="stat-card">
                 <span class="stat-number" id="totalStorage">0 MB</span>
                 <span class="stat-label">Storage Used</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WATERMARK TAB -->
+        <div class="settings-form tab-content" id="tab-watermark" role="tabpanel" aria-labelledby="tab-watermark-btn">
+          <div class="settings-section">
+            <h4 class="settings-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="21 8 21 21 3 21 3 8" />
+                <rect x="1" y="3" width="22" height="5" />
+                <line x1="10" y1="12" x2="14" y2="12" />
+              </svg>
+              Watermark Branding
+            </h4>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="settingsWatermarkEnabled">
+                Enable Custom Watermark
+              </label>
+            </div>
+
+            <div id="watermarkSettingsGroup" style="display: none;">
+              <div class="form-group">
+                <label>Watermark Type</label>
+                <div class="toggle-group" style="margin-top: 8px;">
+                  <button type="button" class="btn active" id="watermarkTypeTextBtn">Text</button>
+                  <button type="button" class="btn" id="watermarkTypeImageBtn">Image</button>
+                </div>
+              </div>
+
+              <!-- Text Watermark Settings -->
+              <div id="watermarkTextSettings" class="sub-settings-group">
+                <div class="form-group">
+                  <label for="settingsWatermarkText">Display Text</label>
+                  <input type="text" id="settingsWatermarkText" class="form-input" placeholder="Enter watermark text...">
+                </div>
+              </div>
+
+              <!-- Image Watermark Settings -->
+              <div id="watermarkImageSettings" class="sub-settings-group" style="display: none;">
+                <div class="form-group">
+                  <label>Logo Source</label>
+                  <div class="image-upload-zone" id="watermarkImageUpload">
+                    <div class="upload-placeholder" id="watermarkUploadPlaceholder">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      <span>Upload PNG / JPG</span>
+                    </div>
+                    <img id="watermarkPreview"
+                      style="display: none; max-width: 100%; max-height: 80px; border-radius: 4px;">
+                    <button type="button" class="btn-icon remove-btn" id="removeWatermarkImage"
+                      style="display: none;">&times;</button>
+                  </div>
+                  <input type="hidden" id="settingsWatermarkImagePath">
+                </div>
+              </div>
+
+              <!-- Common Settings (Horizontal Row) -->
+              <div class="watermark-controls-horizontal">
+                <div class="form-group watermark-pos-group">
+                  <label>Positioning</label>
+                  <div class="position-grid">
+                    <button type="button" class="pos-btn" data-pos="top-left" title="Top Left"></button>
+                    <button type="button" class="pos-btn" data-pos="top-center" title="Top Center"></button>
+                    <button type="button" class="pos-btn" data-pos="top-right" title="Top Right"></button>
+                    <button type="button" class="pos-btn" data-pos="center-left" title="Center Left"></button>
+                    <button type="button" class="pos-btn" data-pos="center" title="Center"></button>
+                    <button type="button" class="pos-btn" data-pos="center-right" title="Center Right"></button>
+                    <button type="button" class="pos-btn" data-pos="bottom-left" title="Bottom Left"></button>
+                    <button type="button" class="pos-btn" data-pos="bottom-center" title="Bottom Center"></button>
+                    <button type="button" class="pos-btn active" data-pos="bottom-right" title="Bottom Right"></button>
+                  </div>
+                </div>
+
+                <div class="watermark-sliders-group">
+                  <div class="form-group">
+                    <label for="settingsWatermarkOpacity">Opacity: <span id="watermarkOpacityValue">50</span>%</label>
+                    <input type="range" id="settingsWatermarkOpacity" min="10" max="100" value="50" class="form-range">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settingsWatermarkSize">Scale: <span id="watermarkSizeValue">15</span>%</label>
+                    <input type="range" id="settingsWatermarkSize" min="5" max="50" value="15" class="form-range">
+                    <div class="form-hint">Relative to screen width</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

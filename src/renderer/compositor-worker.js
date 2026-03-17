@@ -26,6 +26,7 @@ let latestScreenFrame = null;
 let latestWebcamFrame = null;
 let latestAnnotationBitmap = null;
 let latestTempAnnotationBitmap = null;
+let latestWatermarkBitmap = null;
 
 // Animation state
 let animProgress = 0; // 0 = corner, 1 = center
@@ -63,6 +64,12 @@ self.onmessage = (event) => {
       if (payload.tempAnnotationBitmap) {
         if (latestTempAnnotationBitmap) latestTempAnnotationBitmap.close();
         latestTempAnnotationBitmap = payload.tempAnnotationBitmap;
+      }
+      break;
+    case "updateWatermark":
+      if (payload.watermarkBitmap) {
+        if (latestWatermarkBitmap) latestWatermarkBitmap.close();
+        latestWatermarkBitmap = payload.watermarkBitmap;
       }
       break;
     case "stop":
@@ -175,9 +182,87 @@ function renderEverything() {
       drawLayer(latestAnnotationBitmap);
       drawLayer(latestTempAnnotationBitmap);
     }
+
+    // 4. Draw Watermark (Top Layer)
+    if (settings.watermarkEnabled) {
+      drawWatermark();
+    }
   } catch (err) {
     console.error("Worker Render Error:", err);
   }
+}
+
+function drawWatermark() {
+  ctx.save();
+  
+  // Ensure we have reasonable defaults for calculations
+  const opacity = (settings.watermarkOpacity === undefined) ? 0.5 : settings.watermarkOpacity;
+  const sizeScale = (settings.watermarkSize || 15) / 100;
+  const watermarkType = settings.watermarkType || 'text';
+  const watermarkText = settings.watermarkText || "OcaTech-Recorder";
+  
+  ctx.globalAlpha = opacity;
+
+  let x, y;
+  const margin = Math.max(10, Math.round(config.width * 0.02)); // Adaptive margin
+  const targetWidth = config.width * sizeScale;
+
+  // Calculate size based on type
+  let contentWidth = 0, contentHeight = 0;
+  let useTextFallback = false;
+
+  if (watermarkType === 'image' && latestWatermarkBitmap) {
+    const ratio = latestWatermarkBitmap.width / latestWatermarkBitmap.height;
+    contentWidth = targetWidth;
+    contentHeight = targetWidth / ratio;
+  } else {
+    // Use text if type is 'text' OR if image type requested but no bitmap available
+    useTextFallback = true;
+    const fontSize = Math.max(12, Math.round(config.width * 0.025 * ((settings.watermarkSize || 15) / 15)));
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    const metrics = ctx.measureText(watermarkText);
+    contentWidth = metrics.width;
+    contentHeight = fontSize;
+  }
+
+  if (contentWidth === 0) { ctx.restore(); return; }
+
+  // Positioning
+  const pos = settings.watermarkPosition || "bottom-right";
+  ctx.textBaseline = "top"; // Use top baseline for easier math
+
+  switch (pos) {
+    case "top-left": x = margin; y = margin; break;
+    case "top-center": x = (config.width - contentWidth) / 2; y = margin; break;
+    case "top-right": x = config.width - contentWidth - margin; y = margin; break;
+    case "center-left": x = margin; y = (config.height - contentHeight) / 2; break;
+    case "center": x = (config.width - contentWidth) / 2; y = (config.height - contentHeight) / 2; break;
+    case "center-right": x = config.width - contentWidth - margin; y = (config.height - contentHeight) / 2; break;
+    case "bottom-left": x = margin; y = config.height - margin - contentHeight; break;
+    case "bottom-center": x = (config.width - contentWidth) / 2; y = config.height - margin - contentHeight; break;
+    default: // bottom-right
+      x = config.width - contentWidth - margin; y = config.height - margin - contentHeight;
+  }
+
+  if (!useTextFallback && latestWatermarkBitmap) {
+    ctx.drawImage(latestWatermarkBitmap, x, y, contentWidth, contentHeight);
+  } else {
+    // Text rendering with robust shadow and backup color
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = "white";
+    ctx.fillText(watermarkText, x, y);
+    
+    // Debug log only once if it's the fallback
+    if (watermarkType === 'image' && !self.fallbackLogged) {
+      console.warn("[Worker] Image watermark bitmap missing, falling back to text.");
+      self.fallbackLogged = true;
+    }
+  }
+
+  ctx.restore();
 }
 
 function drawWebcamOverlay(webcamFrame) {
@@ -263,6 +348,7 @@ function cleanup() {
   if (latestWebcamFrame) latestWebcamFrame.close();
   if (latestAnnotationBitmap) latestAnnotationBitmap.close();
   if (latestTempAnnotationBitmap) latestTempAnnotationBitmap.close();
-  latestScreenFrame = latestWebcamFrame = latestAnnotationBitmap = latestTempAnnotationBitmap = null;
+  if (latestWatermarkBitmap) latestWatermarkBitmap.close();
+  latestScreenFrame = latestWebcamFrame = latestAnnotationBitmap = latestTempAnnotationBitmap = latestWatermarkBitmap = null;
   canvas = ctx = null;
 }

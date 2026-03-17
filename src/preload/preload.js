@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
   selectDirectory: () => ipcRenderer.invoke("select-directory"),
+  selectFile: (options) => ipcRenderer.invoke("select-file", options),
   getAppPaths: () => ipcRenderer.invoke("get-app-paths"),
   getAvailableEncoders: () => ipcRenderer.invoke("get-available-encoders"),
   getDisplays: () => ipcRenderer.invoke("get-displays"),

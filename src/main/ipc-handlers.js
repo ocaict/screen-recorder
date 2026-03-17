@@ -1548,6 +1548,26 @@ function setupIpcHandlers() {
       memoryThresholdMB: Number.isInteger(newSettings.memoryThresholdMB)
         ? newSettings.memoryThresholdMB
         : 500,
+      idleDetectionEnabled: Boolean(newSettings.idleDetectionEnabled),
+      watermarkEnabled: Boolean(newSettings.watermarkEnabled),
+      watermarkType: ["text", "image"].includes(newSettings.watermarkType)
+        ? newSettings.watermarkType
+        : "text",
+      watermarkText: newSettings.watermarkText || "OcaTech MakeVideo",
+      watermarkImagePath: newSettings.watermarkImagePath || "",
+      watermarkPosition: [
+        "top-left", "top-center", "top-right",
+        "center-left", "center", "center-right",
+        "bottom-left", "bottom-center", "bottom-right"
+      ].includes(newSettings.watermarkPosition)
+        ? newSettings.watermarkPosition
+        : "bottom-right",
+      watermarkOpacity: typeof newSettings.watermarkOpacity === "number"
+        ? newSettings.watermarkOpacity
+        : 0.5,
+      watermarkSize: Number.isInteger(newSettings.watermarkSize)
+        ? newSettings.watermarkSize
+        : 15
     };
 
     saveSettings(validatedSettings);
@@ -1594,6 +1614,27 @@ function setupIpcHandlers() {
       return result.filePaths[0];
     } catch (err) {
       log("error", `select-directory failed: ${err.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle("select-file", async (_, options = {}) => {
+    try {
+      if (!mainWindow) {
+        log("error", "select-file: Main window not available");
+        return null;
+      }
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ["openFile"],
+        filters: options.filters || [
+          { name: "Images", extensions: ["png", "jpg", "jpeg", "svg"] },
+        ],
+        ...options,
+      });
+      if (result.canceled) return null;
+      return result.filePaths[0];
+    } catch (err) {
+      log("error", `select-file failed: ${err.message}`);
       return null;
     }
   });

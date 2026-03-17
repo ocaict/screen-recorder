@@ -180,6 +180,48 @@ class SettingsHandler {
     this.updateTimerPresetFromSettings();
     this.loadAudioDevicesForSettings();
 
+    // Watermark Settings
+    setEl("settingsWatermarkEnabled", s.watermarkEnabled || false, true);
+    setEl("settingsWatermarkText", s.watermarkText || "OcaTech MakeVideo");
+    setEl("settingsWatermarkImagePath", s.watermarkImagePath || "");
+    setEl("settingsWatermarkOpacity", (s.watermarkOpacity || 0.5) * 100);
+    setElText("watermarkOpacityValue", Math.round((s.watermarkOpacity || 0.5) * 100));
+    setEl("settingsWatermarkSize", s.watermarkSize || 15);
+    setElText("watermarkSizeValue", s.watermarkSize || 15);
+
+    const watermarkGroup = getEl("watermarkSettingsGroup");
+    if (watermarkGroup) {
+      watermarkGroup.style.display = s.watermarkEnabled ? "block" : "none";
+    }
+
+    this.app.document.querySelectorAll(".pos-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.pos === (s.watermarkPosition || "bottom-right"));
+    });
+
+    const isImage = s.watermarkType === "image";
+    getEl("watermarkTypeTextBtn")?.classList.toggle("active", !isImage);
+    getEl("watermarkTypeImageBtn")?.classList.toggle("active", isImage);
+    getEl("watermarkTextSettings").style.display = isImage ? "none" : "block";
+    getEl("watermarkImageSettings").style.display = isImage ? "block" : "none";
+
+    if (s.watermarkImagePath) {
+      const preview = getEl("watermarkPreview");
+      preview.src = `file:///${s.watermarkImagePath.replace(/\\/g, "/")}`;
+      preview.style.display = "block";
+      preview.style.opacity = s.watermarkOpacity || 0.5;
+      getEl("watermarkUploadPlaceholder").style.display = "none";
+      getEl("removeWatermarkImage").style.display = "flex";
+    } else {
+      getEl("watermarkPreview").style.display = "none";
+      getEl("watermarkUploadPlaceholder").style.display = "flex";
+      getEl("removeWatermarkImage").style.display = "none";
+    }
+
+    if (!this.watermarkListenersAttached) {
+      this.attachWatermarkListeners();
+      this.watermarkListenersAttached = true;
+    }
+
     this.app.openModal(this.app.settingsModal);
   }
 
@@ -336,7 +378,14 @@ class SettingsHandler {
       highlightGlowIntensity: parseInt(getEl("highlightGlowIntensity")?.value),
       idleDetectionEnabled: getEl("settingsIdleDetection")?.checked,
       idleTimeoutMinutes: parseInt(getEl("settingsIdleTimeout")?.value),
-      memoryThresholdMB: parseInt(getEl("settingsMemoryThreshold")?.value)
+      memoryThresholdMB: parseInt(getEl("settingsMemoryThreshold")?.value),
+      watermarkEnabled: getEl("settingsWatermarkEnabled")?.checked,
+      watermarkType: getEl("watermarkTypeImageBtn")?.classList.contains("active") ? "image" : "text",
+      watermarkText: getEl("settingsWatermarkText")?.value,
+      watermarkImagePath: getEl("settingsWatermarkImagePath")?.value,
+      watermarkPosition: this.app.document.querySelector(".pos-btn.active")?.dataset.pos || "bottom-right",
+      watermarkOpacity: (parseInt(getEl("settingsWatermarkOpacity")?.value) || 50) / 100,
+      watermarkSize: parseInt(getEl("settingsWatermarkSize")?.value) || 15
     };
 
     try {
@@ -379,5 +428,81 @@ class SettingsHandler {
         presetBtn.classList.add("active");
       }
     }
+  }
+
+  attachWatermarkListeners() {
+    const getEl = (id) => this.app.document.getElementById(id);
+
+    // Main Toggle
+    const enableChk = getEl("settingsWatermarkEnabled");
+    if (enableChk) {
+      enableChk.addEventListener("change", () => {
+        getEl("watermarkSettingsGroup").style.display = enableChk.checked ? "block" : "none";
+      });
+    }
+
+    // Type Toggle
+    const textBtn = getEl("watermarkTypeTextBtn");
+    const imageBtn = getEl("watermarkTypeImageBtn");
+    if (textBtn && imageBtn) {
+      textBtn.addEventListener("click", () => {
+        textBtn.classList.add("active");
+        imageBtn.classList.remove("active");
+        getEl("watermarkTextSettings").style.display = "block";
+        getEl("watermarkImageSettings").style.display = "none";
+      });
+      imageBtn.addEventListener("click", () => {
+        imageBtn.classList.add("active");
+        textBtn.classList.remove("active");
+        getEl("watermarkTextSettings").style.display = "none";
+        getEl("watermarkImageSettings").style.display = "block";
+      });
+    }
+
+    // Position Grid
+    this.app.document.querySelectorAll(".pos-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        this.app.document.querySelectorAll(".pos-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    });
+
+    // Opacity & Size Labels
+    getEl("settingsWatermarkOpacity")?.addEventListener("input", (e) => {
+      const val = e.target.value;
+      getEl("watermarkOpacityValue").textContent = val;
+      // Live preview opacity for image
+      const preview = getEl("watermarkPreview");
+      if (preview) preview.style.opacity = val / 100;
+    });
+    getEl("settingsWatermarkSize")?.addEventListener("input", (e) => {
+      getEl("watermarkSizeValue").textContent = e.target.value;
+    });
+
+    // Image Upload
+    getEl("watermarkImageUpload")?.addEventListener("click", async () => {
+      const filePath = await window.electronAPI.selectFile({
+        title: "Select Watermark Image",
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "svg"] }]
+      });
+
+      if (filePath) {
+        getEl("settingsWatermarkImagePath").value = filePath;
+        const preview = getEl("watermarkPreview");
+        preview.src = `file:///${filePath.replace(/\\/g, "/")}`;
+        preview.style.display = "block";
+        preview.style.opacity = getEl("settingsWatermarkOpacity").value / 100;
+        getEl("watermarkUploadPlaceholder").style.display = "none";
+        getEl("removeWatermarkImage").style.display = "flex";
+      }
+    });
+
+    getEl("removeWatermarkImage")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      getEl("settingsWatermarkImagePath").value = "";
+      getEl("watermarkPreview").style.display = "none";
+      getEl("watermarkUploadPlaceholder").style.display = "flex";
+      getEl("removeWatermarkImage").style.display = "none";
+    });
   }
 }

@@ -45,14 +45,14 @@
 ## ✂️ Video Editing
 
 - [x] Trim video (start/end points)
-- [ ] Merge multiple recordings
+- [x] Merge multiple recordings
 - [ ] Add intro/outro to videos
 - [ ] Basic video effects (crop, rotate, zoom)
-- [ ] GIF export
+- [x] GIF export
 - [ ] GIF preview before saving (size/length options)
 - [ ] Batch conversion / batch export
 - [ ] Video filters (brightness/contrast post-recording)
-- [ ] Custom watermarks (text/image overlay)
+- [x] Custom watermarks (text/image overlay)
 
 ---
 
@@ -119,7 +119,7 @@
 - [x] Error logging to file
 - [x] Windows notification on recording start/stop
 - [x] Real-time FFmpeg MP4 pipe (chunked direct encoding)
-- [x] Multi-monitor support (display-aware source selection and compositor sync)
+- [x] Multi-monitor support (display-aware source selection and compositor sync) (partially implemented)
 - [ ] Recording History Storage: migrate from `settings.json` to IndexedDB
 - [ ] Start with Windows (auto-start on login)
 - [ ] Global exception handling with crash reports

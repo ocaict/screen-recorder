@@ -2908,3 +2908,155 @@ body {
   pointer-events: none;
   /* Let clicks pass to the handle */
 }
+/* Watermark Settings Styles */
+.sub-settings-group {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.toggle-group {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-dark);
+    padding: 4px;
+    border-radius: 8px;
+    width: max-content;
+}
+
+.toggle-group .btn {
+    padding: 6px 16px;
+    font-size: 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.toggle-group .btn.active {
+    background: var(--primary-color);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.image-upload-zone {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--bg-dark);
+    overflow: hidden;
+}
+
+.image-upload-zone:hover {
+    border-color: var(--primary-color);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 8px;
+}
+
+.upload-placeholder span {
+    font-size: 10px;
+}
+
+.image-upload-zone img#watermarkPreview {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transition: opacity 0.2s ease;
+}
+
+.image-upload-zone .remove-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    z-index: 2;
+    font-size: 14px;
+}
+
+.position-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    width: 100px;
+    margin-top: 8px;
+}
+
+.pos-btn {
+    aspect-ratio: 1;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pos-btn:hover {
+    border-color: var(--primary-color);
+}
+
+.pos-btn.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+/* Horizontal Layout for Watermark Controls */
+.watermark-controls-horizontal {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.watermark-pos-group {
+    flex-shrink: 0;
+}
+
+.watermark-pos-group label {
+    margin-bottom: 8px;
+    display: block;
+}
+
+.watermark-sliders-group {
+    flex: 1;
+    display: flex;
+    flex-direction: row; /* Changed from column to row */
+    gap: 24px;
+}
+
+.watermark-sliders-group .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}

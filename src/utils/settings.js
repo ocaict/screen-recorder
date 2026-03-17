@@ -53,7 +53,15 @@ const DEFAULT_SETTINGS = {
   scheduleTime: "09:00",
   miniWindowPosition: null,
   recordMiniControls: false,
-  recordAnnotationPalette: false
+  recordAnnotationPalette: false,
+
+  watermarkEnabled: false,
+  watermarkType: "text",
+  watermarkText: "OcaTech MakeVideo",
+  watermarkImagePath: "",
+  watermarkPosition: "bottom-right",
+  watermarkOpacity: 0.5,
+  watermarkSize: 15
 };
 
 

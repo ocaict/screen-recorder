@@ -770,10 +770,40 @@ class RecordingManager {
           webcamPosition: this.app.settings.webcamPosition || "bottom-right",
           webcamSize: this.app.settings.webcamSize || "medium",
           // cropRegion uses the original source dimensions so the worker crops correctly
-          cropRegion: region ? { x: region.x, y: region.y, width: sourceWidth, height: sourceHeight } : null
+          cropRegion: region ? { x: region.x, y: region.y, width: sourceWidth, height: sourceHeight } : null,
+
+          // Watermark Settings
+          watermarkEnabled: this.app.settings.watermarkEnabled,
+          watermarkType: this.app.settings.watermarkType,
+          watermarkText: this.app.settings.watermarkText,
+          watermarkPosition: this.app.settings.watermarkPosition,
+          watermarkOpacity: this.app.settings.watermarkOpacity,
+          watermarkSize: this.app.settings.watermarkSize
         }
       }
     }, [offscreenCanvas]);
+
+    // Load watermark image if needed
+    if (this.app.settings.watermarkEnabled && this.app.settings.watermarkType === 'image' && this.app.settings.watermarkImagePath) {
+      const img = new Image();
+      img.onload = async () => {
+        try {
+          const watermarkBitmap = await createImageBitmap(img);
+          this.compositorWorker.postMessage({
+            type: "updateWatermark",
+            payload: { watermarkBitmap }
+          }, [watermarkBitmap]);
+        } catch (e) {
+          console.error("[Comp] Failed to create watermark bitmap:", e);
+        }
+      };
+      img.onerror = (e) => console.error("[Comp] Failed to load watermark image:", e);
+      // Use file protocol for local paths in Electron (handling Windows paths)
+      const safePath = this.app.settings.watermarkImagePath.replace(/\\/g, "/");
+      img.src = `file:///${safePath}`;
+    } else if (this.app.settings.watermarkEnabled && this.app.settings.watermarkType === 'image') {
+      console.warn("[Comp] Image watermark enabled but no path provided");
+    }
 
     // Stream Transfer Optimization: Use MediaStreamTrackProcessor to offload video frames
     // This allows the worker to pull frames directly from the tracks without main thread CPU usage.
@@ -1653,9 +1683,6 @@ class RecordingManager {
         this.chunkSessionId = res.sessionId;
         this.tempChunkPath = res.tempFilePath || null;
         this.isLiveRecording = res.isLive || false;
-        if (this.isLiveRecording) {
-          console.log("Live direct-to-MP4 recording initialized at:", res.filePath);
-        }
       } else {
         console.warn("Chunked recording session not created");
       }

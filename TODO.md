@@ -1,8 +1,5 @@
 # Screen Recorder App — Master TODO
 
-> Last updated: 2026-03-17. Merged from `TODO.md` + `RECOMMENDATIONS_TODO.md`.
-
----
 
 ## ✅ Phase 1 – Phase 4: Core Build (All Complete)
 
@@ -108,7 +105,7 @@
 - [x] Memory monitoring during recording
 - [x] rAF-based drag for annotation palette and mini-controls (GPU-accelerated)
 - [x] Error Recovery: WebM backup fallback when source disconnects mid-recording
-- [ ] Memory Optimization: stream processing to disk instead of RAM for very long recordings
+- [x] Memory Optimization: stream processing to disk instead of RAM for very long recordings
 - [ ] Background Processing: convert videos while a new recording starts
 - [ ] Audio noise removal (AI-based noise cancellation filter)
 

@@ -35,7 +35,6 @@ class UIManager {
     this.app.processingCancel = document.getElementById("processingCancel");
     this.app.sourceList = document.getElementById("sourceList");
     this.app.minimizeBtn = document.getElementById("minimizeBtn");
-    this.app.maximizeBtn = document.getElementById("maximizeBtn");
     this.app.closeBtn = document.getElementById("closeBtn");
     this.app.countdownOverlay = document.getElementById("countdownOverlay");
     this.app.countdownNumber = document.getElementById("countdownNumber");
@@ -44,6 +43,8 @@ class UIManager {
     this.app.hotkeyOverlay = document.getElementById("hotkeyOverlay");
     this.app.hotkeyKey = document.getElementById("hotkeyKey");
     this.app.toggleSelectBtn = document.getElementById("toggleSelectBtn");
+    this.app.toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
+    this.app.sidebar = document.querySelector(".sidebar");
     this.app.mergeRecordingsBtn = document.getElementById("mergeRecordingsBtn");
     this.app.hwInfo = document.getElementById("hardwareInfo");
     this.app.hwAutoBtn = document.getElementById("autoSelectNvenc");

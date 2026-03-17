@@ -363,6 +363,10 @@ class ScreenRecorder {
       );
     }
 
+    if (this.toggleSidebarBtn) {
+      this.toggleSidebarBtn.addEventListener("click", () => this.toggleSidebar());
+    }
+
     if (this.mergeRecordingsBtn) {
       this.mergeRecordingsBtn.addEventListener("click", () =>
         this.handleMerge(),
@@ -405,7 +409,6 @@ class ScreenRecorder {
         .windowMinimize()
         .catch((err) => console.error("Failed to minimize window:", err)),
     );
-    this.maximizeBtn.addEventListener("click", () => this.toggleMaximize());
     this.closeBtn.addEventListener("click", () =>
       window.electronAPI
         .windowClose()
@@ -1049,6 +1052,15 @@ class ScreenRecorder {
       this.settings.shortcutEnabled !== false;
     document.getElementById("settingsShortcutKey").value =
       this.settings.shortcutKey || "F9";
+
+    // Sidebar state
+    if (this.sidebar) {
+      if (this.settings.sidebarCollapsed) {
+        this.sidebar.classList.add("collapsed");
+      } else {
+        this.sidebar.classList.remove("collapsed");
+      }
+    }
     document.getElementById("settingsShortcutKey").disabled =
       this.settings.shortcutEnabled === false;
     document.getElementById("settingsFormat").value =
@@ -1952,24 +1964,6 @@ class ScreenRecorder {
     this.uiManager?.openModal(modal);
   }
 
-  async toggleMaximize() {
-    try {
-      const isMaximized = await window.electronAPI.windowMaximize();
-      if (isMaximized) {
-        this.maximizeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12">
-          <rect x="2.5" y="0.5" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/>
-          <rect x="0.5" y="2.5" width="8" height="8" fill="var(--bg-card)" stroke="currentColor" stroke-width="1"/>
-        </svg>`;
-      } else {
-        this.maximizeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12">
-          <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/>
-        </svg>`;
-      }
-    } catch (err) {
-      console.error("Failed to toggle maximize:", err);
-    }
-  }
-
   destroy() {
     try {
       // Stop recording if active
@@ -2228,6 +2222,19 @@ class ScreenRecorder {
 
   toggleSelectionMode() {
     return this.recentRecordingsManager.toggleSelectionMode();
+  }
+
+  async toggleSidebar() {
+    if (!this.sidebar) return;
+
+    const isCollapsed = this.sidebar.classList.toggle("collapsed");
+    this.settings.sidebarCollapsed = isCollapsed;
+
+    try {
+      await window.electronAPI.saveSettings({ sidebarCollapsed: isCollapsed });
+    } catch (err) {
+      console.warn("Failed to save sidebar state:", err);
+    }
   }
 
   async handleMerge() {

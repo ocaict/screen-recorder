@@ -51,14 +51,13 @@ const ICON_PATH = isDev
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1080,
+    width: 1050,
     height: 700,
-    minWidth: 800,
-    minHeight: 600,
     frame: false,
     transparent: false,
     backgroundColor: "#1a1a2e",
     resizable: false,
+    maximizable: false,
     show: false,
     icon: ICON_PATH,
     webPreferences: {

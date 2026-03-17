@@ -83,7 +83,8 @@
 - [x] Hardware info / diagnostics page (FFmpeg path, encoder availability)
 - [x] Advanced encoder settings (H.264/H.265, CRF/VBR, chroma subsampling)
 - [x] Native resolution capture (records at display's actual pixel density)
-- [ ] Collapsible sidebar (toggle to expand/collapse right panel)
+- [x] Fixed app window size (1050x700) and non-resizable
+- [x] Collapsible sidebar (toggle to expand/collapse right panel)
 - [ ] Dark / Light mode toggle
 - [ ] Multiple language support (i18n)
 - [ ] Improved source selection modal (search/filter, multi-select)

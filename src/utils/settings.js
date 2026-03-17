@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
   autoOpenAfterRecording: true,
   recordDirectToMp4: true,
   defaultFormat: "mp4",
+  sidebarCollapsed: false,
   countdown: 3,
   recentRecordings: [],
   maxRecentRecordings: 10,

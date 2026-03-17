@@ -31,6 +31,16 @@ class SettingsHandler {
     setEl("countdownSelect", s.countdown);
     setEl("recordAudio", s.recordAudio, true);
     setEl("hwSelect", s.hardwareAcceleration);
+
+    // Apply sidebar state
+    const sidebar = this.app.sidebar || this.app.document.querySelector(".sidebar");
+    if (sidebar) {
+      if (s.sidebarCollapsed) {
+        sidebar.classList.add("collapsed");
+      } else {
+        sidebar.classList.remove("collapsed");
+      }
+    }
   }
 
   updateQuickSettings() {
